@@ -84,4 +84,7 @@ export interface VerityAPI {
 
   // 获取测试文件路径
   getTestFile(): Promise<string | null>;
+
+  // PDF 导出（带标注）
+  exportPDF(pdfData: string, annotations: unknown[], defaultName?: string): Promise<string | null>;
 }

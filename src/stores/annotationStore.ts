@@ -146,3 +146,8 @@ export const useAnnotationStore = create<AnnotationState>((set, get) => ({
     });
   },
 }));
+
+// 暴露 store 用于自动化测试（开发模式）
+if (typeof window !== 'undefined') {
+  (window as any).__annotationStore = useAnnotationStore;
+}

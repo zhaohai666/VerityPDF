@@ -71,12 +71,11 @@ export function createAppMenu(win: BrowserWindow): void {
       submenu: [
         {
           label: '撤销',
-          accelerator: 'CmdOrCtrl+Z',
+          // accelerator 由渲染进程 useKeyboardShortcuts 处理，此处不设以避免拦截
           click: () => sendAction('edit:undo'),
         },
         {
           label: '重做',
-          accelerator: 'CmdOrCtrl+Shift+Z',
           click: () => sendAction('edit:redo'),
         },
         { type: 'separator' },
@@ -92,7 +91,7 @@ export function createAppMenu(win: BrowserWindow): void {
         },
         {
           label: '删除',
-          accelerator: 'Delete',
+          // Delete 键由渲染进程 AnnotationCanvas 处理
           click: () => sendAction('edit:delete'),
         },
         { type: 'separator' },
@@ -110,40 +109,34 @@ export function createAppMenu(win: BrowserWindow): void {
       submenu: [
         {
           label: '放大',
-          accelerator: 'CmdOrCtrl+=',
+          // accelerator 由渲染进程 useKeyboardShortcuts 处理
           click: () => sendAction('view:zoomIn'),
         },
         {
           label: '缩小',
-          accelerator: 'CmdOrCtrl+-',
           click: () => sendAction('view:zoomOut'),
         },
         {
           label: '适应页宽',
-          accelerator: 'CmdOrCtrl+0',
           click: () => sendAction('view:fitWidth'),
         },
         { type: 'separator' },
         {
           label: '上一页',
-          accelerator: 'PageUp',
           click: () => sendAction('view:prevPage'),
         },
         {
           label: '下一页',
-          accelerator: 'PageDown',
           click: () => sendAction('view:nextPage'),
         },
         { type: 'separator' },
         {
           label: '旋转页面',
-          accelerator: 'CmdOrCtrl+R',
           click: () => sendAction('view:rotate'),
         },
         { type: 'separator' },
         {
           label: '切换侧边栏',
-          accelerator: 'CmdOrCtrl+B',
           click: () => sendAction('view:toggleSidebar'),
         },
         { type: 'separator' },

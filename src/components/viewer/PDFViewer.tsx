@@ -139,6 +139,46 @@ export const PDFViewer: React.FC = () => {
     }
   }, [loadFileFromPath]);
 
+  // 导出带标注的 PDF
+  const handleExportPDF = useCallback(async () => {
+    try {
+      const store = usePdfStore.getState();
+      if (!store.filePath || !store.isLoaded) {
+        console.warn('[Export] No PDF loaded');
+        return;
+      }
+
+      // 读取原始 PDF 文件并转为 Base64
+      const pdfArrayBuffer = await window.verityAPI.readFile(store.filePath);
+      const pdfBytes = new Uint8Array(pdfArrayBuffer);
+      let binary = '';
+      for (let i = 0; i < pdfBytes.length; i++) {
+        binary += String.fromCharCode(pdfBytes[i]);
+      }
+      const pdfBase64 = btoa(binary);
+
+      // 获取所有标注
+      const annotations = useAnnotationStore.getState().annotations;
+
+      // 默认导出文件名
+      const originalName = store.filePath.split(/[\\/]/).pop()?.replace(/\.pdf$/i, '') || 'document';
+      const defaultName = `${originalName}_annotated.pdf`;
+
+      console.log(`[Export] Starting export: ${annotations.length} annotations`);
+
+      // 调用主进程导出
+      const savedPath = await window.verityAPI.exportPDF(pdfBase64, annotations, defaultName);
+      if (savedPath) {
+        console.log('[Export] PDF saved to:', savedPath);
+      } else {
+        console.log('[Export] Export cancelled by user');
+      }
+    } catch (err) {
+      console.error('[Export] Export failed:', err);
+      alert(`导出失败: ${err instanceof Error ? err.message : '未知错误'}`);
+    }
+  }, []);
+
   // 滚动到指定页面
   const scrollToPage = useCallback((page: number) => {
     const el = pageRefs.current.get(page);
@@ -230,17 +270,25 @@ export const PDFViewer: React.FC = () => {
     };
   }, [loadFileFromPath]);
 
-  // 菜单事件 + 文件打开事件
+  // 菜单事件 + 文件打开事件 + 导出事件
   useEffect(() => {
     const unsubMenu = window.verityAPI.onMenuAction((action) => {
       if (action === 'file:open') handleOpenFile();
+      if (action === 'file:export') handleExportPDF();
     });
     const unsubFile = window.verityAPI.onFileOpen((fp) => {
       console.log('[Viewer] Received file:opened event:', fp);
       loadFileFromPath(fp);
     });
-    return () => { unsubMenu(); unsubFile(); };
-  }, [handleOpenFile, loadFileFromPath]);
+    // 工具栏导出按钮事件
+    const handleExportEvent = () => handleExportPDF();
+    window.addEventListener('verity:export', handleExportEvent);
+    return () => {
+      unsubMenu();
+      unsubFile();
+      window.removeEventListener('verity:export', handleExportEvent);
+    };
+  }, [handleOpenFile, loadFileFromPath, handleExportPDF]);
 
   // 启动时自动加载测试文件
   useEffect(() => {

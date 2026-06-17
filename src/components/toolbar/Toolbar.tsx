@@ -103,8 +103,14 @@ const StylePanel: React.FC = () => {
 export const Toolbar: React.FC = () => {
   const activeTool = useToolStore((s) => s.activeTool);
   const setActiveTool = useToolStore((s) => s.setActiveTool);
-  const { zoomIn, zoomOut, currentPage, documentInfo, zoomMode, setZoomMode, effectiveZoom } = usePdfStore();
+  const { zoomIn, zoomOut, currentPage, documentInfo, zoomMode, setZoomMode, effectiveZoom, isLoaded } = usePdfStore();
   const isDrawTool = ['rect', 'ellipse', 'arrow', 'line', 'freehand', 'text', 'highlight', 'stickyNote'].includes(activeTool);
+
+  // 触发导出（发送菜单事件）
+  const handleExport = () => {
+    // 通过自定义事件触发，PDFViewer 监听
+    window.dispatchEvent(new CustomEvent('verity:export'));
+  };
 
   return (
     <div className="toolbar">
@@ -146,6 +152,23 @@ export const Toolbar: React.FC = () => {
         <button className="toolbar-btn" onClick={() => usePdfStore.getState().prevPage()} title="上一页" disabled={currentPage <= 1}>◀</button>
         <span className="page-display">{currentPage} / {documentInfo?.pageCount ?? 0}</span>
         <button className="toolbar-btn" onClick={() => usePdfStore.getState().nextPage()} title="下一页" disabled={currentPage >= (documentInfo?.pageCount ?? 0)}>▶</button>
+      </div>
+
+      <div className="toolbar-divider" />
+
+      <div className="toolbar-group toolbar-actions">
+        <button
+          className="toolbar-btn export-btn"
+          onClick={handleExport}
+          disabled={!isLoaded}
+          title="导出带标注的 PDF (Ctrl+E)"
+        >
+          <svg className="toolbar-icon-svg" viewBox="0 0 24 24" width="16" height="16">
+            <path d="M12 16l-5-5h3V4h4v7h3l-5 5z" fill="currentColor"/>
+            <path d="M20 18H4v2h16v-2z" fill="currentColor"/>
+          </svg>
+          <span className="toolbar-label">导出</span>
+        </button>
       </div>
     </div>
   );

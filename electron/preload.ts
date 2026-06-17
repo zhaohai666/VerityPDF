@@ -48,6 +48,10 @@ const api: VerityAPI = {
 
   // 获取测试文件路径
   getTestFile: () => ipcRenderer.invoke('app:getTestFile'),
+
+  // PDF 导出
+  exportPDF: (pdfData: string, annotations: unknown[], defaultName?: string) =>
+    ipcRenderer.invoke('export:merge', { pdfData, annotations, defaultName }),
 };
 
 contextBridge.exposeInMainWorld('verityAPI', api);

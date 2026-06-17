@@ -1,6 +1,7 @@
 import { ipcMain, dialog, BrowserWindow, app } from 'electron';
 import fs from 'fs';
 import path from 'path';
+import { exportPDF } from '../export/PDFExporter';
 
 export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   // 文件对话框
@@ -62,5 +63,32 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   ipcMain.on('window:close', () => mainWindow.close());
   ipcMain.on('window:setTitle', (_event, title: string) => {
     mainWindow.setTitle(title);
+  });
+
+  // PDF 导出
+  ipcMain.handle('export:merge', async (_event, { pdfData, annotations, defaultName }) => {
+    try {
+      // 将 Base64 转回 ArrayBuffer
+      const binary = Buffer.from(pdfData, 'base64');
+      const arrayBuffer = binary.buffer.slice(binary.byteOffset, binary.byteOffset + binary.byteLength);
+
+      // 调用 pdf-lib 合并标注
+      const exportedBytes = await exportPDF(arrayBuffer as ArrayBuffer, annotations);
+
+      // 保存对话框
+      const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
+        defaultPath: defaultName || 'exported.pdf',
+        filters: [{ name: 'PDF 文件', extensions: ['pdf'] }],
+      });
+
+      if (canceled || !filePath) return null;
+
+      // 写入文件
+      fs.writeFileSync(filePath, exportedBytes);
+      return filePath;
+    } catch (err) {
+      console.error('[IPC] export:merge error:', err);
+      throw err;
+    }
   });
 }

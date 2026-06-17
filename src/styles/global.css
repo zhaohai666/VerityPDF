@@ -121,6 +121,8 @@ button {
   min-width: 44px;
   height: 38px;
   transition: background 0.15s;
+  -webkit-app-region: no-drag;
+  cursor: pointer;
 }
 
 .toolbar-btn:hover {
@@ -149,12 +151,30 @@ button {
   height: 28px;
   background: var(--border-color);
   margin: 0 4px;
+  -webkit-app-region: no-drag;
+}
+
+.export-btn {
+  background: var(--accent-color);
+  color: white;
+  padding: 4px 10px;
+  border-radius: 4px;
+}
+
+.export-btn:hover {
+  background: var(--accent-hover);
+}
+
+.export-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .zoom-display, .page-display {
   font-size: var(--font-size-sm);
   color: var(--text-secondary);
   padding: 0 8px;
+  -webkit-app-region: no-drag;
   white-space: nowrap;
   min-width: 48px;
   text-align: center;
@@ -751,4 +771,227 @@ button {
   height: 1px;
   background: var(--border-color);
   margin: 4px 0;
+}
+
+/* ========================================
+   属性编辑面板
+   ======================================== */
+.property-panel {
+  width: 260px;
+  background: var(--bg-secondary);
+  border-left: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.prop-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.prop-type {
+  font-weight: 600;
+  font-size: var(--font-size-base);
+  color: var(--accent-color);
+}
+
+.prop-page {
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+}
+
+.prop-close-btn {
+  margin-left: auto;
+  font-size: 18px;
+  color: var(--text-muted);
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+}
+
+.prop-close-btn:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.prop-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 12px;
+}
+
+.prop-section {
+  margin-bottom: 14px;
+}
+
+.prop-section-title {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+  font-weight: 500;
+}
+
+.prop-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.prop-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.prop-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  width: 16px;
+  flex-shrink: 0;
+}
+
+.prop-input {
+  width: 100%;
+  padding: 4px 6px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  font-family: monospace;
+}
+
+.prop-input:focus {
+  outline: none;
+  border-color: var(--accent-color);
+}
+
+.prop-suffix {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.prop-color-section {
+  margin-bottom: 4px;
+}
+
+.prop-color-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin-bottom: 4px;
+}
+
+.color-swatch-sm {
+  width: 20px;
+  height: 20px;
+  border-radius: 3px;
+  border: 2px solid transparent;
+  cursor: pointer;
+}
+
+.color-swatch-sm:hover {
+  border-color: var(--accent-hover);
+}
+
+.color-swatch-sm.active {
+  border-color: var(--accent-color);
+}
+
+.prop-color-input {
+  width: 100%;
+  height: 24px;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.prop-range {
+  width: 100%;
+  height: 4px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--border-color);
+  border-radius: 2px;
+  outline: none;
+}
+
+.prop-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent-color);
+  cursor: pointer;
+}
+
+.prop-dash-group {
+  display: flex;
+  gap: 4px;
+}
+
+.prop-dash-btn {
+  flex: 1;
+  padding: 4px 2px;
+  font-size: 11px;
+  border-radius: 4px;
+  color: var(--text-secondary);
+  transition: all 0.15s;
+}
+
+.prop-dash-btn:hover {
+  background: var(--bg-tertiary);
+}
+
+.prop-dash-btn.active {
+  background: var(--accent-color);
+  color: white;
+}
+
+.prop-textarea {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  font-family: var(--font-family);
+  resize: vertical;
+  min-height: 60px;
+}
+
+.prop-textarea:focus {
+  outline: none;
+  border-color: var(--accent-color);
+}
+
+.prop-actions {
+  margin-top: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-color);
+}
+
+.prop-delete-btn {
+  width: 100%;
+  padding: 8px;
+  background: var(--danger-color);
+  color: white;
+  border-radius: 6px;
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  transition: opacity 0.15s;
+}
+
+.prop-delete-btn:hover {
+  opacity: 0.85;
 }

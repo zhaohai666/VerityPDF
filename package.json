@@ -20,7 +20,8 @@
     "test:coverage": "vitest run --coverage",
     "pack:mac": "electron-builder --mac",
     "pack:win": "electron-builder --win",
-    "pack:linux": "electron-builder --linux"
+    "pack:linux": "electron-builder --linux",
+    "build:verify": "vite build && electron-builder --mac --dir"
   },
   "dependencies": {
     "antd": "^5.20.0",
@@ -60,11 +61,11 @@
     ],
     "mac": {
       "target": "dmg",
-      "icon": "resources/icon.icns"
+      "icon": "resources/icon.png"
     },
     "win": {
       "target": "nsis",
-      "icon": "resources/icon.ico"
+      "icon": "resources/icon.png"
     },
     "linux": {
       "target": ["AppImage", "deb"],
