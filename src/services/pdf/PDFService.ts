@@ -126,8 +126,8 @@ export class PDFService {
 
       await renderTask.promise;
       logger.debug(`Page ${pageNumber} rendered at scale ${scale}`);
-    } catch (err: any) {
-      if (err?.name === 'RenderingCancelledException') return; // 被取消的渲染正常忽略
+    } catch (err) {
+      if (err instanceof Error && err.name === 'RenderingCancelledException') return;
       throw err;
     } finally {
       this.renderTasks.delete(pageNumber);
@@ -174,17 +174,21 @@ export class PDFService {
     const page = await this.getPage(pageNumber);
     const textContent = await page.getTextContent();
     return textContent.items
-      .filter((item): item is pdfjsLib.TextItem => 'str' in item)
-      .map((item) => item.str)
+      .map((item) => 'str' in item ? item.str : '')
       .join(' ');
   }
 
   /**
    * 获取大纲
    */
-  async getOutline(): Promise<pdfjsLib.OutlineNode[] | null> {
+  async getOutline(): Promise<Array<{ title: string; pageNumber: number }> | null> {
     if (!this.pdfDocument) return null;
-    return this.pdfDocument.getOutline();
+    const outline = await this.pdfDocument.getOutline();
+    if (!outline) return null;
+    return outline.map(item => ({
+      title: item.title || '',
+      pageNumber: typeof item.dest === 'number' ? item.dest : 1,
+    }));
   }
 
   /**

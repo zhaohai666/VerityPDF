@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 
 /** 标注数据（从渲染进程接收） */
-interface ExportAnnotation {
+export interface ExportAnnotation {
   id: string;
   type: string;
   page: number;
@@ -65,11 +65,29 @@ function parseColor(color: string): { r: number; g: number; b: number } {
 
 // ─── 坐标转换 ────────────────────────────────────
 
-/**
- * 归一化坐标 (0-1, 原点左上角) → PDF 坐标 (原点左下角)
- */
-function toPdf(normX: number, normY: number, pw: number, ph: number) {
-  return { x: normX * pw, y: ph - normY * ph };
+interface PageBox {
+  width: number;
+  height: number;
+  x: number;
+  y: number;
+}
+
+function getCropBox(page: PDFPage): PageBox {
+  const cropBox = page.getCropBox();
+  if (cropBox) {
+    return {
+      width: cropBox.width,
+      height: cropBox.height,
+      x: cropBox.x,
+      y: cropBox.y,
+    };
+  }
+  const { width, height } = page.getSize();
+  return { width, height, x: 0, y: 0 };
+}
+
+function toPdf(normX: number, normY: number, box: PageBox) {
+  return { x: box.x + normX * box.width, y: box.y + box.height - normY * box.height };
 }
 
 // ─── 主导出函数 ──────────────────────────────────
@@ -83,8 +101,9 @@ export async function exportPDF(
 
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+  const timesFont = await pdfDoc.embedFont(StandardFonts.TimesRoman);
+  const courierFont = await pdfDoc.embedFont(StandardFonts.Courier);
 
-  // 按页分组
   const byPage = new Map<number, ExportAnnotation[]>();
   for (const ann of annotations) {
     const idx = ann.page - 1;
@@ -92,14 +111,13 @@ export async function exportPDF(
     byPage.get(idx)!.push(ann);
   }
 
-  // 逐页绘制
   byPage.forEach((anns, idx) => {
     if (idx < 0 || idx >= pages.length) return;
     const page = pages[idx];
-    const { width: pw, height: ph } = page.getSize();
+    const box = getCropBox(page);
     for (const ann of anns) {
       try {
-        drawAnnotation(page, ann, pw, ph, font, boldFont, pdfDoc);
+        drawAnnotation(page, ann, box, font, boldFont, timesFont, courierFont, pdfDoc);
       } catch (err) {
         console.error(`[Export] ann ${ann.id} (${ann.type}):`, err);
       }
@@ -114,10 +132,11 @@ export async function exportPDF(
 async function drawAnnotation(
   page: PDFPage,
   ann: ExportAnnotation,
-  pw: number,
-  ph: number,
+  box: PageBox,
   font: PDFFont,
-  boldFont: PDFFont,
+  _boldFont: PDFFont,
+  timesFont: PDFFont,
+  courierFont: PDFFont,
   pdfDoc: PDFDocument
 ): Promise<void> {
   const sc = parseColor(ann.style.stroke);
@@ -127,12 +146,17 @@ async function drawAnnotation(
   const dash = ann.style.dash?.length ? ann.style.dash : undefined;
   const hasFill = ann.style.fill && ann.style.fill !== 'transparent' && ann.style.fill !== 'none';
 
-  // position = top-left for rect/highlight/text/stickyNote
-  // position = center for ellipse
-  // position = start for arrow/line/freehand
-  const tl = toPdf(ann.position.x, ann.position.y, pw, ph);
-  const w = ann.size.width * pw;
-  const h = ann.size.height * ph;
+  const getFont = (family?: string): PDFFont => {
+    if (!family) return font;
+    if (family.toLowerCase().includes('times')) return timesFont;
+    if (family.toLowerCase().includes('courier')) return courierFont;
+    if (family.toLowerCase().includes('serif')) return timesFont;
+    return font;
+  };
+
+  const tl = toPdf(ann.position.x, ann.position.y, box);
+  const w = ann.size.width * box.width;
+  const h = ann.size.height * box.height;
 
   switch (ann.type) {
     // ── 矩形: position = 左上角 ──
@@ -174,8 +198,8 @@ async function drawAnnotation(
     // ── 直线: position = 起点, endPoint = 终点 ──
     case 'line': {
       if (!ann.endPoint) break;
-      const s = toPdf(ann.position.x, ann.position.y, pw, ph);
-      const e = toPdf(ann.endPoint.x, ann.endPoint.y, pw, ph);
+      const s = toPdf(ann.position.x, ann.position.y, box);
+      const e = toPdf(ann.endPoint.x, ann.endPoint.y, box);
       page.drawLine({ start: s, end: e, thickness: sw, color: rgb(sc.r, sc.g, sc.b), opacity: op, dashArray: dash });
       break;
     }
@@ -183,8 +207,8 @@ async function drawAnnotation(
     // ── 箭头: position = 起点, endPoint = 终点 + 箭头头 ──
     case 'arrow': {
       if (!ann.endPoint) break;
-      const s = toPdf(ann.position.x, ann.position.y, pw, ph);
-      const e = toPdf(ann.endPoint.x, ann.endPoint.y, pw, ph);
+      const s = toPdf(ann.position.x, ann.position.y, box);
+      const e = toPdf(ann.endPoint.x, ann.endPoint.y, box);
       page.drawLine({ start: s, end: e, thickness: sw, color: rgb(sc.r, sc.g, sc.b), opacity: op, dashArray: dash });
       // 箭头头部
       const dx = e.x - s.x;
@@ -211,8 +235,8 @@ async function drawAnnotation(
     case 'freehand': {
       if (!ann.points || ann.points.length < 2) break;
       for (let i = 1; i < ann.points.length; i++) {
-        const p1 = toPdf(ann.points[i - 1].x, ann.points[i - 1].y, pw, ph);
-        const p2 = toPdf(ann.points[i].x, ann.points[i].y, pw, ph);
+        const p1 = toPdf(ann.points[i - 1].x, ann.points[i - 1].y, box);
+        const p2 = toPdf(ann.points[i].x, ann.points[i].y, box);
         page.drawLine({ start: p1, end: p2, thickness: sw, color: rgb(sc.r, sc.g, sc.b), opacity: op });
       }
       break;
@@ -238,13 +262,15 @@ async function drawAnnotation(
       if (!ann.content) break;
       const fontSize = ann.style.fontSize || 14;
       const tc = parseColor(ann.style.stroke);
-      const lines = wrapText(ann.content, font, fontSize, w > 0 ? w : pw * 0.5);
+      const currentFont = getFont(ann.style.fontFamily);
+      const maxWidth = w > 0 ? w : box.width * 0.5;
+      const lines = wrapText(ann.content, currentFont, fontSize, maxWidth);
       for (let i = 0; i < lines.length; i++) {
         page.drawText(lines[i], {
           x: tl.x,
           y: tl.y - fontSize - i * (fontSize * 1.3),
           size: fontSize,
-          font,
+          font: currentFont,
           color: rgb(tc.r, tc.g, tc.b),
           opacity: op,
         });
@@ -283,15 +309,41 @@ async function drawAnnotation(
       break;
     }
 
+    // ── 多边形: points = 顶点数组 ──
+    case 'polygon': {
+      if (!ann.points || ann.points.length < 3) break;
+      const pdfPoints = ann.points.map(p => toPdf(p.x, p.y, box));
+      const firstPoint = pdfPoints[0];
+      const subsequentPoints = pdfPoints.slice(1);
+      page.drawPolygon(firstPoint, subsequentPoints, {
+        borderColor: rgb(sc.r, sc.g, sc.b),
+        borderWidth: sw,
+        color: hasFill ? rgb(fc.r, fc.g, fc.b) : undefined,
+        opacity: op,
+        borderOpacity: op,
+        borderDashArray: dash,
+      });
+      break;
+    }
+
+    // ── 连接线: 连接两个标注 ──
+    case 'connector': {
+      if (!ann.endPoint) break;
+      const s = toPdf(ann.position.x, ann.position.y, box);
+      const e = toPdf(ann.endPoint.x, ann.endPoint.y, box);
+      page.drawLine({ start: s, end: e, thickness: sw, color: rgb(sc.r, sc.g, sc.b), opacity: op, dashArray: dash });
+      break;
+    }
+
     // ── 印章: 嵌入图片 ──
     case 'stamp': {
-      await drawImageAnnotation(page, ann, pw, ph, tl, w, h, pdfDoc);
+      await drawImageAnnotation(page, ann, tl, w, h, pdfDoc);
       break;
     }
 
     // ── 签名: 嵌入图片 ──
     case 'signature': {
-      await drawImageAnnotation(page, ann, pw, ph, tl, w, h, pdfDoc);
+      await drawImageAnnotation(page, ann, tl, w, h, pdfDoc);
       break;
     }
 
@@ -305,8 +357,6 @@ async function drawAnnotation(
 async function drawImageAnnotation(
   page: PDFPage,
   ann: ExportAnnotation,
-  _pw: number,
-  _ph: number,
   tl: { x: number; y: number },
   w: number,
   h: number,
@@ -361,24 +411,57 @@ async function drawImageAnnotation(
 
 function wrapText(text: string, font: PDFFont, fontSize: number, maxWidth: number): string[] {
   if (maxWidth <= 0) maxWidth = 200;
-  const chars = text.split('');
   const lines: string[] = [];
-  let current = '';
+  const paragraphs = text.split('\n');
 
-  for (const ch of chars) {
-    if (ch === '\n') {
-      lines.push(current);
-      current = '';
+  for (const paragraph of paragraphs) {
+    if (!paragraph.trim()) {
+      lines.push('');
       continue;
     }
-    const test = current + ch;
-    if (font.widthOfTextAtSize(test, fontSize) > maxWidth && current.length > 0) {
-      lines.push(current);
-      current = ch;
-    } else {
-      current = test;
+
+    const words = paragraph.split(/(\s+)/);
+    let currentLine = '';
+
+    for (const word of words) {
+      if (word.trim() === '') {
+        currentLine += word;
+        continue;
+      }
+
+      const testLine = currentLine + word;
+      const testWidth = font.widthOfTextAtSize(testLine, fontSize);
+
+      if (testWidth <= maxWidth) {
+        currentLine = testLine;
+      } else {
+        if (currentLine.trim()) {
+          lines.push(currentLine.trimEnd());
+        }
+
+        const wordWidth = font.widthOfTextAtSize(word, fontSize);
+        if (wordWidth > maxWidth) {
+          let remaining = word;
+          while (remaining) {
+            let splitPoint = remaining.length;
+            while (splitPoint > 0 && font.widthOfTextAtSize(remaining.slice(0, splitPoint), fontSize) > maxWidth) {
+              splitPoint--;
+            }
+            if (splitPoint === 0) splitPoint = 1;
+            lines.push(remaining.slice(0, splitPoint));
+            remaining = remaining.slice(splitPoint);
+          }
+          currentLine = '';
+        } else {
+          currentLine = word;
+        }
+      }
+    }
+
+    if (currentLine.trim()) {
+      lines.push(currentLine.trimEnd());
     }
   }
-  if (current) lines.push(current);
-  return lines.slice(0, 20); // 最多 20 行
+
+  return lines.slice(0, 50);
 }

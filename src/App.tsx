@@ -4,6 +4,7 @@ import { Sidebar } from '@/components/sidebar/Sidebar';
 import { PDFViewer } from '@/components/viewer/PDFViewer';
 import { PropertyPanel } from '@/components/property/PropertyPanel';
 import { StatusBar } from '@/components/common/StatusBar';
+import { Toast } from '@/components/common/Toast';
 import { useKeyboardShortcuts, useAutoSave } from '@/hooks';
 import { usePdfStore } from '@/stores/pdfStore';
 import { useAnnotationStore } from '@/stores/annotationStore';
@@ -79,6 +80,7 @@ const App: React.FC = () => {
         <PropertyPanel />
       </div>
       <StatusBar />
+      <Toast />
     </div>
   );
 };

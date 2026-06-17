@@ -1,4 +1,4 @@
-import React, { useRef, useState, useCallback, useEffect } from 'react';
+import React, { useRef, useState, useCallback, useEffect, useMemo, memo } from 'react';
 import { useToolStore } from '@/stores/toolStore';
 import { useAnnotationStore } from '@/stores/annotationStore';
 import type { Annotation, ToolType, AnnotationStyle } from '@/types';
@@ -49,9 +49,136 @@ function styleToCSS(s: AnnotationStyle): React.CSSProperties {
   };
 }
 
-/**
- * 标注绘制覆盖层 - SVG 实现全部标注工具
- */
+interface SingleAnnotationProps {
+  annotation: Annotation;
+  isSelected: boolean;
+}
+
+const SingleAnnotation = memo(({ annotation, isSelected }: SingleAnnotationProps) => {
+  const st = styleToCSS(annotation.style);
+  const selectionBox = isSelected ? (
+    <rect
+      x={`${annotation.position.x * 100 - 0.3}%`}
+      y={`${annotation.position.y * 100 - 0.3}%`}
+      width={`${annotation.size.width * 100 + 0.6}%`}
+      height={`${annotation.size.height * 100 + 0.6}%`}
+      fill="none"
+      stroke="#1677ff"
+      strokeWidth="1.5"
+      strokeDasharray="4 2"
+    />
+  ) : null;
+
+  let shape: React.ReactNode = null;
+  switch (annotation.type) {
+    case 'rect':
+      shape = (
+        <rect
+          x={`${annotation.position.x * 100}%`}
+          y={`${annotation.position.y * 100}%`}
+          width={`${annotation.size.width * 100}%`}
+          height={`${annotation.size.height * 100}%`}
+          style={st}
+        />
+      );
+      break;
+    case 'ellipse':
+      shape = (
+        <ellipse
+          cx={`${annotation.position.x * 100}%`}
+          cy={`${annotation.position.y * 100}%`}
+          rx={`${(annotation.size.width / 2) * 100}%`}
+          ry={`${(annotation.size.height / 2) * 100}%`}
+          style={st}
+        />
+      );
+      break;
+    case 'arrow':
+    case 'line':
+      shape = (
+        <line
+          x1={`${annotation.position.x * 100}%`}
+          y1={`${annotation.position.y * 100}%`}
+          x2={`${annotation.endPoint.x * 100}%`}
+          y2={`${annotation.endPoint.y * 100}%`}
+          style={st}
+          markerEnd={annotation.type === 'arrow' ? 'url(#arrowhead)' : undefined}
+        />
+      );
+      break;
+    case 'freehand': {
+      if (!annotation.points || annotation.points.length < 2) break;
+      const d = annotation.points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x * 100} ${p.y * 100}`).join(' ');
+      shape = <path d={d} style={st} />;
+      break;
+    }
+    case 'highlight':
+      shape = (
+        <rect
+          x={`${annotation.position.x * 100}%`}
+          y={`${annotation.position.y * 100}%`}
+          width={`${annotation.size.width * 100}%`}
+          height={`${annotation.size.height * 100}%`}
+          fill={annotation.style.fill || annotation.style.stroke}
+          opacity={annotation.style.opacity || 0.3}
+        />
+      );
+      break;
+    case 'text':
+      shape = (
+        <foreignObject
+          x={`${annotation.position.x * 100}%`}
+          y={`${annotation.position.y * 100}%`}
+          width="30%"
+          height="10%"
+        >
+          <div
+            style={{
+              fontSize: annotation.style.fontSize || 14,
+              color: annotation.style.stroke,
+              fontFamily: annotation.style.fontFamily || 'sans-serif',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {annotation.content}
+          </div>
+        </foreignObject>
+      );
+      break;
+    case 'stickyNote':
+      shape = (
+        <g>
+          <rect
+            x={`${annotation.position.x * 100}%`}
+            y={`${annotation.position.y * 100}%`}
+            width={`${annotation.size.width * 100}%`}
+            height={`${annotation.size.height * 100}%`}
+            fill="#FDE68A"
+            stroke="#B8860B"
+            strokeWidth="1"
+            opacity={0.9}
+            rx="2"
+          />
+          <foreignObject
+            x={`${annotation.position.x * 100 + 0.3}%`}
+            y={`${annotation.position.y * 100 + 0.3}%`}
+            width={`${annotation.size.width * 100 - 0.6}%`}
+            height={`${annotation.size.height * 100 - 0.6}%`}
+          >
+            <div style={{ fontSize: 11, color: '#333', padding: '2px', overflow: 'hidden', wordBreak: 'break-all' }}>
+              {annotation.content}
+            </div>
+          </foreignObject>
+        </g>
+      );
+      break;
+  }
+
+  return <g key={annotation.id}>{selectionBox}{shape}</g>;
+});
+
+SingleAnnotation.displayName = 'SingleAnnotation';
+
 export const AnnotationCanvas: React.FC<AnnotationCanvasProps> = ({ pageNumber, containerRef }) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const activeTool = useToolStore((s) => s.activeTool);
@@ -67,48 +194,49 @@ export const AnnotationCanvas: React.FC<AnnotationCanvasProps> = ({ pageNumber, 
 
   const isDrawTool = DRAW_TOOLS.includes(activeTool);
   const isClickTool = CLICK_TOOLS.includes(activeTool);
-  const getPageAnnotations = annotations.filter((a) => a.page === pageNumber);
 
-  const getRelativeCoords = useCallback((e: React.MouseEvent | MouseEvent) => {
+  const pageAnnotations = useMemo(() => {
+    return annotations.filter((a) => a.page === pageNumber);
+  }, [annotations, pageNumber]);
+
+  const getRelativeCoords = useCallback((e: React.MouseEvent | MouseEvent): { x: number; y: number } | null => {
     const container = containerRef.current;
-    if (!container) return { x: 0, y: 0 };
+    if (!container) return null;
     const rect = container.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return null;
     return {
-      x: (e.clientX - rect.left) / rect.width,
-      y: (e.clientY - rect.top) / rect.height,
+      x: Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)),
+      y: Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height)),
     };
   }, [containerRef]);
 
-  // 查找点击位置的标注
   const findAnnotationAt = useCallback((x: number, y: number): Annotation | null => {
     const threshold = 0.02;
-    for (let i = getPageAnnotations.length - 1; i >= 0; i--) {
-      const ann = getPageAnnotations[i];
+    for (let i = pageAnnotations.length - 1; i >= 0; i--) {
+      const ann = pageAnnotations[i];
       const { position: p, size: s } = ann;
       if (ann.type === 'arrow' || ann.type === 'line') {
-        // 简化：检查线段端点附近
         if (Math.abs(p.x - x) < threshold && Math.abs(p.y - y) < threshold) return ann;
-        if ('endPoint' in ann && ann.endPoint) {
+        if (ann.endPoint) {
           if (Math.abs(ann.endPoint.x - x) < threshold && Math.abs(ann.endPoint.y - y) < threshold) return ann;
+          const minX = Math.min(p.x, ann.endPoint.x) - threshold;
+          const maxX = Math.max(p.x, ann.endPoint.x) + threshold;
+          const minY = Math.min(p.y, ann.endPoint.y) - threshold;
+          const maxY = Math.max(p.y, ann.endPoint.y) + threshold;
+          if (x >= minX && x <= maxX && y >= minY && y <= maxY) return ann;
         }
-        // 粗略检查：是否在bounding box内
-        const minX = Math.min(p.x, (ann as any).endPoint?.x ?? p.x) - threshold;
-        const maxX = Math.max(p.x, (ann as any).endPoint?.x ?? p.x) + threshold;
-        const minY = Math.min(p.y, (ann as any).endPoint?.y ?? p.y) - threshold;
-        const maxY = Math.max(p.y, (ann as any).endPoint?.y ?? p.y) + threshold;
-        if (x >= minX && x <= maxX && y >= minY && y <= maxY) return ann;
       } else {
         if (x >= p.x - threshold && x <= p.x + s.width + threshold &&
           y >= p.y - threshold && y <= p.y + s.height + threshold) return ann;
       }
     }
     return null;
-  }, [getPageAnnotations]);
+  }, [pageAnnotations]);
 
-  // 鼠标按下
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    if (e.button === 2) return; // 右键不处理
+    if (e.button === 2) return;
     const coords = getRelativeCoords(e);
+    if (!coords) return;
     setContextMenu({ visible: false, x: 0, y: 0, annotationId: '' });
 
     if (activeTool === 'select') {
@@ -144,25 +272,27 @@ export const AnnotationCanvas: React.FC<AnnotationCanvasProps> = ({ pageNumber, 
     }
   }, [activeTool, isDrawTool, isClickTool, getRelativeCoords, findAnnotationAt, selectAnnotation, clearSelection, removeAnnotation, containerRef]);
 
-  // 鼠标移动
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     if (drag.isDragging) {
       const coords = getRelativeCoords(e);
+      if (!coords) return;
+      const newX = Math.max(0, Math.min(1, coords.x - drag.offsetX));
+      const newY = Math.max(0, Math.min(1, coords.y - drag.offsetY));
       updateAnnotation(drag.annotationId, {
-        position: { x: coords.x - drag.offsetX, y: coords.y - drag.offsetY },
+        position: { x: newX, y: newY },
       });
       return;
     }
 
     if (!drawing.isDrawing) return;
     const coords = getRelativeCoords(e);
+    if (!coords) return;
     setDrawing((prev) => ({ ...prev, currentX: coords.x, currentY: coords.y }));
     if (activeTool === 'freehand') {
       setFreehandPoints((prev) => `${prev} L ${coords.x * 100} ${coords.y * 100}`);
     }
   }, [drawing.isDrawing, drag, getRelativeCoords, updateAnnotation, activeTool]);
 
-  // 鼠标抬起
   const handleMouseUp = useCallback(() => {
     if (drag.isDragging) {
       setDrag({ isDragging: false, annotationId: '', offsetX: 0, offsetY: 0 });
@@ -223,7 +353,6 @@ export const AnnotationCanvas: React.FC<AnnotationCanvasProps> = ({ pageNumber, 
     setFreehandPoints('');
   }, [drawing, drag, activeTool, pageNumber, toolStyle, addAnnotation, updateAnnotation, setActiveTool, freehandPoints]);
 
-  // 文本编辑完成
   const handleTextSubmit = useCallback(() => {
     if (!editingText.value.trim()) {
       setEditingText({ visible: false, x: 0, y: 0, value: '' });
@@ -262,10 +391,10 @@ export const AnnotationCanvas: React.FC<AnnotationCanvasProps> = ({ pageNumber, 
     }
   }, [editingText, activeTool, pageNumber, toolStyle, addAnnotation, updateAnnotation, setActiveTool, containerRef]);
 
-  // 右键菜单
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     const coords = getRelativeCoords(e);
+    if (!coords) return;
     const ann = findAnnotationAt(coords.x, coords.y);
     if (ann) {
       const container = containerRef.current;
@@ -276,7 +405,6 @@ export const AnnotationCanvas: React.FC<AnnotationCanvasProps> = ({ pageNumber, 
     }
   }, [getRelativeCoords, findAnnotationAt, selectAnnotation, containerRef]);
 
-  // 全局键盘 - Delete 删除选中标注
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.key === 'Delete' || e.key === 'Backspace') && selectedIds.length > 0) {
@@ -290,8 +418,7 @@ export const AnnotationCanvas: React.FC<AnnotationCanvasProps> = ({ pageNumber, 
     return () => window.removeEventListener('keydown', handler);
   }, [selectedIds, removeAnnotation, clearSelection]);
 
-  // 预览绘制中的形状
-  const renderPreview = () => {
+  const renderPreview = useMemo(() => {
     if (!drawing.isDrawing) return null;
     const { startX, startY, currentX, currentY } = drawing;
     const x = Math.min(startX, currentX) * 100;
@@ -318,76 +445,7 @@ export const AnnotationCanvas: React.FC<AnnotationCanvasProps> = ({ pageNumber, 
       default:
         return null;
     }
-  };
-
-  // 渲染已有标注
-  const renderAnnotations = () => {
-    return getPageAnnotations.map((ann) => {
-      const st = styleToCSS(ann.style);
-      const isSelected = selectedIds.includes(ann.id);
-      const selectionBox = isSelected ? (
-        <rect x={`${ann.position.x * 100 - 0.3}%`} y={`${ann.position.y * 100 - 0.3}%`}
-          width={`${ann.size.width * 100 + 0.6}%`} height={`${ann.size.height * 100 + 0.6}%`}
-          fill="none" stroke="#1677ff" strokeWidth="1.5" strokeDasharray="4 2" />
-      ) : null;
-
-      let shape: React.ReactNode = null;
-      switch (ann.type) {
-        case 'rect':
-          shape = <rect x={`${ann.position.x * 100}%`} y={`${ann.position.y * 100}%`}
-            width={`${ann.size.width * 100}%`} height={`${ann.size.height * 100}%`} style={st} />;
-          break;
-        case 'ellipse':
-          shape = <ellipse cx={`${ann.position.x * 100}%`} cy={`${ann.position.y * 100}%`}
-            rx={`${(ann.size.width / 2) * 100}%`} ry={`${(ann.size.height / 2) * 100}%`} style={st} />;
-          break;
-        case 'arrow':
-        case 'line':
-          shape = <line x1={`${ann.position.x * 100}%`} y1={`${ann.position.y * 100}%`}
-            x2={`${(ann as any).endPoint.x * 100}%`} y2={`${(ann as any).endPoint.y * 100}%`}
-            style={st} markerEnd={ann.type === 'arrow' ? 'url(#arrowhead)' : undefined} />;
-          break;
-        case 'freehand': {
-          if (!ann.points || ann.points.length < 2) break;
-          const d = ann.points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x * 100} ${p.y * 100}`).join(' ');
-          shape = <path d={d} style={st} />;
-          break;
-        }
-        case 'highlight':
-          shape = <rect x={`${ann.position.x * 100}%`} y={`${ann.position.y * 100}%`}
-            width={`${ann.size.width * 100}%`} height={`${ann.size.height * 100}%`}
-            fill={ann.style.fill || ann.style.stroke} opacity={ann.style.opacity || 0.3} />;
-          break;
-        case 'text':
-          shape = (
-            <foreignObject x={`${ann.position.x * 100}%`} y={`${ann.position.y * 100}%`}
-              width="30%" height="10%">
-              <div style={{ fontSize: ann.style.fontSize || 14, color: ann.style.stroke, fontFamily: ann.style.fontFamily || 'sans-serif', whiteSpace: 'nowrap' }}>
-                {ann.content}
-              </div>
-            </foreignObject>
-          );
-          break;
-        case 'stickyNote':
-          shape = (
-            <g>
-              <rect x={`${ann.position.x * 100}%`} y={`${ann.position.y * 100}%`}
-                width={`${ann.size.width * 100}%`} height={`${ann.size.height * 100}%`}
-                fill="#FDE68A" stroke="#B8860B" strokeWidth="1" opacity={0.9} rx="2" />
-              <foreignObject x={`${ann.position.x * 100 + 0.3}%`} y={`${ann.position.y * 100 + 0.3}%`}
-                width={`${ann.size.width * 100 - 0.6}%`} height={`${ann.size.height * 100 - 0.6}%`}>
-                <div style={{ fontSize: 11, color: '#333', padding: '2px', overflow: 'hidden', wordBreak: 'break-all' }}>
-                  {ann.content}
-                </div>
-              </foreignObject>
-            </g>
-          );
-          break;
-      }
-
-      return <g key={ann.id}>{selectionBox}{shape}</g>;
-    });
-  };
+  }, [drawing, activeTool, toolStyle, freehandPoints]);
 
   const isInteractive = activeTool === 'select' || activeTool === 'eraser' || isDrawTool || isClickTool;
   const cursor = activeTool === 'select' ? (drag.isDragging ? 'grabbing' : 'default')
@@ -421,11 +479,16 @@ export const AnnotationCanvas: React.FC<AnnotationCanvasProps> = ({ pageNumber, 
             <polygon points="0 0, 10 3.5, 0 7" fill={toolStyle.stroke} />
           </marker>
         </defs>
-        {renderAnnotations()}
-        {renderPreview()}
+        {pageAnnotations.map((ann) => (
+          <SingleAnnotation
+            key={ann.id}
+            annotation={ann}
+            isSelected={selectedIds.includes(ann.id)}
+          />
+        ))}
+        {renderPreview}
       </svg>
 
-      {/* 文本编辑输入框 */}
       {editingText.visible && (
         <div className="text-edit-overlay" style={{ left: editingText.x, top: editingText.y }}>
           <textarea
@@ -440,7 +503,6 @@ export const AnnotationCanvas: React.FC<AnnotationCanvasProps> = ({ pageNumber, 
         </div>
       )}
 
-      {/* 右键菜单 */}
       {contextMenu.visible && (
         <div className="context-menu" style={{ left: contextMenu.x, top: contextMenu.y }}
           onMouseLeave={() => setContextMenu({ visible: false, x: 0, y: 0, annotationId: '' })}>

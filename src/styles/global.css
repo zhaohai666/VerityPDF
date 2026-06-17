@@ -94,16 +94,35 @@ button {
   height: var(--toolbar-height);
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
+  padding: 0;
+  gap: 0;
+  position: relative;
+}
+
+.toolbar-drag-area {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 100%;
+  -webkit-app-region: drag;
+  z-index: 0;
+}
+
+.toolbar-content {
+  display: flex;
+  align-items: center;
+  height: 100%;
   padding: 0 8px;
   gap: 8px;
-  -webkit-app-region: drag;
+  position: relative;
+  z-index: 1;
 }
 
 .toolbar-group {
   display: flex;
   align-items: center;
   gap: 2px;
-  -webkit-app-region: no-drag;
 }
 
 .toolbar-tools {
@@ -121,7 +140,6 @@ button {
   min-width: 44px;
   height: 38px;
   transition: background 0.15s;
-  -webkit-app-region: no-drag;
   cursor: pointer;
 }
 
@@ -151,7 +169,6 @@ button {
   height: 28px;
   background: var(--border-color);
   margin: 0 4px;
-  -webkit-app-region: no-drag;
 }
 
 .export-btn {
@@ -994,4 +1011,176 @@ button {
 
 .prop-delete-btn:hover {
   opacity: 0.85;
+}
+
+/* ========================================
+   Toast 消息提示
+   ======================================== */
+:root {
+  --error-bg: #fff2f0;
+  --error-text: #ff4d4f;
+  --error-border: #ffccc7;
+  --success-bg: #f6ffed;
+  --success-text: #52c41a;
+  --success-border: #b7eb8f;
+  --warning-bg: #fffbe6;
+  --warning-text: #faad14;
+  --warning-border: #ffe58f;
+  --info-bg: #e6f7ff;
+  --info-text: #1890ff;
+  --info-border: #91d5ff;
+}
+
+[data-theme='dark'] {
+  --error-bg: #2a1a1a;
+  --error-text: #ff7875;
+  --error-border: #ff4d4f;
+  --success-bg: #1a2a1a;
+  --success-text: #73d13d;
+  --success-border: #52c41a;
+  --warning-bg: #2a251a;
+  --warning-text: #ffc53d;
+  --warning-border: #faad14;
+  --info-bg: #1a252a;
+  --info-text: #40a9ff;
+  --info-border: #1890ff;
+}
+
+.toast-container {
+  position: fixed;
+  top: calc(var(--toolbar-height) + 16px);
+  right: 16px;
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border-left: 4px solid;
+  min-width: 240px;
+  max-width: 400px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  cursor: pointer;
+  transition: opacity 0.2s, transform 0.2s;
+}
+
+.toast:hover {
+  opacity: 0.9;
+}
+
+.toast-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.toast-message {
+  flex: 1;
+  font-size: var(--font-size-sm);
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.toast-close {
+  font-size: 18px;
+  padding: 0 4px;
+  opacity: 0.5;
+  transition: opacity 0.15s;
+  flex-shrink: 0;
+}
+
+.toast-close:hover {
+  opacity: 1;
+}
+
+/* ========================================
+   响应式布局
+   ======================================== */
+@media (max-width: 1024px) {
+  :root {
+    --sidebar-width: 200px;
+  }
+  
+  .sidebar-tab {
+    padding: 6px 4px;
+    font-size: 11px;
+  }
+  
+  .thumbnail-canvas {
+    width: 120px !important;
+  }
+}
+
+@media (max-width: 768px) {
+  :root {
+    --sidebar-width: 180px;
+    --toolbar-height: 44px;
+  }
+  
+  .toolbar-btn {
+    padding: 6px 8px;
+  }
+  
+  .toolbar-icon {
+    font-size: 14px;
+  }
+  
+  .toolbar-label {
+    display: none;
+  }
+  
+  .zoom-display, .page-display {
+    min-width: 40px;
+    font-size: 11px;
+  }
+  
+  .thumbnail-canvas {
+    width: 100px !important;
+  }
+  
+  .style-panel-dropdown {
+    width: 180px;
+  }
+}
+
+@media (max-width: 640px) {
+  .sidebar {
+    width: 48px;
+    overflow: hidden;
+  }
+  
+  .sidebar-tab span {
+    display: none;
+  }
+  
+  .sidebar-tab {
+    font-size: 16px;
+  }
+  
+  .thumbnail-canvas {
+    display: none;
+  }
+  
+  .page-number-label {
+    display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  :root {
+    --statusbar-height: 24px;
+  }
+  
+  .status-item {
+    font-size: 10px;
+  }
+  
+  .theme-toggle {
+    font-size: 14px;
+  }
 }

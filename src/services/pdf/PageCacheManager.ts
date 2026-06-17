@@ -3,14 +3,20 @@ import { Logger } from '@/utils';
 
 const logger = new Logger('PageCache');
 
-/**
- * LRU 页面缓存管理器
- * 最大缓存 15 页，总内存不超过 256MB
- */
+interface LRUNode {
+  key: string;
+  entry: PageCacheEntry;
+  prev: LRUNode | null;
+  next: LRUNode | null;
+}
+
 export class PageCacheManager {
-  private cache = new Map<string, PageCacheEntry>();
+  private cache = new Map<string, LRUNode>();
+  private head: LRUNode | null = null;
+  private tail: LRUNode | null = null;
   private maxEntries: number;
   private maxMemory: number;
+  private totalMemory: number = 0;
 
   constructor(maxEntries = 15, maxMemoryMB = 256) {
     this.maxEntries = maxEntries;
@@ -21,101 +27,126 @@ export class PageCacheManager {
     return `${pageNumber}_${scale.toFixed(2)}_${rotation}`;
   }
 
-  /**
-   * 获取缓存的页面
-   */
-  get(pageNumber: number, scale: number, rotation: number): PageCacheEntry | undefined {
-    const key = this.makeKey(pageNumber, scale, rotation);
-    const entry = this.cache.get(key);
-    if (entry) {
-      // 更新访问时间（LRU）
-      entry.timestamp = Date.now();
-      logger.debug(`Cache hit: page ${pageNumber}`);
+  private addToHead(node: LRUNode): void {
+    node.prev = null;
+    node.next = this.head;
+    if (this.head) {
+      this.head.prev = node;
+    } else {
+      this.tail = node;
     }
-    return entry;
+    this.head = node;
   }
 
-  /**
-   * 缓存页面
-   */
+  private removeNode(node: LRUNode): void {
+    if (node.prev) {
+      node.prev.next = node.next;
+    } else {
+      this.head = node.next;
+    }
+    if (node.next) {
+      node.next.prev = node.prev;
+    } else {
+      this.tail = node.prev;
+    }
+    node.prev = null;
+    node.next = null;
+  }
+
+  private moveToHead(node: LRUNode): void {
+    this.removeNode(node);
+    this.addToHead(node);
+  }
+
+  get(pageNumber: number, scale: number, rotation: number): PageCacheEntry | undefined {
+    const key = this.makeKey(pageNumber, scale, rotation);
+    const node = this.cache.get(key);
+    if (node) {
+      this.moveToHead(node);
+      logger.debug(`Cache hit: page ${pageNumber}`);
+      return node.entry;
+    }
+    return undefined;
+  }
+
   set(pageNumber: number, canvas: HTMLCanvasElement, scale: number, rotation: number): void {
     const key = this.makeKey(pageNumber, scale, rotation);
-    const estimatedSize = canvas.width * canvas.height * 4; // RGBA 4 bytes per pixel
+    const estimatedSize = canvas.width * canvas.height * 4;
 
-    // 淘汰旧条目
+    const existingNode = this.cache.get(key);
+    if (existingNode) {
+      this.totalMemory -= existingNode.entry.size;
+      this.removeNode(existingNode);
+    }
+
     this.evictIfNeeded(estimatedSize);
 
-    this.cache.set(key, {
+    const entry: PageCacheEntry = {
       pageNumber,
       canvas,
       scale,
       rotation: rotation as 0 | 90 | 180 | 270,
       timestamp: Date.now(),
       size: estimatedSize,
-    });
+    };
+
+    const node: LRUNode = { key, entry, prev: null, next: null };
+    this.cache.set(key, node);
+    this.addToHead(node);
+    this.totalMemory += estimatedSize;
 
     logger.debug(`Cache set: page ${pageNumber} (${this.cache.size}/${this.maxEntries})`);
   }
 
-  /**
-   * LRU 淘汰
-   */
   private evictIfNeeded(incomingSize: number): void {
-    // 淘汰过期条目
     while (this.cache.size >= this.maxEntries) {
       this.evictLRU();
     }
 
-    // 检查内存限制
-    let totalMemory = this.getTotalMemory() + incomingSize;
-    while (totalMemory > this.maxMemory && this.cache.size > 0) {
+    while (this.totalMemory + incomingSize > this.maxMemory && this.cache.size > 0) {
       this.evictLRU();
-      totalMemory = this.getTotalMemory() + incomingSize;
     }
   }
 
   private evictLRU(): void {
-    let oldestKey: string | null = null;
-    let oldestTime = Infinity;
+    if (!this.tail) return;
 
-    for (const [key, entry] of this.cache) {
-      if (entry.timestamp < oldestTime) {
-        oldestTime = entry.timestamp;
-        oldestKey = key;
-      }
-    }
+    const node = this.tail;
+    this.removeNode(node);
+    this.cache.delete(node.key);
+    this.totalMemory -= node.entry.size;
 
-    if (oldestKey) {
-      this.cache.delete(oldestKey);
-      logger.debug(`Cache evict: ${oldestKey}`);
-    }
+    logger.debug(`Cache evict: ${node.key}`);
   }
 
-  /**
-   * 使特定页面的缓存失效（缩放/旋转变化时）
-   */
   invalidate(pageNumber: number): void {
+    const keysToRemove: string[] = [];
     for (const key of this.cache.keys()) {
       if (key.startsWith(`${pageNumber}_`)) {
+        keysToRemove.push(key);
+      }
+    }
+
+    for (const key of keysToRemove) {
+      const node = this.cache.get(key);
+      if (node) {
+        this.removeNode(node);
         this.cache.delete(key);
+        this.totalMemory -= node.entry.size;
       }
     }
   }
 
-  /**
-   * 清空缓存
-   */
   clear(): void {
     this.cache.clear();
+    this.head = null;
+    this.tail = null;
+    this.totalMemory = 0;
     logger.info('Cache cleared');
   }
 
   getTotalMemory(): number {
-    let total = 0;
-    for (const entry of this.cache.values()) {
-      total += entry.size;
-    }
-    return total;
+    return this.totalMemory;
   }
 
   get size(): number {
@@ -125,7 +156,7 @@ export class PageCacheManager {
   getStats(): { size: number; memory: number; hitRate: string } {
     return {
       size: this.cache.size,
-      memory: this.getTotalMemory(),
+      memory: this.totalMemory,
       hitRate: `${((this.cache.size / this.maxEntries) * 100).toFixed(0)}%`,
     };
   }

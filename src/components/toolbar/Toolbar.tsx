@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useToolStore } from '@/stores/toolStore';
 import { usePdfStore } from '@/stores/pdfStore';
 import { TOOL_LIST } from '@/types';
-import type { ToolType, ZoomMode } from '@/types';
+import type { ToolType } from '@/types';
 
 /** SVG 工具图标 */
 const ICONS: Record<string, React.ReactNode> = {
@@ -113,62 +113,68 @@ export const Toolbar: React.FC = () => {
   };
 
   return (
-    <div className="toolbar">
-      <div className="toolbar-group toolbar-tools">
-        {TOOL_LIST.map((tool) => (
-          <button
-            key={tool.type}
-            className={`toolbar-btn ${activeTool === tool.type ? 'active' : ''}`}
-            onClick={() => setActiveTool(tool.type as ToolType)}
-            title={`${tool.label}${tool.shortcut ? ` (${tool.shortcut})` : ''}`}
-          >
-            <svg className="toolbar-icon-svg" viewBox="0 0 24 24" width="18" height="18">
-              {ICONS[tool.type] || <text x="4" y="18" fontSize="16" fill="currentColor">{tool.icon[0]}</text>}
-            </svg>
-            <span className="toolbar-label">{tool.label}</span>
-          </button>
-        ))}
-      </div>
-
-      {isDrawTool && <StylePanel />}
-
-      <div className="toolbar-divider" />
-
-      <div className="toolbar-group toolbar-zoom">
-        <button className="toolbar-btn" onClick={zoomOut} title="缩小 (Ctrl+-)">−</button>
-        <span className="zoom-display">{Math.round(effectiveZoom * 100)}%</span>
-        <button className="toolbar-btn" onClick={zoomIn} title="放大 (Ctrl++)">+</button>
-        <div className="zoom-mode-group">
-          <button className={`zoom-mode-btn ${zoomMode === 'fitWidth' ? 'active' : ''}`}
-            onClick={() => setZoomMode('fitWidth')} title="适配宽度">宽</button>
-          <button className={`zoom-mode-btn ${zoomMode === 'fitPage' ? 'active' : ''}`}
-            onClick={() => setZoomMode('fitPage')} title="适配页面">页</button>
+    <div className="toolbar" role="toolbar" aria-label="工具栏">
+      <div className="toolbar-drag-area" />
+      <div className="toolbar-content">
+        <div className="toolbar-group toolbar-tools" role="group" aria-label="标注工具">
+          {TOOL_LIST.map((tool) => (
+            <button
+              key={tool.type}
+              className={`toolbar-btn ${activeTool === tool.type ? 'active' : ''}`}
+              onClick={() => setActiveTool(tool.type as ToolType)}
+              title={`${tool.label}${tool.shortcut ? ` (${tool.shortcut})` : ''}`}
+              aria-label={tool.label}
+              aria-pressed={activeTool === tool.type}
+            >
+              <svg className="toolbar-icon-svg" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                {ICONS[tool.type] || <text x="4" y="18" fontSize="16" fill="currentColor">{tool.icon[0]}</text>}
+              </svg>
+              <span className="toolbar-label">{tool.label}</span>
+            </button>
+          ))}
         </div>
-      </div>
 
-      <div className="toolbar-divider" />
+        {isDrawTool && <StylePanel />}
 
-      <div className="toolbar-group toolbar-page">
-        <button className="toolbar-btn" onClick={() => usePdfStore.getState().prevPage()} title="上一页" disabled={currentPage <= 1}>◀</button>
-        <span className="page-display">{currentPage} / {documentInfo?.pageCount ?? 0}</span>
-        <button className="toolbar-btn" onClick={() => usePdfStore.getState().nextPage()} title="下一页" disabled={currentPage >= (documentInfo?.pageCount ?? 0)}>▶</button>
-      </div>
+        <div className="toolbar-divider" />
 
-      <div className="toolbar-divider" />
+        <div className="toolbar-group toolbar-zoom" role="group" aria-label="缩放控制">
+          <button className="toolbar-btn" onClick={zoomOut} title="缩小 (Ctrl+-)" aria-label="缩小">−</button>
+          <span className="zoom-display" role="status" aria-live="polite">{Math.round(effectiveZoom * 100)}%</span>
+          <button className="toolbar-btn" onClick={zoomIn} title="放大 (Ctrl++)" aria-label="放大">+</button>
+          <div className="zoom-mode-group" role="group" aria-label="缩放模式">
+            <button className={`zoom-mode-btn ${zoomMode === 'fitWidth' ? 'active' : ''}`}
+              onClick={() => setZoomMode('fitWidth')} title="适配宽度" aria-label="适配宽度" aria-pressed={zoomMode === 'fitWidth'}>宽</button>
+            <button className={`zoom-mode-btn ${zoomMode === 'fitPage' ? 'active' : ''}`}
+              onClick={() => setZoomMode('fitPage')} title="适配页面" aria-label="适配页面" aria-pressed={zoomMode === 'fitPage'}>页</button>
+          </div>
+        </div>
 
-      <div className="toolbar-group toolbar-actions">
-        <button
-          className="toolbar-btn export-btn"
-          onClick={handleExport}
-          disabled={!isLoaded}
-          title="导出带标注的 PDF (Ctrl+E)"
-        >
-          <svg className="toolbar-icon-svg" viewBox="0 0 24 24" width="16" height="16">
-            <path d="M12 16l-5-5h3V4h4v7h3l-5 5z" fill="currentColor"/>
-            <path d="M20 18H4v2h16v-2z" fill="currentColor"/>
-          </svg>
-          <span className="toolbar-label">导出</span>
-        </button>
+        <div className="toolbar-divider" />
+
+        <div className="toolbar-group toolbar-page" role="group" aria-label="页面导航">
+          <button className="toolbar-btn" onClick={() => usePdfStore.getState().prevPage()} title="上一页" disabled={currentPage <= 1} aria-label="上一页">◀</button>
+          <span className="page-display" role="status" aria-live="polite">{currentPage} / {documentInfo?.pageCount ?? 0}</span>
+          <button className="toolbar-btn" onClick={() => usePdfStore.getState().nextPage()} title="下一页" disabled={currentPage >= (documentInfo?.pageCount ?? 0)} aria-label="下一页">▶</button>
+        </div>
+
+        <div className="toolbar-divider" />
+
+        <div className="toolbar-group toolbar-actions">
+          <button
+            className="toolbar-btn export-btn"
+            onClick={handleExport}
+            disabled={!isLoaded}
+            title="导出带标注的 PDF (Ctrl+E)"
+            aria-label="导出带标注的 PDF"
+          >
+            <svg className="toolbar-icon-svg" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+              <path d="M12 16l-5-5h3V4h4v7h3l-5 5z" fill="currentColor"/>
+              <path d="M20 18H4v2h16v-2z" fill="currentColor"/>
+            </svg>
+            <span className="toolbar-label">导出</span>
+          </button>
+        </div>
       </div>
     </div>
   );

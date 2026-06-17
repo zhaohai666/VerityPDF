@@ -140,12 +140,12 @@ export const PropertyPanel: React.FC = () => {
         )}
 
         {/* 终点 (箭头/直线) */}
-        {hasEndPoint && 'endPoint' in ann && ann.endPoint && (
+        {hasEndPoint && ann.endPoint && (
           <div className="prop-section">
             <div className="prop-section-title">终点</div>
             <div className="prop-grid">
-              <NumInput label="X" value={ann.endPoint.x} onChange={(v) => update({ endPoint: { ...ann.endPoint!, x: v } } as any)} />
-              <NumInput label="Y" value={ann.endPoint.y} onChange={(v) => update({ endPoint: { ...ann.endPoint!, y: v } } as any)} />
+              <NumInput label="X" value={ann.endPoint.x} onChange={(v) => update({ endPoint: { ...ann.endPoint, x: v } })} />
+              <NumInput label="Y" value={ann.endPoint.y} onChange={(v) => update({ endPoint: { ...ann.endPoint, y: v } })} />
             </div>
           </div>
         )}
@@ -212,7 +212,7 @@ export const PropertyPanel: React.FC = () => {
             <textarea
               className="prop-textarea"
               value={ann.content || ''}
-              onChange={(e) => update({ content: e.target.value } as any)}
+              onChange={(e) => update({ content: e.target.value })}
               rows={3}
               placeholder="输入内容..."
             />

@@ -1,20 +1,20 @@
 import { create } from 'zustand';
 import type { Annotation } from '@/types';
 
-interface HistoryEntry {
-  before: Annotation[];
-  after: Annotation[];
-}
+type Operation =
+  | { type: 'add'; annotation: Annotation }
+  | { type: 'remove'; annotation: Annotation }
+  | { type: 'update'; annotationId: string; before: Annotation; after: Annotation };
 
 interface AnnotationState {
   annotations: Annotation[];
   selectedIds: string[];
   isDirty: boolean;
   saveStatus: 'saved' | 'saving' | 'unsaved' | 'error';
-  undoStack: HistoryEntry[];
-  redoStack: HistoryEntry[];
+  lastSavedTime: number | null;
+  undoStack: Operation[];
+  redoStack: Operation[];
 
-  // Actions
   setAnnotations: (annotations: Annotation[]) => void;
   addAnnotation: (annotation: Annotation) => void;
   updateAnnotation: (id: string, changes: Partial<Annotation>) => void;
@@ -35,46 +35,49 @@ export const useAnnotationStore = create<AnnotationState>((set, get) => ({
   selectedIds: [],
   isDirty: false,
   saveStatus: 'saved',
+  lastSavedTime: null,
   undoStack: [],
   redoStack: [],
 
-  setAnnotations: (annotations) => set({ annotations, isDirty: false, saveStatus: 'saved', undoStack: [], redoStack: [] }),
+  setAnnotations: (annotations) => {
+    set({ annotations, isDirty: false, saveStatus: 'saved', lastSavedTime: Date.now(), undoStack: [], redoStack: [] });
+  },
 
   addAnnotation: (annotation) => {
-    const before = [...get().annotations];
     set((state) => ({
       annotations: [...state.annotations, annotation],
       isDirty: true,
       saveStatus: 'unsaved',
-      undoStack: [...state.undoStack.slice(-49), { before, after: [...state.annotations, annotation] }],
+      undoStack: [...state.undoStack.slice(-49), { type: 'add', annotation }],
       redoStack: [],
     }));
   },
 
   updateAnnotation: (id, changes) => {
-    const before = [...get().annotations];
     set((state) => {
-      const after = state.annotations.map((a) => (a.id === id ? ({ ...a, ...changes } as Annotation) : a));
+      const before = state.annotations.find((a) => a.id === id);
+      if (!before) return state;
+      const after = { ...before, ...changes } as Annotation;
       return {
-        annotations: after,
+        annotations: state.annotations.map((a) => (a.id === id ? after : a)),
         isDirty: true,
         saveStatus: 'unsaved',
-        undoStack: [...state.undoStack.slice(-49), { before, after }],
+        undoStack: [...state.undoStack.slice(-49), { type: 'update', annotationId: id, before, after }],
         redoStack: [],
       };
     });
   },
 
   removeAnnotation: (id) => {
-    const before = [...get().annotations];
     set((state) => {
-      const after = state.annotations.filter((a) => a.id !== id);
+      const annotation = state.annotations.find((a) => a.id === id);
+      if (!annotation) return state;
       return {
-        annotations: after,
+        annotations: state.annotations.filter((a) => a.id !== id),
         selectedIds: state.selectedIds.filter((sid) => sid !== id),
         isDirty: true,
         saveStatus: 'unsaved',
-        undoStack: [...state.undoStack.slice(-49), { before, after }],
+        undoStack: [...state.undoStack.slice(-49), { type: 'remove', annotation }],
         redoStack: [],
       };
     });
@@ -99,7 +102,12 @@ export const useAnnotationStore = create<AnnotationState>((set, get) => ({
   clearSelection: () => set({ selectedIds: [] }),
 
   setDirty: (dirty) => set({ isDirty: dirty }),
-  setSaveStatus: (status) => set({ saveStatus: status }),
+  setSaveStatus: (status) => {
+    set((state) => ({
+      saveStatus: status,
+      lastSavedTime: status === 'saved' ? Date.now() : state.lastSavedTime,
+    }));
+  },
 
   getByPage: (page) => {
     return get().annotations.filter((a) => a.page === page);
@@ -116,6 +124,7 @@ export const useAnnotationStore = create<AnnotationState>((set, get) => ({
       selectedIds: [],
       isDirty: false,
       saveStatus: 'saved',
+      lastSavedTime: null,
       undoStack: [],
       redoStack: [],
     }),
@@ -123,11 +132,32 @@ export const useAnnotationStore = create<AnnotationState>((set, get) => ({
   undo: () => {
     const { undoStack, annotations } = get();
     if (undoStack.length === 0) return;
-    const entry = undoStack[undoStack.length - 1];
+    const op = undoStack[undoStack.length - 1];
+
+    let newAnnotations = [...annotations];
+    let redoOp: Operation;
+
+    switch (op.type) {
+      case 'add':
+        newAnnotations = newAnnotations.filter((a) => a.id !== op.annotation.id);
+        redoOp = { type: 'add', annotation: op.annotation };
+        break;
+      case 'remove':
+        newAnnotations = [...newAnnotations, op.annotation];
+        redoOp = { type: 'remove', annotation: op.annotation };
+        break;
+      case 'update':
+        newAnnotations = newAnnotations.map((a) => (a.id === op.annotationId ? op.before : a));
+        redoOp = { type: 'update', annotationId: op.annotationId, before: op.before, after: op.after };
+        break;
+      default:
+        return;
+    }
+
     set({
-      annotations: entry.before,
+      annotations: newAnnotations,
       undoStack: undoStack.slice(0, -1),
-      redoStack: [...get().redoStack, { before: entry.before, after: annotations }],
+      redoStack: [...get().redoStack, redoOp],
       isDirty: true,
       saveStatus: 'unsaved',
     });
@@ -136,18 +166,38 @@ export const useAnnotationStore = create<AnnotationState>((set, get) => ({
   redo: () => {
     const { redoStack, annotations } = get();
     if (redoStack.length === 0) return;
-    const entry = redoStack[redoStack.length - 1];
+    const op = redoStack[redoStack.length - 1];
+
+    let newAnnotations = [...annotations];
+    let undoOp: Operation;
+
+    switch (op.type) {
+      case 'add':
+        newAnnotations = [...newAnnotations, op.annotation];
+        undoOp = { type: 'add', annotation: op.annotation };
+        break;
+      case 'remove':
+        newAnnotations = newAnnotations.filter((a) => a.id !== op.annotation.id);
+        undoOp = { type: 'remove', annotation: op.annotation };
+        break;
+      case 'update':
+        newAnnotations = newAnnotations.map((a) => (a.id === op.annotationId ? op.after : a));
+        undoOp = { type: 'update', annotationId: op.annotationId, before: op.before, after: op.after };
+        break;
+      default:
+        return;
+    }
+
     set({
-      annotations: entry.after,
+      annotations: newAnnotations,
       redoStack: redoStack.slice(0, -1),
-      undoStack: [...get().undoStack, { before: annotations, after: entry.after }],
+      undoStack: [...get().undoStack, undoOp],
       isDirty: true,
       saveStatus: 'unsaved',
     });
   },
 }));
 
-// 暴露 store 用于自动化测试（开发模式）
 if (typeof window !== 'undefined') {
-  (window as any).__annotationStore = useAnnotationStore;
+  window.__annotationStore = useAnnotationStore;
 }

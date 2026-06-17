@@ -64,11 +64,24 @@ export const usePdfStore = create<PDFState>((set, get) => ({
   setLoading: (loading) => set({ isLoading: loading }),
   setLoadingProgress: (progress) => set({ loadingProgress: progress }),
   setPasswordRequired: (required) => set({ passwordRequired: required }),
-  setCurrentPage: (page) => set({ currentPage: page }),
-  setZoom: (zoom) => set({ zoom, zoomMode: 'custom' }),
-  setEffectiveZoom: (effectiveZoom) => set({ effectiveZoom }),
+  setCurrentPage: (page) => {
+    const { documentInfo } = get();
+    const pageCount = documentInfo?.pageCount ?? 1;
+    set({ currentPage: Math.max(1, Math.min(page, pageCount)) });
+  },
+  setZoom: (zoom) => {
+    const clamped = Math.max(0.25, Math.min(zoom, 4.0));
+    set({ zoom: clamped, effectiveZoom: clamped, zoomMode: 'custom' });
+  },
+  setEffectiveZoom: (effectiveZoom) => {
+    const clamped = Math.max(0.25, Math.min(effectiveZoom, 4.0));
+    set({ effectiveZoom: clamped });
+  },
   setZoomMode: (mode) => set({ zoomMode: mode }),
-  setRotation: (rotation) => set({ rotation }),
+  setRotation: (rotation) => {
+    const normalized = ((rotation % 360) + 360) % 360;
+    set({ rotation: normalized as Rotation });
+  },
   setScrollMode: (mode) => set({ scrollMode: mode }),
   setOutline: (outline) => set({ outline }),
 

@@ -2,33 +2,34 @@ import React, { useRef, useEffect, useCallback, useState } from 'react';
 import { usePdfStore } from '@/stores/pdfStore';
 import { useAnnotationStore } from '@/stores/annotationStore';
 import { useToolStore } from '@/stores/toolStore';
+import { useUIStore } from '@/stores/uiStore';
 import { PDFService } from '@/services/pdf/PDFService';
 import { PageRenderer } from './PageRenderer';
 
 const pdfService = new PDFService();
 
-// 全局暴露 pdfService 供缩略图使用
 if (typeof window !== 'undefined') {
-  (window as any).__pdfService = pdfService;
+  window.__pdfService = pdfService;
 }
 
-// 防止 StrictMode 双重挂载导致重复加载
 let _fileLoadInitiated = false;
+
+const VISIBLE_THRESHOLD = 2;
 
 export const PDFViewer: React.FC = () => {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const viewerContentRef = useRef<HTMLDivElement>(null);
-  const { filePath, isLoaded, currentPage, zoom, rotation, zoomMode, scrollMode, isLoading, loadingProgress, documentInfo } = usePdfStore();
+  const { isLoaded, currentPage, zoom, rotation, zoomMode, scrollMode, isLoading, loadingProgress, documentInfo } = usePdfStore();
   const activeTool = useToolStore((s) => s.activeTool);
   const [containerWidth, setContainerWidth] = useState<number>(0);
+  const [visiblePages, setVisiblePages] = useState<Set<number>>(new Set([1]));
   const pageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
+  const observerRef = useRef<IntersectionObserver | null>(null);
 
-  // 测量容器宽度
   useEffect(() => {
     const el = scrollContainerRef.current;
     if (!el) return;
 
-    // 立即获取初始宽度
     const initialWidth = el.clientWidth;
     if (initialWidth > 0) {
       setContainerWidth(initialWidth);
@@ -41,9 +42,8 @@ export const PDFViewer: React.FC = () => {
     });
     observer.observe(el);
     return () => observer.disconnect();
-  }, [isLoaded, isLoading]); // 当加载状态变化时重新绑定
+  }, [isLoaded, isLoading]);
 
-  // 计算并同步 effectiveZoom
   useEffect(() => {
     if (!isLoaded || !documentInfo || containerWidth <= 0) return;
     const computeEffectiveZoom = async () => {
@@ -64,14 +64,13 @@ export const PDFViewer: React.FC = () => {
     computeEffectiveZoom();
   }, [isLoaded, zoomMode, zoom, containerWidth, documentInfo]);
 
-  // 渲染完成后加载大纲
   useEffect(() => {
     if (!isLoaded) return;
     pdfService.getOutline().then((outline) => {
       if (outline && outline.length > 0) {
         const mapped = outline.map((item) => ({
           title: item.title || 'Untitled',
-          pageNumber: item.dest ? 1 : 1, // 简化处理
+          pageNumber: item.pageNumber || 1,
           children: [],
         }));
         usePdfStore.getState().setOutline(mapped);
@@ -79,10 +78,15 @@ export const PDFViewer: React.FC = () => {
     }).catch(() => { /* ignore */ });
   }, [isLoaded]);
 
-  // 加载文件
   const loadFileFromPath = useCallback(async (path: string) => {
+    const showToast = useUIStore.getState().showToast;
     try {
       const data = await window.verityAPI.readFile(path);
+      if (!data) {
+        showToast('无法读取文件', 'error');
+        return;
+      }
+
       const store = usePdfStore.getState();
       store.setLoading(true);
       store.setFilePath(path);
@@ -100,7 +104,6 @@ export const PDFViewer: React.FC = () => {
       store.setLoaded(true);
       store.setLoading(false);
 
-      // 自动加载 .verity 项目文件
       const verityPath = path.replace(/\.pdf$/i, '.verity');
       try {
         const verityData = await window.verityAPI.readFile(verityPath);
@@ -119,16 +122,17 @@ export const PDFViewer: React.FC = () => {
       window.verityAPI.setWindowTitle(`${fileName} - VerityPDF`);
       console.log('[Viewer] File loaded:', fileName, 'pages:', info?.pageCount);
 
-      // 自动滚动到第 1 页
       setTimeout(() => scrollToPage(1), 300);
     } catch (err) {
       console.error('Failed to load file:', err);
       usePdfStore.getState().setLoading(false);
+      const errorMsg = err instanceof Error ? err.message : '加载文件失败';
+      showToast(errorMsg, 'error');
     }
   }, []);
 
-  // 打开文件对话框
   const handleOpenFile = useCallback(async () => {
+    const showToast = useUIStore.getState().showToast;
     try {
       const path = await window.verityAPI.openFile();
       if (!path) return;
@@ -136,20 +140,26 @@ export const PDFViewer: React.FC = () => {
     } catch (err) {
       console.error('Failed to open file:', err);
       usePdfStore.getState().setLoading(false);
+      const errorMsg = err instanceof Error ? err.message : '打开文件失败';
+      showToast(errorMsg, 'error');
     }
   }, [loadFileFromPath]);
 
-  // 导出带标注的 PDF
   const handleExportPDF = useCallback(async () => {
+    const showToast = useUIStore.getState().showToast;
     try {
       const store = usePdfStore.getState();
       if (!store.filePath || !store.isLoaded) {
-        console.warn('[Export] No PDF loaded');
+        showToast('请先打开 PDF 文件', 'warning');
         return;
       }
 
-      // 读取原始 PDF 文件并转为 Base64
       const pdfArrayBuffer = await window.verityAPI.readFile(store.filePath);
+      if (!pdfArrayBuffer) {
+        showToast('无法读取 PDF 文件', 'error');
+        return;
+      }
+
       const pdfBytes = new Uint8Array(pdfArrayBuffer);
       let binary = '';
       for (let i = 0; i < pdfBytes.length; i++) {
@@ -157,29 +167,27 @@ export const PDFViewer: React.FC = () => {
       }
       const pdfBase64 = btoa(binary);
 
-      // 获取所有标注
       const annotations = useAnnotationStore.getState().annotations;
 
-      // 默认导出文件名
       const originalName = store.filePath.split(/[\\/]/).pop()?.replace(/\.pdf$/i, '') || 'document';
       const defaultName = `${originalName}_annotated.pdf`;
 
       console.log(`[Export] Starting export: ${annotations.length} annotations`);
 
-      // 调用主进程导出
       const savedPath = await window.verityAPI.exportPDF(pdfBase64, annotations, defaultName);
       if (savedPath) {
         console.log('[Export] PDF saved to:', savedPath);
+        showToast('导出成功', 'success');
       } else {
         console.log('[Export] Export cancelled by user');
       }
     } catch (err) {
       console.error('[Export] Export failed:', err);
-      alert(`导出失败: ${err instanceof Error ? err.message : '未知错误'}`);
+      const errorMsg = err instanceof Error ? err.message : '导出失败';
+      showToast(errorMsg, 'error');
     }
   }, []);
 
-  // 滚动到指定页面
   const scrollToPage = useCallback((page: number) => {
     const el = pageRefs.current.get(page);
     if (el) {
@@ -187,14 +195,12 @@ export const PDFViewer: React.FC = () => {
     }
   }, []);
 
-  // 监听 currentPage 变化来滚动
   useEffect(() => {
     if (isLoaded && scrollMode === 'singlePage') {
       scrollToPage(currentPage);
     }
   }, [currentPage, isLoaded, scrollMode, scrollToPage]);
 
-  // 监听滚动事件，更新当前页码
   useEffect(() => {
     const container = scrollContainerRef.current;
     if (!container || !isLoaded) return;
@@ -231,7 +237,6 @@ export const PDFViewer: React.FC = () => {
     };
   }, [isLoaded]);
 
-  // 鼠标滚轮缩放 (Ctrl+Wheel)
   useEffect(() => {
     const container = scrollContainerRef.current;
     if (!container || !isLoaded) return;
@@ -252,7 +257,6 @@ export const PDFViewer: React.FC = () => {
     return () => container.removeEventListener('wheel', handleWheel);
   }, [isLoaded]);
 
-  // 文件拖放
   useEffect(() => {
     const handleDrop = async (e: DragEvent) => {
       e.preventDefault();
@@ -270,7 +274,6 @@ export const PDFViewer: React.FC = () => {
     };
   }, [loadFileFromPath]);
 
-  // 菜单事件 + 文件打开事件 + 导出事件
   useEffect(() => {
     const unsubMenu = window.verityAPI.onMenuAction((action) => {
       if (action === 'file:open') handleOpenFile();
@@ -280,7 +283,6 @@ export const PDFViewer: React.FC = () => {
       console.log('[Viewer] Received file:opened event:', fp);
       loadFileFromPath(fp);
     });
-    // 工具栏导出按钮事件
     const handleExportEvent = () => handleExportPDF();
     window.addEventListener('verity:export', handleExportEvent);
     return () => {
@@ -290,10 +292,9 @@ export const PDFViewer: React.FC = () => {
     };
   }, [handleOpenFile, loadFileFromPath, handleExportPDF]);
 
-  // 启动时自动加载测试文件
   useEffect(() => {
     if (_fileLoadInitiated) return;
-    _fileLoadInitiated = true; // 同步设置，防止 StrictMode 双重挂载
+    _fileLoadInitiated = true;
     const checkTestFile = async () => {
       const testFilePath = await window.verityAPI.getTestFile();
       if (testFilePath && !usePdfStore.getState().isLoaded && !usePdfStore.getState().isLoading) {
@@ -304,19 +305,58 @@ export const PDFViewer: React.FC = () => {
     checkTestFile();
   }, [loadFileFromPath]);
 
-  // 注册页面 ref
   const registerPageRef = useCallback((page: number, el: HTMLDivElement | null) => {
     if (el) {
       pageRefs.current.set(page, el);
+      if (observerRef.current) {
+        observerRef.current.observe(el);
+      }
     } else {
       pageRefs.current.delete(page);
     }
   }, []);
 
+  useEffect(() => {
+    if (!scrollContainerRef.current) return;
+
+    observerRef.current = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          const pageNum = parseInt(entry.target.getAttribute('data-page') || '0');
+          if (pageNum > 0) {
+            if (entry.isIntersecting) {
+              setVisiblePages((prev) => {
+                const next = new Set(prev);
+                for (let i = Math.max(1, pageNum - VISIBLE_THRESHOLD); i <= Math.min(documentInfo?.pageCount ?? 0, pageNum + VISIBLE_THRESHOLD); i++) {
+                  next.add(i);
+                }
+                return next;
+              });
+            }
+          }
+        });
+      },
+      {
+        root: scrollContainerRef.current,
+        rootMargin: '200px',
+        threshold: 0.1,
+      }
+    );
+
+    pageRefs.current.forEach((el) => {
+      observerRef.current?.observe(el);
+    });
+
+    return () => {
+      observerRef.current?.disconnect();
+    };
+  }, [isLoaded, documentInfo?.pageCount]);
+
   const cursor = activeTool === 'select' ? 'default' : activeTool === 'pan' ? 'grab' : 'crosshair';
   const pageCount = documentInfo?.pageCount ?? 0;
 
-  // 空状态
+
+
   if (!isLoaded && !isLoading) {
     return (
       <div className="pdf-viewer" style={{ cursor: 'default' }}>
@@ -332,7 +372,6 @@ export const PDFViewer: React.FC = () => {
     );
   }
 
-  // 加载中
   if (isLoading) {
     return (
       <div className="pdf-viewer">
@@ -361,16 +400,19 @@ export const PDFViewer: React.FC = () => {
           <div
             key={pageNum}
             ref={(el) => registerPageRef(pageNum, el)}
+            data-page={pageNum}
             className={`pdf-page-slot ${currentPage === pageNum ? 'active' : ''}`}
           >
-            <PageRenderer
-              pageNumber={pageNum}
-              pdfService={pdfService}
-              zoom={zoom}
-              rotation={rotation}
-              containerWidth={containerWidth}
-              zoomMode={zoomMode}
-            />
+            {visiblePages.has(pageNum) && (
+              <PageRenderer
+                pageNumber={pageNum}
+                pdfService={pdfService}
+                zoom={zoom}
+                rotation={rotation}
+                containerWidth={containerWidth}
+                zoomMode={zoomMode}
+              />
+            )}
           </div>
         ))}
       </div>

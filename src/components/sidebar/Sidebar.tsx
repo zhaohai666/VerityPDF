@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, memo, useCallback } from 'react';
+import React, { useRef, useEffect, memo } from 'react';
 import { useUIStore } from '@/stores/uiStore';
 import { usePdfStore } from '@/stores/pdfStore';
 import { useAnnotationStore } from '@/stores/annotationStore';
@@ -18,8 +18,7 @@ const ThumbnailItem = memo(({ pageNumber, isActive, onClick }: {
     const timer = setTimeout(async () => {
       if (!canvasRef.current || renderedRef.current) return;
       try {
-        // 从 PDFViewer 的 pdfService 获取渲染（通过全局引用）
-        const pdfService = (window as any).__pdfService;
+        const pdfService = window.__pdfService;
         if (!pdfService) return;
 
         const pageSize = await pdfService.getPageSize(pageNumber);
@@ -65,23 +64,35 @@ export const Sidebar: React.FC = () => {
   if (!sidebarVisible) return null;
 
   return (
-    <div className="sidebar">
-      <div className="sidebar-tabs">
+    <aside className="sidebar" role="navigation" aria-label="侧边栏">
+      <div className="sidebar-tabs" role="tablist">
         <button
           className={`sidebar-tab ${sidebarTab === 'thumbnails' ? 'active' : ''}`}
           onClick={() => setSidebarTab('thumbnails')}
+          role="tab"
+          aria-selected={sidebarTab === 'thumbnails'}
+          aria-controls="sidebar-thumbnails"
+          id="tab-thumbnails"
         >
           缩略图
         </button>
         <button
           className={`sidebar-tab ${sidebarTab === 'outline' ? 'active' : ''}`}
           onClick={() => setSidebarTab('outline')}
+          role="tab"
+          aria-selected={sidebarTab === 'outline'}
+          aria-controls="sidebar-outline"
+          id="tab-outline"
         >
           大纲
         </button>
         <button
           className={`sidebar-tab ${sidebarTab === 'annotations' ? 'active' : ''}`}
           onClick={() => setSidebarTab('annotations')}
+          role="tab"
+          aria-selected={sidebarTab === 'annotations'}
+          aria-controls="sidebar-annotations"
+          id="tab-annotations"
         >
           标注
         </button>
@@ -89,7 +100,7 @@ export const Sidebar: React.FC = () => {
 
       <div className="sidebar-content">
         {sidebarTab === 'thumbnails' && (
-          <div className="thumbnail-list">
+          <div id="sidebar-thumbnails" className="thumbnail-list" role="tabpanel" aria-labelledby="tab-thumbnails" aria-label="页面缩略图">
             {documentInfo && Array.from({ length: documentInfo.pageCount }, (_, i) => (
               <ThumbnailItem
                 key={i + 1}
@@ -102,28 +113,28 @@ export const Sidebar: React.FC = () => {
         )}
 
         {sidebarTab === 'outline' && (
-          <div className="outline-list">
+          <div id="sidebar-outline" className="outline-list" role="tabpanel" aria-labelledby="tab-outline" aria-label="文档大纲">
             {outline.length === 0 ? (
               <div className="empty-message">无大纲信息</div>
             ) : (
               outline.map((item, i) => (
-                <div key={i} className="outline-item" onClick={() => setCurrentPage(item.pageNumber)}>
+                <button key={i} className="outline-item" onClick={() => setCurrentPage(item.pageNumber)} aria-label={`跳转到 ${item.title}，第 ${item.pageNumber} 页`}>
                   <span className="outline-title">{item.title}</span>
                   <span className="outline-page">{item.pageNumber}</span>
-                </div>
+                </button>
               ))
             )}
           </div>
         )}
 
         {sidebarTab === 'annotations' && (
-          <div className="annotation-list">
+          <div id="sidebar-annotations" className="annotation-list" role="tabpanel" aria-labelledby="tab-annotations" aria-label="标注列表">
             {annotations.length === 0 ? (
               <div className="empty-message">暂无标注</div>
             ) : (
               annotations.map((ann) => (
-                <div key={ann.id} className="annotation-item">
-                  <span className="ann-type">{ann.type}</span>
+                <div key={ann.id} className="annotation-item" role="listitem">
+                  <span className="ann-type" aria-label={ann.type}>{ann.type}</span>
                   <span className="ann-page">P{ann.page}</span>
                 </div>
               ))
@@ -131,6 +142,6 @@ export const Sidebar: React.FC = () => {
           </div>
         )}
       </div>
-    </div>
+    </aside>
   );
 };

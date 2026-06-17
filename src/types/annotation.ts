@@ -1,4 +1,4 @@
-import type { Point, Size, Rotation } from './common';
+import type { Point, Size } from './common';
 
 /** 标注类型 */
 export type AnnotationType =

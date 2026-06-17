@@ -28,6 +28,5 @@
       "@assets/*": ["src/assets/*"]
     }
   },
-  "include": ["src", "electron", "vite-env.d.ts"],
-  "references": [{ "path": "./tsconfig.node.json" }]
+  "include": ["src", "electron", "vite-env.d.ts"]
 }

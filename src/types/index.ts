@@ -4,3 +4,4 @@ export * from './pdf';
 export * from './tool';
 export * from './electron';
 export * from './project';
+export * from './utils';

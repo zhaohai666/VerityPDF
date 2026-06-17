@@ -3,17 +3,33 @@ import { usePdfStore } from '@/stores/pdfStore';
 import { useAnnotationStore } from '@/stores/annotationStore';
 import { useUIStore } from '@/stores/uiStore';
 
+function formatTime(timestamp: number): string {
+  const date = new Date(timestamp);
+  const hours = date.getHours().toString().padStart(2, '0');
+  const minutes = date.getMinutes().toString().padStart(2, '0');
+  const seconds = date.getSeconds().toString().padStart(2, '0');
+  return `${hours}:${minutes}:${seconds}`;
+}
+
 export const StatusBar: React.FC = () => {
   const { currentPage, documentInfo, effectiveZoom, rotation } = usePdfStore();
-  const { annotations, saveStatus } = useAnnotationStore();
+  const { annotations, saveStatus, lastSavedTime } = useAnnotationStore();
   const { theme, setTheme } = useUIStore();
 
-  const saveStatusText = {
-    saved: '已保存',
-    saving: '保存中...',
-    unsaved: '未保存',
-    error: '保存失败',
-  }[saveStatus];
+  const getSaveStatusText = () => {
+    switch (saveStatus) {
+      case 'saved':
+        return lastSavedTime ? `已保存 ${formatTime(lastSavedTime)}` : '已保存';
+      case 'saving':
+        return '保存中...';
+      case 'unsaved':
+        return '未保存';
+      case 'error':
+        return '保存失败';
+      default:
+        return '';
+    }
+  };
 
   return (
     <div className="status-bar">
@@ -30,7 +46,7 @@ export const StatusBar: React.FC = () => {
       </div>
 
       <div className="status-center">
-        <span className="status-item">{saveStatusText}</span>
+        <span className="status-item">{getSaveStatusText()}</span>
         {annotations.length > 0 && (
           <>
             <span className="status-separator">|</span>
@@ -51,6 +67,7 @@ export const StatusBar: React.FC = () => {
         <button
           className="theme-toggle"
           onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+          aria-label={theme === 'dark' ? '切换到浅色模式' : '切换到深色模式'}
         >
           {theme === 'dark' ? '☀' : '☾'}
         </button>
