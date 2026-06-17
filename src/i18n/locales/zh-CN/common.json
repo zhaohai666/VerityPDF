@@ -1,0 +1,55 @@
+{
+  "app": {
+    "name": "VerityPDF",
+    "description": "专业 PDF 批注工具"
+  },
+  "menu": {
+    "file": "文件",
+    "edit": "编辑",
+    "view": "视图",
+    "help": "帮助",
+    "open": "打开 PDF...",
+    "save": "保存",
+    "saveAs": "另存为...",
+    "export": "导出 PDF...",
+    "print": "打印...",
+    "undo": "撤销",
+    "redo": "重做",
+    "copy": "复制",
+    "paste": "粘贴",
+    "delete": "删除",
+    "selectAll": "全选"
+  },
+  "toolbar": {
+    "select": "选择",
+    "pan": "平移",
+    "rect": "矩形",
+    "ellipse": "椭圆",
+    "arrow": "箭头",
+    "line": "直线",
+    "freehand": "画笔",
+    "text": "文本",
+    "highlight": "高亮",
+    "stickyNote": "便签",
+    "stamp": "印章",
+    "signature": "签名",
+    "eraser": "橡皮擦"
+  },
+  "sidebar": {
+    "thumbnails": "缩略图",
+    "outline": "大纲",
+    "annotations": "标注",
+    "empty": "暂无数据"
+  },
+  "viewer": {
+    "openFile": "打开 PDF 文件",
+    "dropHint": "或将 PDF 文件拖放到此处",
+    "noDocument": "请打开一个 PDF 文件"
+  },
+  "status": {
+    "saved": "已保存",
+    "saving": "保存中...",
+    "unsaved": "未保存",
+    "error": "保存失败"
+  }
+}

@@ -1,0 +1,152 @@
+import React, { useState } from 'react';
+import { useToolStore } from '@/stores/toolStore';
+import { usePdfStore } from '@/stores/pdfStore';
+import { TOOL_LIST } from '@/types';
+import type { ToolType, ZoomMode } from '@/types';
+
+/** SVG 工具图标 */
+const ICONS: Record<string, React.ReactNode> = {
+  select: <path d="M3 3l7 18 2-8 8-2L3 3z" fill="currentColor"/>,
+  pan: <path d="M12 2a3 3 0 00-3 3v4.26A2 2 0 007 11v5a6 6 0 0012 0v-5a2 2 0 00-2-1.74V5a3 3 0 00-3-3h-2z" fill="none" stroke="currentColor" strokeWidth="1.5"/>,
+  rect: <rect x="3" y="3" width="18" height="18" rx="2" fill="none" stroke="currentColor" strokeWidth="1.5"/>,
+  ellipse: <ellipse cx="12" cy="12" rx="9" ry="7" fill="none" stroke="currentColor" strokeWidth="1.5"/>,
+  arrow: <><line x1="4" y1="20" x2="20" y2="4" stroke="currentColor" strokeWidth="1.5"/><polyline points="10,4 20,4 20,14" fill="none" stroke="currentColor" strokeWidth="1.5"/></>,
+  line: <line x1="4" y1="20" x2="20" y2="4" stroke="currentColor" strokeWidth="2"/>,
+  freehand: <path d="M3 17c3-4 6 2 9-2s6-6 9-2" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>,
+  text: <><line x1="6" y1="4" x2="18" y2="4" stroke="currentColor" strokeWidth="2"/><line x1="12" y1="4" x2="12" y2="20" stroke="currentColor" strokeWidth="2"/><line x1="8" y1="20" x2="16" y2="20" stroke="currentColor" strokeWidth="1.5"/></>,
+  highlight: <><rect x="4" y="8" width="16" height="8" rx="1" fill="currentColor" opacity="0.3"/><line x1="4" y1="12" x2="20" y2="12" stroke="currentColor" strokeWidth="1"/></>,
+  stickyNote: <><rect x="3" y="3" width="18" height="18" rx="2" fill="#FDE68A" stroke="currentColor" strokeWidth="1"/><line x1="7" y1="8" x2="17" y2="8" stroke="#666" strokeWidth="1"/><line x1="7" y1="12" x2="14" y2="12" stroke="#666" strokeWidth="1"/></>,
+  stamp: <><circle cx="12" cy="10" r="6" fill="none" stroke="currentColor" strokeWidth="1.5"/><line x1="12" y1="16" x2="12" y2="20" stroke="currentColor" strokeWidth="2"/><line x1="8" y1="20" x2="16" y2="20" stroke="currentColor" strokeWidth="1.5"/></>,
+  signature: <path d="M3 18c2-3 4 1 6-1s3-5 5-3 3 4 5 2" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>,
+  eraser: <><rect x="6" y="4" width="12" height="8" rx="1" fill="none" stroke="currentColor" strokeWidth="1.5" transform="rotate(-30 12 8)"/><line x1="3" y1="20" x2="21" y2="20" stroke="currentColor" strokeWidth="1.5"/></>,
+};
+
+const PRESET_COLORS = [
+  '#FF0000', '#FF6600', '#FFCC00', '#33CC00', '#0099FF',
+  '#6633CC', '#FF3399', '#000000', '#666666', '#FFFFFF',
+];
+
+/** 样式面板 */
+const StylePanel: React.FC = () => {
+  const { toolStyle, setToolStyle } = useToolStore();
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="style-panel-wrapper">
+      <button className="style-panel-toggle" onClick={() => setOpen(!open)} title="标注样式">
+        <span className="style-color-preview" style={{ background: toolStyle.stroke }} />
+        <span className="style-label">样式</span>
+      </button>
+      {open && (
+        <div className="style-panel-dropdown">
+          <div className="style-section">
+            <label>描边颜色</label>
+            <div className="color-grid">
+              {PRESET_COLORS.map((c) => (
+                <button
+                  key={c}
+                  className={`color-swatch ${toolStyle.stroke === c ? 'active' : ''}`}
+                  style={{ background: c }}
+                  onClick={() => setToolStyle({ stroke: c })}
+                />
+              ))}
+            </div>
+            <input
+              type="color"
+              value={toolStyle.stroke}
+              onChange={(e) => setToolStyle({ stroke: e.target.value })}
+              className="color-input"
+            />
+          </div>
+          <div className="style-section">
+            <label>填充颜色</label>
+            <div className="color-grid">
+              <button
+                className={`color-swatch ${toolStyle.fill === 'transparent' ? 'active' : ''}`}
+                style={{ background: 'repeating-conic-gradient(#ccc 0% 25%, #fff 0% 50%) 50% / 8px 8px' }}
+                onClick={() => setToolStyle({ fill: 'transparent' })}
+              />
+              {PRESET_COLORS.map((c) => (
+                <button
+                  key={`f-${c}`}
+                  className={`color-swatch ${toolStyle.fill === c ? 'active' : ''}`}
+                  style={{ background: c }}
+                  onClick={() => setToolStyle({ fill: c })}
+                />
+              ))}
+            </div>
+          </div>
+          <div className="style-section">
+            <label>线宽: {toolStyle.strokeWidth}px</label>
+            <input
+              type="range" min="1" max="10" step="0.5"
+              value={toolStyle.strokeWidth}
+              onChange={(e) => setToolStyle({ strokeWidth: Number(e.target.value) })}
+              className="style-range"
+            />
+          </div>
+          <div className="style-section">
+            <label>透明度: {Math.round(toolStyle.opacity * 100)}%</label>
+            <input
+              type="range" min="0.1" max="1" step="0.05"
+              value={toolStyle.opacity}
+              onChange={(e) => setToolStyle({ opacity: Number(e.target.value) })}
+              className="style-range"
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export const Toolbar: React.FC = () => {
+  const activeTool = useToolStore((s) => s.activeTool);
+  const setActiveTool = useToolStore((s) => s.setActiveTool);
+  const { zoomIn, zoomOut, currentPage, documentInfo, zoomMode, setZoomMode, effectiveZoom } = usePdfStore();
+  const isDrawTool = ['rect', 'ellipse', 'arrow', 'line', 'freehand', 'text', 'highlight', 'stickyNote'].includes(activeTool);
+
+  return (
+    <div className="toolbar">
+      <div className="toolbar-group toolbar-tools">
+        {TOOL_LIST.map((tool) => (
+          <button
+            key={tool.type}
+            className={`toolbar-btn ${activeTool === tool.type ? 'active' : ''}`}
+            onClick={() => setActiveTool(tool.type as ToolType)}
+            title={`${tool.label}${tool.shortcut ? ` (${tool.shortcut})` : ''}`}
+          >
+            <svg className="toolbar-icon-svg" viewBox="0 0 24 24" width="18" height="18">
+              {ICONS[tool.type] || <text x="4" y="18" fontSize="16" fill="currentColor">{tool.icon[0]}</text>}
+            </svg>
+            <span className="toolbar-label">{tool.label}</span>
+          </button>
+        ))}
+      </div>
+
+      {isDrawTool && <StylePanel />}
+
+      <div className="toolbar-divider" />
+
+      <div className="toolbar-group toolbar-zoom">
+        <button className="toolbar-btn" onClick={zoomOut} title="缩小 (Ctrl+-)">−</button>
+        <span className="zoom-display">{Math.round(effectiveZoom * 100)}%</span>
+        <button className="toolbar-btn" onClick={zoomIn} title="放大 (Ctrl++)">+</button>
+        <div className="zoom-mode-group">
+          <button className={`zoom-mode-btn ${zoomMode === 'fitWidth' ? 'active' : ''}`}
+            onClick={() => setZoomMode('fitWidth')} title="适配宽度">宽</button>
+          <button className={`zoom-mode-btn ${zoomMode === 'fitPage' ? 'active' : ''}`}
+            onClick={() => setZoomMode('fitPage')} title="适配页面">页</button>
+        </div>
+      </div>
+
+      <div className="toolbar-divider" />
+
+      <div className="toolbar-group toolbar-page">
+        <button className="toolbar-btn" onClick={() => usePdfStore.getState().prevPage()} title="上一页" disabled={currentPage <= 1}>◀</button>
+        <span className="page-display">{currentPage} / {documentInfo?.pageCount ?? 0}</span>
+        <button className="toolbar-btn" onClick={() => usePdfStore.getState().nextPage()} title="下一页" disabled={currentPage >= (documentInfo?.pageCount ?? 0)}>▶</button>
+      </div>
+    </div>
+  );
+};

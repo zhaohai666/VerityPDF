@@ -1,0 +1,55 @@
+{
+  "app": {
+    "name": "VerityPDF",
+    "description": "Professional PDF Annotation Tool"
+  },
+  "menu": {
+    "file": "File",
+    "edit": "Edit",
+    "view": "View",
+    "help": "Help",
+    "open": "Open PDF...",
+    "save": "Save",
+    "saveAs": "Save As...",
+    "export": "Export PDF...",
+    "print": "Print...",
+    "undo": "Undo",
+    "redo": "Redo",
+    "copy": "Copy",
+    "paste": "Paste",
+    "delete": "Delete",
+    "selectAll": "Select All"
+  },
+  "toolbar": {
+    "select": "Select",
+    "pan": "Pan",
+    "rect": "Rectangle",
+    "ellipse": "Ellipse",
+    "arrow": "Arrow",
+    "line": "Line",
+    "freehand": "Pen",
+    "text": "Text",
+    "highlight": "Highlight",
+    "stickyNote": "Sticky Note",
+    "stamp": "Stamp",
+    "signature": "Signature",
+    "eraser": "Eraser"
+  },
+  "sidebar": {
+    "thumbnails": "Thumbnails",
+    "outline": "Outline",
+    "annotations": "Annotations",
+    "empty": "No data"
+  },
+  "viewer": {
+    "openFile": "Open PDF File",
+    "dropHint": "or drag and drop a PDF file here",
+    "noDocument": "Please open a PDF file"
+  },
+  "status": {
+    "saved": "Saved",
+    "saving": "Saving...",
+    "unsaved": "Unsaved",
+    "error": "Save failed"
+  }
+}

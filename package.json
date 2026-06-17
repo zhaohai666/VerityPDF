@@ -1,0 +1,74 @@
+{
+  "name": "verity-pdf",
+  "version": "1.0.0",
+  "description": "A professional PDF annotation and review tool built with Electron + PDF.js + Konva.js",
+  "main": "dist-electron/main.js",
+  "license": "MIT",
+  "author": "VerityPDF Team",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build && electron-builder",
+    "build:dir": "vite build && electron-builder --dir",
+    "preview": "vite preview",
+    "electron:dev": "vite --mode electron",
+    "electron:build": "vite build && electron-builder",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/ electron/ --ext .ts,.tsx",
+    "lint:fix": "eslint src/ electron/ --ext .ts,.tsx --fix",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "pack:mac": "electron-builder --mac",
+    "pack:win": "electron-builder --win",
+    "pack:linux": "electron-builder --linux"
+  },
+  "dependencies": {
+    "antd": "^5.20.0",
+    "i18next": "^23.12.0",
+    "konva": "^9.3.0",
+    "pdf-lib": "^1.17.1",
+    "pdfjs-dist": "^4.4.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-i18next": "^14.1.0",
+    "react-konva": "^18.2.10",
+    "zustand": "^4.5.0",
+    "electron-store": "^8.2.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "electron": "^30.1.0",
+    "electron-builder": "^24.13.3",
+    "eslint": "^8.57.0",
+    "typescript": "^5.5.0",
+    "vite": "^5.4.0",
+    "vite-plugin-electron": "^0.28.0",
+    "vite-plugin-electron-renderer": "^0.14.5",
+    "vitest": "^1.6.0"
+  },
+  "build": {
+    "appId": "com.veritypdf.app",
+    "productName": "VerityPDF",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*"
+    ],
+    "mac": {
+      "target": "dmg",
+      "icon": "resources/icon.icns"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "resources/icon.ico"
+    },
+    "linux": {
+      "target": ["AppImage", "deb"],
+      "icon": "resources/icon.png"
+    }
+  }
+}
