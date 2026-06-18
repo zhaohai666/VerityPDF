@@ -5,6 +5,7 @@ import { PDFViewer } from '@/components/viewer/PDFViewer';
 import { PropertyPanel } from '@/components/property/PropertyPanel';
 import { StatusBar } from '@/components/common/StatusBar';
 import { Toast } from '@/components/common/Toast';
+import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 import { useKeyboardShortcuts, useAutoSave } from '@/hooks';
 import { usePdfStore } from '@/stores/pdfStore';
 import { useAnnotationStore } from '@/stores/annotationStore';
@@ -15,7 +16,15 @@ const App: React.FC = () => {
   // 初始化全局快捷键
   useKeyboardShortcuts();
   // 初始化自动保存
-  useAutoSave(30000);
+  useAutoSave();
+
+  // PDF 卸载时同步清理标注 Store，防止新文档残留旧标注
+  const isLoaded = usePdfStore((s) => s.isLoaded);
+  useEffect(() => {
+    if (!isLoaded) {
+      useAnnotationStore.getState().reset();
+    }
+  }, [isLoaded]);
 
   // 全局菜单事件处理：将 Electron 菜单的 menu:action 分发到各 store
   useEffect(() => {
@@ -72,16 +81,30 @@ const App: React.FC = () => {
   }, []);
 
   return (
-    <div className="app-layout">
-      <Toolbar />
-      <div className="app-main">
-        <Sidebar />
-        <PDFViewer />
-        <PropertyPanel />
+    <ErrorBoundary>
+      <div className="app-layout">
+        <Toolbar />
+        <div className="app-main">
+          <Sidebar />
+          <ErrorBoundary
+            fallback={(error, reset) => (
+              <div className="error-boundary-fallback" style={{ flex: 1 }}>
+                <div className="error-boundary-content">
+                  <h2>PDF 查看器出错</h2>
+                  <p className="error-boundary-message">{error.message}</p>
+                  <button className="btn-primary" onClick={reset}>重新加载</button>
+                </div>
+              </div>
+            )}
+          >
+            <PDFViewer />
+          </ErrorBoundary>
+          <PropertyPanel />
+        </div>
+        <StatusBar />
+        <Toast />
       </div>
-      <StatusBar />
-      <Toast />
-    </div>
+    </ErrorBoundary>
   );
 };
 

@@ -187,13 +187,26 @@ export const AnnotationCanvas: React.FC<AnnotationCanvasProps> = ({ pageNumber, 
   const { addAnnotation, updateAnnotation, removeAnnotation, selectAnnotation, clearSelection, selectedIds, annotations } = useAnnotationStore();
 
   const [drawing, setDrawing] = useState<DrawingState>({ isDrawing: false, startX: 0, startY: 0, currentX: 0, currentY: 0 });
-  const [freehandPoints, setFreehandPoints] = useState('');
+  // 使用 ref 存储 freehand 点序列，避免每次 mousemove 触发字符串重建 O(n) 开销
+  const freehandPointsRef = useRef<Array<{x: number; y: number}>>([]);
+  const [freehandVersion, setFreehandVersion] = useState(0); // 触发重渲染的版本号
   const [drag, setDrag] = useState<DragState>({ isDragging: false, annotationId: '', offsetX: 0, offsetY: 0 });
   const [editingText, setEditingText] = useState<{ visible: boolean; x: number; y: number; value: string; id?: string }>({ visible: false, x: 0, y: 0, value: '' });
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({ visible: false, x: 0, y: 0, annotationId: '' });
 
+  // RAF 节流：将 mousemove 更新对齐到浏览器帧率（60fps），避免 240Hz 鼠标触发冗余渲染
+  const rafRef = useRef<number>(0);
+  const pendingCoordsRef = useRef<{ x: number; y: number } | null>(null);
+
   const isDrawTool = DRAW_TOOLS.includes(activeTool);
   const isClickTool = CLICK_TOOLS.includes(activeTool);
+
+  // 组件卸载时清理未完成的 RAF
+  useEffect(() => {
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
+  }, []);
 
   const pageAnnotations = useMemo(() => {
     return annotations.filter((a) => a.page === pageNumber);
@@ -268,32 +281,48 @@ export const AnnotationCanvas: React.FC<AnnotationCanvasProps> = ({ pageNumber, 
     e.preventDefault();
     setDrawing({ isDrawing: true, startX: coords.x, startY: coords.y, currentX: coords.x, currentY: coords.y });
     if (activeTool === 'freehand') {
-      setFreehandPoints(`M ${coords.x * 100} ${coords.y * 100}`);
+      freehandPointsRef.current = [{ x: coords.x, y: coords.y }];
+      setFreehandVersion((v) => v + 1);
     }
   }, [activeTool, isDrawTool, isClickTool, getRelativeCoords, findAnnotationAt, selectAnnotation, clearSelection, removeAnnotation, containerRef]);
 
+  // RAF 节流：mousemove 事件对齐到浏览器帧率，避免高频鼠标（240Hz+）触发冗余渲染
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (drag.isDragging) {
-      const coords = getRelativeCoords(e);
-      if (!coords) return;
-      const newX = Math.max(0, Math.min(1, coords.x - drag.offsetX));
-      const newY = Math.max(0, Math.min(1, coords.y - drag.offsetY));
-      updateAnnotation(drag.annotationId, {
-        position: { x: newX, y: newY },
-      });
-      return;
-    }
-
-    if (!drawing.isDrawing) return;
     const coords = getRelativeCoords(e);
     if (!coords) return;
-    setDrawing((prev) => ({ ...prev, currentX: coords.x, currentY: coords.y }));
-    if (activeTool === 'freehand') {
-      setFreehandPoints((prev) => `${prev} L ${coords.x * 100} ${coords.y * 100}`);
+    pendingCoordsRef.current = coords;
+
+    if (!rafRef.current) {
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = 0;
+        const c = pendingCoordsRef.current;
+        pendingCoordsRef.current = null;
+        if (!c) return;
+
+        if (drag.isDragging) {
+          const newX = Math.max(0, Math.min(1, c.x - drag.offsetX));
+          const newY = Math.max(0, Math.min(1, c.y - drag.offsetY));
+          updateAnnotation(drag.annotationId, { position: { x: newX, y: newY } });
+          return;
+        }
+
+        if (!drawing.isDrawing) return;
+        setDrawing((prev) => ({ ...prev, currentX: c.x, currentY: c.y }));
+        if (activeTool === 'freehand') {
+          freehandPointsRef.current.push({ x: c.x, y: c.y });
+          setFreehandVersion((v) => v + 1);
+        }
+      });
     }
   }, [drawing.isDrawing, drag, getRelativeCoords, updateAnnotation, activeTool]);
 
   const handleMouseUp = useCallback(() => {
+    // 刷新未处理的 RAF 帧，确保最后一次移动位置被应用
+    if (rafRef.current) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = 0;
+    }
+
     if (drag.isDragging) {
       setDrag({ isDragging: false, annotationId: '', offsetX: 0, offsetY: 0 });
       return;
@@ -333,11 +362,13 @@ export const AnnotationCanvas: React.FC<AnnotationCanvasProps> = ({ pageNumber, 
         annotation = { ...base, type: 'highlight', page: pageNumber, position: { x, y }, size: { width, height }, style: { ...toolStyle, opacity: 0.3, fill: toolStyle.stroke } };
         break;
       case 'freehand': {
-        const pts = freehandPoints.split(/(?=M | L )/).map((p) => {
-          const [px, py] = p.trim().replace(/^[ML]\s*/, '').split(/\s+/).map(Number);
-          return { x: px / 100, y: py / 100 };
-        }).filter((p) => !isNaN(p.x));
-        annotation = { ...base, type: 'freehand', page: pageNumber, position: { x, y }, size: { width, height }, points: pts.length > 1 ? pts : [{ x: startX, y: startY }, { x: currentX, y: currentY }] };
+        // 从 ref 读取点序列（避免每次 mousemove 的 O(n) 字符串重建）
+        const pts = freehandPointsRef.current;
+        annotation = {
+          ...base, type: 'freehand', page: pageNumber,
+          position: { x, y }, size: { width, height },
+          points: pts.length > 1 ? pts : [{ x: startX, y: startY }, { x: currentX, y: currentY }],
+        };
         break;
       }
     }
@@ -350,8 +381,8 @@ export const AnnotationCanvas: React.FC<AnnotationCanvasProps> = ({ pageNumber, 
     }
 
     setDrawing({ isDrawing: false, startX: 0, startY: 0, currentX: 0, currentY: 0 });
-    setFreehandPoints('');
-  }, [drawing, drag, activeTool, pageNumber, toolStyle, addAnnotation, updateAnnotation, setActiveTool, freehandPoints]);
+    freehandPointsRef.current = [];
+  }, [drawing, drag, activeTool, pageNumber, toolStyle, addAnnotation, updateAnnotation, setActiveTool]);
 
   const handleTextSubmit = useCallback(() => {
     if (!editingText.value.trim()) {
@@ -418,6 +449,15 @@ export const AnnotationCanvas: React.FC<AnnotationCanvasProps> = ({ pageNumber, 
     return () => window.removeEventListener('keydown', handler);
   }, [selectedIds, removeAnnotation, clearSelection]);
 
+  // 从 ref 构建 freehand SVG path（仅在版本变化时重算，避免每次 mousemove 的字符串拼接）
+  const freehandPathD = useMemo(() => {
+    if (!drawing.isDrawing || activeTool !== 'freehand') return '';
+    return freehandPointsRef.current
+      .map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x * 100} ${p.y * 100}`)
+      .join(' ');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drawing.isDrawing, activeTool, freehandVersion]);
+
   const renderPreview = useMemo(() => {
     if (!drawing.isDrawing) return null;
     const { startX, startY, currentX, currentY } = drawing;
@@ -441,11 +481,11 @@ export const AnnotationCanvas: React.FC<AnnotationCanvasProps> = ({ pageNumber, 
       case 'highlight':
         return <rect x={`${x}%`} y={`${y}%`} width={`${w}%`} height={`${h}%`} fill={toolStyle.stroke} opacity={0.3} />;
       case 'freehand':
-        return <path d={freehandPoints} style={st} />;
+        return freehandPathD ? <path d={freehandPathD} style={st} /> : null;
       default:
         return null;
     }
-  }, [drawing, activeTool, toolStyle, freehandPoints]);
+  }, [drawing, activeTool, toolStyle, freehandPathD]);
 
   const isInteractive = activeTool === 'select' || activeTool === 'eraser' || isDrawTool || isClickTool;
   const cursor = activeTool === 'select' ? (drag.isDragging ? 'grabbing' : 'default')

@@ -14,6 +14,8 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
 export class PDFService {
   private pdfDocument: pdfjsLib.PDFDocumentProxy | null = null;
   private renderTasks = new Map<number, pdfjsLib.RenderTask>();
+  // 页面文本内容缓存：getTextContent() 开销大，同页面只需取一次
+  private textContentCache = new Map<number, Awaited<ReturnType<pdfjsLib.PDFPageProxy['getTextContent']>>>();
 
   /**
    * 加载 PDF 文档
@@ -145,7 +147,13 @@ export class PDFService {
   ): Promise<void> {
     const page = await this.getPage(pageNumber);
     const viewport = page.getViewport({ scale, rotation });
-    const textContent = await page.getTextContent();
+
+    // 使用缓存的 textContent，避免每次重复调用昂贵的 API
+    let textContent = this.textContentCache.get(pageNumber);
+    if (!textContent) {
+      textContent = await page.getTextContent();
+      this.textContentCache.set(pageNumber, textContent);
+    }
 
     container.innerHTML = '';
     container.style.width = `${viewport.width}px`;
@@ -198,6 +206,8 @@ export class PDFService {
     if (this.pdfDocument) {
       await this.pdfDocument.destroy();
       this.pdfDocument = null;
+      this.textContentCache.clear();
+      this.renderTasks.clear();
       logger.info('PDF document destroyed');
     }
   }

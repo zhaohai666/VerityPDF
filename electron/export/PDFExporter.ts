@@ -313,16 +313,33 @@ async function drawAnnotation(
     case 'polygon': {
       if (!ann.points || ann.points.length < 3) break;
       const pdfPoints = ann.points.map(p => toPdf(p.x, p.y, box));
-      const firstPoint = pdfPoints[0];
-      const subsequentPoints = pdfPoints.slice(1);
-      page.drawPolygon(firstPoint, subsequentPoints, {
-        borderColor: rgb(sc.r, sc.g, sc.b),
-        borderWidth: sw,
-        color: hasFill ? rgb(fc.r, fc.g, fc.b) : undefined,
-        opacity: op,
-        borderOpacity: op,
-        borderDashArray: dash,
-      });
+      for (let i = 0; i < pdfPoints.length; i++) {
+        const p1 = pdfPoints[i];
+        const p2 = pdfPoints[(i + 1) % pdfPoints.length];
+        page.drawLine({
+          start: p1,
+          end: p2,
+          thickness: sw,
+          color: rgb(sc.r, sc.g, sc.b),
+          opacity: op,
+          dashArray: dash,
+        });
+      }
+      if (hasFill) {
+        const minX = Math.min(...pdfPoints.map(p => p.x));
+        const minY = Math.min(...pdfPoints.map(p => p.y));
+        const maxX = Math.max(...pdfPoints.map(p => p.x));
+        const maxY = Math.max(...pdfPoints.map(p => p.y));
+        page.drawRectangle({
+          x: minX,
+          y: minY,
+          width: maxX - minX,
+          height: maxY - minY,
+          color: rgb(fc.r, fc.g, fc.b),
+          opacity: op * 0.3,
+          borderWidth: 0,
+        });
+      }
       break;
     }
 

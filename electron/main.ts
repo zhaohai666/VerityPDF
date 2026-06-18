@@ -3,6 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import { createAppMenu } from './menu/appMenu';
 import { registerIpcHandlers } from './ipc/handlers';
+import { removeAllIpcHandlers } from './utils/ipcWrapper';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -58,6 +59,15 @@ function createWindow(): void {
 
   mainWindow.on('closed', () => {
     mainWindow = null;
+    // 窗口关闭后清理 IPC 处理器，避免内存泄漏
+    removeAllIpcHandlers();
+    ipcMain.removeHandler('app:getTestFile');
+    ipcMain.removeAllListeners('app:getVersion');
+    ipcMain.removeAllListeners('window:minimize');
+    ipcMain.removeAllListeners('window:maximize');
+    ipcMain.removeAllListeners('window:close');
+    ipcMain.removeAllListeners('window:setTitle');
+    console.log('[Main] IPC handlers cleaned up');
   });
 }
 
@@ -107,6 +117,20 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
   }
+});
+
+// 应用退出前清理资源
+app.on('before-quit', () => {
+  // 清理所有 IPC 处理器和事件监听器
+  removeAllIpcHandlers();
+  ipcMain.removeHandler('app:getTestFile');
+  ipcMain.removeAllListeners('app:getVersion');
+  ipcMain.removeAllListeners('window:minimize');
+  ipcMain.removeAllListeners('window:maximize');
+  ipcMain.removeAllListeners('window:close');
+  ipcMain.removeAllListeners('window:setTitle');
+  ipcMain.removeAllListeners('app:canClose');
+  console.log('[Main] All IPC handlers cleaned up before quit');
 });
 
 // 文件打开支持 (macOS)

@@ -5,11 +5,16 @@ import { useToolStore } from '@/stores/toolStore';
 import { useUIStore } from '@/stores/uiStore';
 import { PDFService } from '@/services/pdf/PDFService';
 import { PageRenderer } from './PageRenderer';
+import { ExportDialog } from '@/components/export/ExportDialog';
 
 const pdfService = new PDFService();
 
 if (typeof window !== 'undefined') {
   window.__pdfService = pdfService;
+  // 页面卸载时清理 PDFService 资源（释放 PDF.js 文档、缓存、Worker 资源）
+  window.addEventListener('beforeunload', () => {
+    pdfService.destroy().catch(() => { /* 忽略清理错误 */ });
+  });
 }
 
 let _fileLoadInitiated = false;
@@ -25,6 +30,12 @@ export const PDFViewer: React.FC = () => {
   const [visiblePages, setVisiblePages] = useState<Set<number>>(new Set([1]));
   const pageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
   const observerRef = useRef<IntersectionObserver | null>(null);
+  // 滚动方向跟踪：用于非对称预加载（滚动方向前部更多缓冲）
+  const scrollDirRef = useRef<'forward' | 'backward'>('forward');
+  const lastScrollTopRef = useRef<number>(0);
+  // 加载阶段跟踪：提供有意义的进度反馈
+  const [loadingPhase, setLoadingPhase] = useState<'idle' | 'reading' | 'parsing' | 'preparing' | 'done'>('idle');
+  const [showExportDialog, setShowExportDialog] = useState(false);
 
   useEffect(() => {
     const el = scrollContainerRef.current;
@@ -81,20 +92,30 @@ export const PDFViewer: React.FC = () => {
   const loadFileFromPath = useCallback(async (path: string) => {
     const showToast = useUIStore.getState().showToast;
     try {
-      const data = await window.verityAPI.readFile(path);
-      if (!data) {
-        showToast('无法读取文件', 'error');
-        return;
-      }
-
+      // 阶段 1：读取文件（0-30%）
+      setLoadingPhase('reading');
       const store = usePdfStore.getState();
       store.setLoading(true);
       store.setFilePath(path);
+      store.setLoadingProgress(0.1);
 
+      const data = await window.verityAPI.readFile(path);
+      if (!data) {
+        showToast('无法读取文件', 'error');
+        setLoadingPhase('idle');
+        return;
+      }
+      store.setLoadingProgress(0.3);
+
+      // 阶段 2：解析 PDF（30-80%）
+      setLoadingPhase('parsing');
       await pdfService.loadDocument(data, {
-        onProgress: (p) => store.setLoadingProgress(p),
+        onProgress: (p) => store.setLoadingProgress(0.3 + p * 0.5),
       });
+      store.setLoadingProgress(0.8);
 
+      // 阶段 3：准备文档信息（80-100%）
+      setLoadingPhase('preparing');
       const info = await pdfService.getDocumentInfo(path);
       if (info) {
         info.fileSize = data.byteLength;
@@ -103,6 +124,8 @@ export const PDFViewer: React.FC = () => {
 
       store.setLoaded(true);
       store.setLoading(false);
+      store.setLoadingProgress(1);
+      setLoadingPhase('done');
 
       const verityPath = path.replace(/\.pdf$/i, '.verity');
       try {
@@ -126,6 +149,7 @@ export const PDFViewer: React.FC = () => {
     } catch (err) {
       console.error('Failed to load file:', err);
       usePdfStore.getState().setLoading(false);
+      setLoadingPhase('idle');
       const errorMsg = err instanceof Error ? err.message : '加载文件失败';
       showToast(errorMsg, 'error');
     }
@@ -146,46 +170,13 @@ export const PDFViewer: React.FC = () => {
   }, [loadFileFromPath]);
 
   const handleExportPDF = useCallback(async () => {
-    const showToast = useUIStore.getState().showToast;
-    try {
-      const store = usePdfStore.getState();
-      if (!store.filePath || !store.isLoaded) {
-        showToast('请先打开 PDF 文件', 'warning');
-        return;
-      }
-
-      const pdfArrayBuffer = await window.verityAPI.readFile(store.filePath);
-      if (!pdfArrayBuffer) {
-        showToast('无法读取 PDF 文件', 'error');
-        return;
-      }
-
-      const pdfBytes = new Uint8Array(pdfArrayBuffer);
-      let binary = '';
-      for (let i = 0; i < pdfBytes.length; i++) {
-        binary += String.fromCharCode(pdfBytes[i]);
-      }
-      const pdfBase64 = btoa(binary);
-
-      const annotations = useAnnotationStore.getState().annotations;
-
-      const originalName = store.filePath.split(/[\\/]/).pop()?.replace(/\.pdf$/i, '') || 'document';
-      const defaultName = `${originalName}_annotated.pdf`;
-
-      console.log(`[Export] Starting export: ${annotations.length} annotations`);
-
-      const savedPath = await window.verityAPI.exportPDF(pdfBase64, annotations, defaultName);
-      if (savedPath) {
-        console.log('[Export] PDF saved to:', savedPath);
-        showToast('导出成功', 'success');
-      } else {
-        console.log('[Export] Export cancelled by user');
-      }
-    } catch (err) {
-      console.error('[Export] Export failed:', err);
-      const errorMsg = err instanceof Error ? err.message : '导出失败';
-      showToast(errorMsg, 'error');
+    const store = usePdfStore.getState();
+    if (!store.filePath || !store.isLoaded) {
+      useUIStore.getState().showToast('请先打开 PDF 文件', 'warning');
+      return;
     }
+    // 显示导出选项对话框（支持类型/页码范围筛选）
+    setShowExportDialog(true);
   }, []);
 
   const scrollToPage = useCallback((page: number) => {
@@ -207,6 +198,11 @@ export const PDFViewer: React.FC = () => {
 
     let scrollTimeout: ReturnType<typeof setTimeout>;
     const handleScroll = () => {
+      // 跟踪滚动方向（用于非对称预加载）
+      const currentTop = container.scrollTop;
+      scrollDirRef.current = currentTop > lastScrollTopRef.current ? 'forward' : 'backward';
+      lastScrollTopRef.current = currentTop;
+
       clearTimeout(scrollTimeout);
       scrollTimeout = setTimeout(() => {
         const containerRect = container.getBoundingClientRect();
@@ -319,17 +315,38 @@ export const PDFViewer: React.FC = () => {
   useEffect(() => {
     if (!scrollContainerRef.current) return;
 
+    // 方向感知预加载：滚动方向前部 400px 缓冲，后部 100px
+    const getRootMargin = () => {
+      const dir = scrollDirRef.current;
+      return dir === 'forward' ? '100px 0px 400px 0px' : '400px 0px 100px 0px';
+    };
+
     observerRef.current = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
           const pageNum = parseInt(entry.target.getAttribute('data-page') || '0');
           if (pageNum > 0) {
             if (entry.isIntersecting) {
+              // 页面进入视口：根据滚动方向非对称预加载
               setVisiblePages((prev) => {
                 const next = new Set(prev);
-                for (let i = Math.max(1, pageNum - VISIBLE_THRESHOLD); i <= Math.min(documentInfo?.pageCount ?? 0, pageNum + VISIBLE_THRESHOLD); i++) {
+                const ahead = scrollDirRef.current === 'forward'
+                  ? VISIBLE_THRESHOLD + 2   // 向下滚动：多预加载 2 页
+                  : VISIBLE_THRESHOLD;
+                const behind = scrollDirRef.current === 'forward'
+                  ? VISIBLE_THRESHOLD
+                  : VISIBLE_THRESHOLD + 2;  // 向上滚动：多预加载后方
+                for (let i = Math.max(1, pageNum - behind); i <= Math.min(documentInfo?.pageCount ?? 0, pageNum + ahead); i++) {
                   next.add(i);
                 }
+                return next;
+              });
+            } else {
+              // 页面离开视口：从渲染集合中移除，释放内存
+              setVisiblePages((prev) => {
+                if (!prev.has(pageNum)) return prev;
+                const next = new Set(prev);
+                next.delete(pageNum);
                 return next;
               });
             }
@@ -338,7 +355,7 @@ export const PDFViewer: React.FC = () => {
       },
       {
         root: scrollContainerRef.current,
-        rootMargin: '200px',
+        rootMargin: getRootMargin(),
         threshold: 0.1,
       }
     );
@@ -373,12 +390,13 @@ export const PDFViewer: React.FC = () => {
   }
 
   if (isLoading) {
+    const phaseLabels: Record<string, string> = { idle: '', reading: '读取文件中...', parsing: '解析 PDF 结构...', preparing: '准备文档...', done: '完成' };
     return (
       <div className="pdf-viewer">
         <div className="pdf-viewer-empty">
           <div className="empty-content">
             <div className="loading-spinner" />
-            <p>正在加载 PDF...</p>
+            <p>{phaseLabels[loadingPhase] || '正在加载 PDF...'}</p>
             <div className="loading-bar">
               <div className="loading-bar-fill" style={{ width: `${Math.round(loadingProgress * 100)}%` }} />
             </div>
@@ -390,32 +408,35 @@ export const PDFViewer: React.FC = () => {
   }
 
   return (
-    <div
-      ref={scrollContainerRef}
-      className="pdf-viewer"
-      style={{ cursor }}
-    >
-      <div ref={viewerContentRef} className="pdf-viewer-content">
-        {Array.from({ length: pageCount }, (_, i) => i + 1).map((pageNum) => (
-          <div
-            key={pageNum}
-            ref={(el) => registerPageRef(pageNum, el)}
-            data-page={pageNum}
-            className={`pdf-page-slot ${currentPage === pageNum ? 'active' : ''}`}
-          >
-            {visiblePages.has(pageNum) && (
-              <PageRenderer
-                pageNumber={pageNum}
-                pdfService={pdfService}
-                zoom={zoom}
-                rotation={rotation}
-                containerWidth={containerWidth}
-                zoomMode={zoomMode}
-              />
-            )}
-          </div>
-        ))}
+    <>
+      <div
+        ref={scrollContainerRef}
+        className="pdf-viewer"
+        style={{ cursor }}
+      >
+        <div ref={viewerContentRef} className="pdf-viewer-content">
+          {Array.from({ length: pageCount }, (_, i) => i + 1).map((pageNum) => (
+            <div
+              key={pageNum}
+              ref={(el) => registerPageRef(pageNum, el)}
+              data-page={pageNum}
+              className={`pdf-page-slot ${currentPage === pageNum ? 'active' : ''}`}
+            >
+              {visiblePages.has(pageNum) && (
+                <PageRenderer
+                  pageNumber={pageNum}
+                  pdfService={pdfService}
+                  zoom={zoom}
+                  rotation={rotation}
+                  containerWidth={containerWidth}
+                  zoomMode={zoomMode}
+                />
+              )}
+            </div>
+          ))}
+        </div>
       </div>
-    </div>
+      <ExportDialog open={showExportDialog} onClose={() => setShowExportDialog(false)} />
+    </>
   );
 };

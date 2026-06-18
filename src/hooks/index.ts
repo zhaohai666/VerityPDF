@@ -92,8 +92,9 @@ export function useKeyboardShortcuts(): void {
 
 /**
  * 自动保存 Hook
+ * @param interval 防抖间隔（毫秒），默认 5000ms，标注停止后 5 秒自动保存
  */
-export function useAutoSave(interval = 30000): void {
+export function useAutoSave(interval = 5000): void {
   const isDirty = useAnnotationStore((s) => s.isDirty);
   const setSaveStatus = useAnnotationStore((s) => s.setSaveStatus);
   const annotations = useAnnotationStore((s) => s.annotations);
@@ -122,11 +123,33 @@ export function useAutoSave(interval = 30000): void {
     }
   }, [filePath, isDirty, annotations, setSaveStatus]);
 
+  // 防抖自动保存：标注停止变化后 interval ms 触发，每次变化重置计时器
   useEffect(() => {
     if (!isDirty) return;
     const timer = setTimeout(save, interval);
     return () => clearTimeout(timer);
   }, [isDirty, interval, save]);
+
+  // 页面卸载 / 关闭时强制保存，防止数据丢失
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (useAnnotationStore.getState().isDirty && usePdfStore.getState().filePath) {
+        // 同步保存（beforeunload 中异步不可靠）
+        const state = useAnnotationStore.getState();
+        const fp = usePdfStore.getState().filePath!;
+        const project = {
+          version: '1.0', format: 'verity-project' as const,
+          pdfPath: fp, pdfHash: '', pdfInfo: { pageCount: 0, title: '', fileSize: 0 },
+          createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+          viewState: { currentPage: 1, zoom: 1, zoomMode: 'fitWidth' as const, rotation: 0 as const, scrollMode: 'continuous' as const },
+          annotations: state.annotations,
+        };
+        window.verityAPI.saveFile(JSON.stringify(project, null, 2), fp.replace(/\.pdf$/i, '.verity'));
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, []);
 
   // Ctrl+S 手动保存
   useEffect(() => {

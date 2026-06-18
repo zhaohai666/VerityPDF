@@ -17,6 +17,27 @@ interface PageModeProps {
   containerRef: React.RefObject<HTMLDivElement>;
 }
 
+/**
+ * 统一 scale 计算：根据 zoomMode 从 pageSize + 容器宽度导出实际缩放比例
+ * 消除 PageRenderer 中两处独立计算 scale 的重复逻辑
+ */
+function computeScale(
+  pageSize: { width: number; height: number },
+  zoom: number,
+  zoomMode: string,
+  containerWidth?: number
+): number {
+  if (zoomMode === 'fitWidth' && containerWidth && containerWidth > 0) {
+    return (containerWidth - 40) / pageSize.width;
+  }
+  if (zoomMode === 'fitPage') {
+    const availH = window.innerHeight - 160;
+    const availW = containerWidth ? containerWidth - 40 : 800;
+    return Math.min(availH / pageSize.height, availW / pageSize.width);
+  }
+  return zoom;
+}
+
 const PageModeContext: React.FC<PageModeProps> = memo(({ pageNumber, containerRef }) => {
   const activeTool = useToolStore((s) => s.activeTool);
   const isSelectMode = activeTool === 'select' || activeTool === 'pan';
@@ -52,44 +73,35 @@ export const PageRenderer = memo(({
   const renderingRef = useRef(false);
   const pendingRef = useRef(false);
   const lastScaleRef = useRef<number>(0);
+  // 单独跟踪 TextLayer 的比例/旋转，避免与 Canvas 同步触发不必要的重建
+  const textLayerScaleRef = useRef<number>(0);
+  const textLayerRotationRef = useRef<number>(-1);
 
   const needsWidth = (zoomMode === 'fitWidth' || zoomMode === 'fitPage');
   const ready = !needsWidth || (containerWidth !== undefined && containerWidth > 0);
 
-  const actualZoom = useMemo(() => {
-    if (!ready) return zoom;
-    if (zoomMode === 'fitWidth' && containerWidth && containerWidth > 0) {
-      return (containerWidth - 40);
-    }
-    if (zoomMode === 'fitPage') {
-      const availH = window.innerHeight - 160;
-      const availW = containerWidth ? containerWidth - 40 : 800;
-      return Math.min(availH, availW);
-    }
-    return zoom;
-  }, [zoom, zoomMode, containerWidth, ready]);
+  // scale 变化触发器：依赖项变化时重新计算 scale，作为 useEffect 依赖
+  const scaleTrigger = useMemo(() => ({ zoom, zoomMode, containerWidth }), [zoom, zoomMode, containerWidth]);
 
   const doRender = useCallback(async () => {
     if (!canvasRef.current || !textLayerRef.current) return;
 
-    let scale = zoom;
-    if (zoomMode === 'fitWidth' && containerWidth && containerWidth > 0) {
-      const pageSize = await pdfService.getPageSize(pageNumber);
-      scale = (containerWidth - 40) / pageSize.width;
-    } else if (zoomMode === 'fitPage') {
-      const pageSize = await pdfService.getPageSize(pageNumber);
-      const availH = window.innerHeight - 160;
-      const availW = containerWidth ? containerWidth - 40 : 800;
-      const heightFit = availH / pageSize.height;
-      const widthFit = availW / pageSize.width;
-      scale = Math.min(heightFit, widthFit);
-    }
+    const pageSize = await pdfService.getPageSize(pageNumber);
+    const scale = computeScale(pageSize, zoom, zoomMode, containerWidth);
 
     if (Math.abs(scale - lastScaleRef.current) < 0.001 && rotation === 0) return;
     lastScaleRef.current = scale;
 
     await pdfService.renderPage(pageNumber, canvasRef.current, scale, rotation);
-    await pdfService.renderTextLayer(pageNumber, textLayerRef.current, scale, rotation);
+
+    // TextLayer 单独跟踪：仅在比例/旋转实际变化时重建
+    const textScaleChanged = Math.abs(scale - textLayerScaleRef.current) >= 0.001;
+    const textRotChanged = Math.abs(rotation - textLayerRotationRef.current) >= 0.001;
+    if (textScaleChanged || textRotChanged) {
+      await pdfService.renderTextLayer(pageNumber, textLayerRef.current, scale, rotation);
+      textLayerScaleRef.current = scale;
+      textLayerRotationRef.current = rotation;
+    }
   }, [pageNumber, pdfService, zoom, rotation, containerWidth, zoomMode]);
 
   useEffect(() => {
@@ -132,16 +144,7 @@ export const PageRenderer = memo(({
     const updateDimensions = async () => {
       try {
         const pageSize = await pdfService.getPageSize(pageNumber);
-        let scale = zoom;
-        if (zoomMode === 'fitWidth' && containerWidth && containerWidth > 0) {
-          scale = (containerWidth - 40) / pageSize.width;
-        } else if (zoomMode === 'fitPage') {
-          const availH = window.innerHeight - 160;
-          const availW = containerWidth ? containerWidth - 40 : 800;
-          const heightFit = availH / pageSize.height;
-          const widthFit = availW / pageSize.width;
-          scale = Math.min(heightFit, widthFit);
-        }
+        const scale = computeScale(pageSize, zoom, zoomMode, containerWidth);
 
         const width = pageSize.width * scale;
         const height = pageSize.height * scale;
@@ -165,7 +168,7 @@ export const PageRenderer = memo(({
     };
 
     updateDimensions();
-  }, [pageNumber, pdfService, actualZoom, rotation, containerWidth]);
+  }, [pageNumber, pdfService, scaleTrigger, rotation, containerWidth]);
 
   return (
     <div className="pdf-page-wrapper" data-page={pageNumber}>

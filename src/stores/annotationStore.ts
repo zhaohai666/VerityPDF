@@ -130,70 +130,76 @@ export const useAnnotationStore = create<AnnotationState>((set, get) => ({
     }),
 
   undo: () => {
-    const { undoStack, annotations } = get();
-    if (undoStack.length === 0) return;
-    const op = undoStack[undoStack.length - 1];
+    // 使用 set 的函数式更新，避免快速连续调用时读取过期状态
+    set((state) => {
+      const { undoStack, annotations } = state;
+      if (undoStack.length === 0) return state;
+      const op = undoStack[undoStack.length - 1];
 
-    let newAnnotations = [...annotations];
-    let redoOp: Operation;
+      let newAnnotations = [...annotations];
+      let redoOp: Operation;
 
-    switch (op.type) {
-      case 'add':
-        newAnnotations = newAnnotations.filter((a) => a.id !== op.annotation.id);
-        redoOp = { type: 'add', annotation: op.annotation };
-        break;
-      case 'remove':
-        newAnnotations = [...newAnnotations, op.annotation];
-        redoOp = { type: 'remove', annotation: op.annotation };
-        break;
-      case 'update':
-        newAnnotations = newAnnotations.map((a) => (a.id === op.annotationId ? op.before : a));
-        redoOp = { type: 'update', annotationId: op.annotationId, before: op.before, after: op.after };
-        break;
-      default:
-        return;
-    }
+      switch (op.type) {
+        case 'add':
+          newAnnotations = newAnnotations.filter((a) => a.id !== op.annotation.id);
+          redoOp = { type: 'add', annotation: op.annotation };
+          break;
+        case 'remove':
+          newAnnotations = [...newAnnotations, op.annotation];
+          redoOp = { type: 'remove', annotation: op.annotation };
+          break;
+        case 'update':
+          newAnnotations = newAnnotations.map((a) => (a.id === op.annotationId ? op.before : a));
+          redoOp = { type: 'update', annotationId: op.annotationId, before: op.before, after: op.after };
+          break;
+        default:
+          return state;
+      }
 
-    set({
-      annotations: newAnnotations,
-      undoStack: undoStack.slice(0, -1),
-      redoStack: [...get().redoStack, redoOp],
-      isDirty: true,
-      saveStatus: 'unsaved',
+      return {
+        annotations: newAnnotations,
+        undoStack: undoStack.slice(0, -1),
+        redoStack: [...state.redoStack, redoOp],
+        isDirty: true,
+        saveStatus: 'unsaved' as const,
+      };
     });
   },
 
   redo: () => {
-    const { redoStack, annotations } = get();
-    if (redoStack.length === 0) return;
-    const op = redoStack[redoStack.length - 1];
+    // 使用 set 的函数式更新，避免快速连续调用时读取过期状态
+    set((state) => {
+      const { redoStack, annotations } = state;
+      if (redoStack.length === 0) return state;
+      const op = redoStack[redoStack.length - 1];
 
-    let newAnnotations = [...annotations];
-    let undoOp: Operation;
+      let newAnnotations = [...annotations];
+      let undoOp: Operation;
 
-    switch (op.type) {
-      case 'add':
-        newAnnotations = [...newAnnotations, op.annotation];
-        undoOp = { type: 'add', annotation: op.annotation };
-        break;
-      case 'remove':
-        newAnnotations = newAnnotations.filter((a) => a.id !== op.annotation.id);
-        undoOp = { type: 'remove', annotation: op.annotation };
-        break;
-      case 'update':
-        newAnnotations = newAnnotations.map((a) => (a.id === op.annotationId ? op.after : a));
-        undoOp = { type: 'update', annotationId: op.annotationId, before: op.before, after: op.after };
-        break;
-      default:
-        return;
-    }
+      switch (op.type) {
+        case 'add':
+          newAnnotations = [...newAnnotations, op.annotation];
+          undoOp = { type: 'add', annotation: op.annotation };
+          break;
+        case 'remove':
+          newAnnotations = newAnnotations.filter((a) => a.id !== op.annotation.id);
+          undoOp = { type: 'remove', annotation: op.annotation };
+          break;
+        case 'update':
+          newAnnotations = newAnnotations.map((a) => (a.id === op.annotationId ? op.after : a));
+          undoOp = { type: 'update', annotationId: op.annotationId, before: op.before, after: op.after };
+          break;
+        default:
+          return state;
+      }
 
-    set({
-      annotations: newAnnotations,
-      redoStack: redoStack.slice(0, -1),
-      undoStack: [...get().undoStack, undoOp],
-      isDirty: true,
-      saveStatus: 'unsaved',
+      return {
+        annotations: newAnnotations,
+        redoStack: redoStack.slice(0, -1),
+        undoStack: [...state.undoStack, undoOp],
+        isDirty: true,
+        saveStatus: 'unsaved' as const,
+      };
     });
   },
 }));

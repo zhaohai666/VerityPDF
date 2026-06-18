@@ -1114,6 +1114,12 @@ button {
   .thumbnail-canvas {
     width: 120px !important;
   }
+
+  /* 属性面板缩小宽度 */
+  .property-panel {
+    width: 200px;
+    min-width: 180px;
+  }
 }
 
 @media (max-width: 768px) {
@@ -1124,6 +1130,7 @@ button {
   
   .toolbar-btn {
     padding: 6px 8px;
+    min-width: 36px;
   }
   
   .toolbar-icon {
@@ -1145,6 +1152,27 @@ button {
   
   .style-panel-dropdown {
     width: 180px;
+  }
+
+  /* 属性面板覆盖层模式：缩小宽度，浮动在内容之上 */
+  .property-panel {
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 220px;
+    z-index: 20;
+    box-shadow: -2px 0 8px rgba(0, 0, 0, 0.15);
+  }
+
+  /* 工具栏工具允许水平滚动 */
+  .toolbar-tools {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .toolbar-tools::-webkit-scrollbar {
+    display: none;
   }
 }
 
@@ -1169,6 +1197,16 @@ button {
   .page-number-label {
     display: none;
   }
+
+  /* 属性面板在超窄屏幕上隐藏，用浮动按钮触发 */
+  .property-panel {
+    display: none;
+  }
+
+  /* PDF 页面缩小边距 */
+  .pdf-page-wrapper {
+    padding: 4px;
+  }
 }
 
 @media (max-width: 480px) {
@@ -1183,4 +1221,206 @@ button {
   .theme-toggle {
     font-size: 14px;
   }
+
+  /* 隐藏工具栏部分控件，仅保留核心工具 */
+  .toolbar-divider:nth-child(n+3) {
+    display: none;
+  }
+
+  /* 全屏 PDF 查看器 */
+  .pdf-viewer-content {
+    padding: 4px;
+  }
+}
+
+/* ========================================
+   导出对话框
+   ======================================== */
+.export-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.export-dialog {
+  background: var(--bg-primary);
+  border-radius: 12px;
+  padding: 24px;
+  width: 420px;
+  max-width: 90vw;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+.export-dialog-title {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 20px;
+  color: var(--text-primary);
+}
+
+.export-dialog-section {
+  margin-bottom: 18px;
+}
+
+.export-dialog-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.export-dialog-type-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.export-dialog-link {
+  font-size: 12px;
+  color: var(--accent-color);
+  text-decoration: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+.export-dialog-link:hover {
+  text-decoration: underline;
+}
+
+.export-dialog-types {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.export-dialog-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 4px 0;
+}
+.export-dialog-checkbox input[type="checkbox"] {
+  accent-color: var(--accent-color);
+}
+
+.export-dialog-input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  font-size: 13px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  outline: none;
+  transition: border-color 0.15s;
+}
+.export-dialog-input:focus {
+  border-color: var(--accent-color);
+}
+
+.export-dialog-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.export-dialog-stats {
+  font-size: 13px;
+  color: var(--text-secondary);
+  padding: 8px 12px;
+  background: var(--bg-secondary);
+  border-radius: 6px;
+  margin-bottom: 16px;
+}
+.export-dialog-stats strong {
+  color: var(--accent-color);
+}
+
+.export-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.btn-secondary {
+  padding: 8px 16px;
+  border-radius: 6px;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background 0.15s;
+}
+.btn-secondary:hover:not(:disabled) {
+  background: var(--border-color);
+}
+.btn-secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ========================================
+   ErrorBoundary 降级 UI
+   ======================================== */
+.error-boundary-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  background: var(--bg-primary);
+  padding: 24px;
+}
+
+.error-boundary-content {
+  text-align: center;
+  max-width: 480px;
+}
+
+.error-boundary-content h2 {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+}
+
+.error-boundary-message {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-bottom: 16px;
+}
+
+.error-boundary-details {
+  text-align: left;
+  margin-bottom: 20px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.error-boundary-details summary {
+  cursor: pointer;
+  padding: 4px 0;
+  color: var(--text-secondary);
+}
+
+.error-boundary-details pre {
+  background: var(--bg-secondary);
+  padding: 12px;
+  border-radius: 6px;
+  overflow-x: auto;
+  font-size: 11px;
+  margin-top: 8px;
+  white-space: pre-wrap;
+  word-break: break-all;
 }
