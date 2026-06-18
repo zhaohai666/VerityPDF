@@ -7,6 +7,11 @@ import { PDFService } from '@/services/pdf/PDFService';
 import { PageRenderer } from './PageRenderer';
 import { ExportDialog } from '@/components/export/ExportDialog';
 import { SummaryDialog } from '@/components/export/SummaryDialog';
+import { ImageExportDialog } from '@/components/export/ImageExportDialog';
+import { EncryptionDialog } from '@/components/encryption/EncryptionDialog';
+import { PasswordDialog } from '@/components/encryption/PasswordDialog';
+import { DigitalSignatureDialog } from '@/components/signature/DigitalSignatureDialog';
+import { FormatConvertDialog } from '@/components/convert/FormatConvertDialog';
 
 const pdfService = new PDFService();
 
@@ -38,6 +43,13 @@ export const PDFViewer: React.FC = () => {
   const [loadingPhase, setLoadingPhase] = useState<'idle' | 'reading' | 'parsing' | 'preparing' | 'done'>('idle');
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [showSummaryDialog, setShowSummaryDialog] = useState(false);
+  const [showImageExportDialog, setShowImageExportDialog] = useState(false);
+  const [showEncryptionDialog, setShowEncryptionDialog] = useState(false);
+  const [showPasswordDialog, setShowPasswordDialog] = useState(false);
+  const [showSignatureDialog, setShowSignatureDialog] = useState(false);
+  const [showConvertDialog, setShowConvertDialog] = useState(false);
+  const [pendingPasswordPath, setPendingPasswordPath] = useState<string | null>(null);
+  const [pendingPasswordData, setPendingPasswordData] = useState<ArrayBuffer | null>(null);
 
   useEffect(() => {
     const el = scrollContainerRef.current;
@@ -111,9 +123,24 @@ export const PDFViewer: React.FC = () => {
 
       // 阶段 2：解析 PDF（30-80%）
       setLoadingPhase('parsing');
-      await pdfService.loadDocument(data, {
-        onProgress: (p) => store.setLoadingProgress(0.3 + p * 0.5),
-      });
+      try {
+        await pdfService.loadDocument(data, {
+          onProgress: (p) => store.setLoadingProgress(0.3 + p * 0.5),
+        });
+      } catch (loadErr: unknown) {
+        // 检查是否是密码错误
+        const errStr = loadErr instanceof Error ? loadErr.message : String(loadErr);
+        if (errStr.includes('password') || errStr.includes('Password') || errStr.includes('encrypted')) {
+          store.setLoading(false);
+          setLoadingPhase('idle');
+          store.setPasswordRequired(true);
+          setPendingPasswordPath(path);
+          setPendingPasswordData(data);
+          setShowPasswordDialog(true);
+          return;
+        }
+        throw loadErr;
+      }
       store.setLoadingProgress(0.8);
 
       // 阶段 3：准备文档信息（80-100%）
@@ -287,13 +314,32 @@ export const PDFViewer: React.FC = () => {
     });
     const handleExportEvent = () => handleExportPDF();
     const handleSummaryExport = () => setShowSummaryDialog(true);
+    const handleImageExport = () => setShowImageExportDialog(true);
+    const handleEncryption = () => setShowEncryptionDialog(true);
+    const handleSignature = () => setShowSignatureDialog(true);
+    const handleConvert = () => setShowConvertDialog(true);
+    const handleReloadPdf = () => {
+      // 页面操作后重新加载文档
+      const fp = usePdfStore.getState().filePath;
+      if (fp) loadFileFromPath(fp);
+    };
     window.addEventListener('verity:export', handleExportEvent);
     window.addEventListener('verity:exportSummary', handleSummaryExport);
+    window.addEventListener('verity:exportImages', handleImageExport);
+    window.addEventListener('verity:encrypt', handleEncryption);
+    window.addEventListener('verity:signature', handleSignature);
+    window.addEventListener('verity:convert', handleConvert);
+    window.addEventListener('verity:reloadPdf', handleReloadPdf);
     return () => {
       unsubMenu();
       unsubFile();
       window.removeEventListener('verity:export', handleExportEvent);
       window.removeEventListener('verity:exportSummary', handleSummaryExport);
+      window.removeEventListener('verity:exportImages', handleImageExport);
+      window.removeEventListener('verity:encrypt', handleEncryption);
+      window.removeEventListener('verity:signature', handleSignature);
+      window.removeEventListener('verity:convert', handleConvert);
+      window.removeEventListener('verity:reloadPdf', handleReloadPdf);
     };
   }, [handleOpenFile, loadFileFromPath, handleExportPDF]);
 
@@ -309,6 +355,87 @@ export const PDFViewer: React.FC = () => {
     };
     checkTestFile();
   }, [loadFileFromPath]);
+
+  // 密码提交处理
+  const handlePasswordSubmit = useCallback(async (password: string) => {
+    if (!pendingPasswordData || !pendingPasswordPath) return;
+    const showToast = useUIStore.getState().showToast;
+    try {
+      const store = usePdfStore.getState();
+      store.setLoading(true);
+      setLoadingPhase('parsing');
+
+      await pdfService.loadDocument(pendingPasswordData, {
+        password,
+        onProgress: (p) => store.setLoadingProgress(0.3 + p * 0.5),
+      });
+      store.setLoadingProgress(0.8);
+
+      setLoadingPhase('preparing');
+      const info = await pdfService.getDocumentInfo(pendingPasswordPath);
+      if (info) {
+        info.fileSize = pendingPasswordData.byteLength;
+        store.setDocumentInfo(info);
+      }
+
+      store.setLoaded(true);
+      store.setLoading(false);
+      store.setLoadingProgress(1);
+      store.setPasswordRequired(false);
+      setLoadingPhase('done');
+      setShowPasswordDialog(false);
+      setPendingPasswordPath(null);
+      setPendingPasswordData(null);
+
+      const fileName = pendingPasswordPath.split(/[\\/]/).pop() || 'VerityPDF';
+      window.verityAPI.setWindowTitle(`${fileName} - VerityPDF`);
+      setTimeout(() => scrollToPage(1), 300);
+    } catch {
+      showToast('密码错误，请重试', 'error');
+      usePdfStore.getState().setLoading(false);
+      setLoadingPhase('idle');
+    }
+  }, [pendingPasswordData, pendingPasswordPath]);
+
+  const handlePasswordCancel = useCallback(() => {
+    setShowPasswordDialog(false);
+    setPendingPasswordPath(null);
+    setPendingPasswordData(null);
+    usePdfStore.getState().setPasswordRequired(false);
+  }, []);
+
+  // 加密应用处理
+  const handleApplyEncryption = useCallback(async (options: {
+    userPassword: string;
+    ownerPassword: string;
+    permissions: {
+      print: boolean; copy: boolean; modify: boolean;
+      annotate: boolean; fillForms: boolean; extract: boolean;
+    };
+  }) => {
+    const showToast = useUIStore.getState().showToast;
+    const store = usePdfStore.getState();
+    if (!store.filePath) return;
+
+    try {
+      const data = await window.verityAPI.readFile(store.filePath);
+      const base64 = btoa(String.fromCharCode(...new Uint8Array(data)));
+      const encrypted = await window.verityAPI.applyEncryption(base64, options);
+
+      const savePath = await window.verityAPI.showDialog({
+        type: 'save',
+        filters: [{ name: 'PDF 文件', extensions: ['pdf'] }],
+      });
+      if (!savePath) return;
+
+      const encryptedBase64 = btoa(String.fromCharCode(...new Uint8Array(encrypted)));
+      await window.verityAPI.saveFile(encryptedBase64, savePath);
+      showToast('加密成功', 'success');
+      setShowEncryptionDialog(false);
+    } catch (err) {
+      showToast('加密失败: ' + (err instanceof Error ? err.message : '未知错误'), 'error');
+    }
+  }, []);
 
   const registerPageRef = useCallback((page: number, el: HTMLDivElement | null) => {
     if (el) {
@@ -447,6 +574,16 @@ export const PDFViewer: React.FC = () => {
       </div>
       <ExportDialog open={showExportDialog} onClose={() => setShowExportDialog(false)} />
       <SummaryDialog open={showSummaryDialog} onClose={() => setShowSummaryDialog(false)} />
+      <ImageExportDialog open={showImageExportDialog} onClose={() => setShowImageExportDialog(false)} pdfService={pdfService} />
+      <EncryptionDialog open={showEncryptionDialog} onClose={() => setShowEncryptionDialog(false)} onApply={handleApplyEncryption} />
+      <PasswordDialog
+        open={showPasswordDialog}
+        fileName={pendingPasswordPath?.split(/[\\/]/).pop() || ''}
+        onSubmit={handlePasswordSubmit}
+        onCancel={handlePasswordCancel}
+      />
+      <DigitalSignatureDialog open={showSignatureDialog} onClose={() => setShowSignatureDialog(false)} />
+      <FormatConvertDialog open={showConvertDialog} onClose={() => setShowConvertDialog(false)} />
     </>
   );
 };

@@ -190,6 +190,31 @@ export const DEFAULT_ANNOTATION_STYLE: AnnotationStyle = {
   arrowType: 'end',
 };
 
+/** 标注搜索与过滤选项 */
+export interface AnnotationFilterOptions {
+  /** 搜索关键词（匹配 content 和 type） */
+  query?: string;
+  /** 按类型过滤（多选） */
+  types?: AnnotationType[];
+  /** 按页码范围过滤，如 "1-5,8" */
+  pageRange?: string;
+  /** 按作者过滤 */
+  author?: string;
+  /** 按锁定状态过滤 */
+  locked?: boolean;
+  /** 排序方式 */
+  sortBy?: 'page' | 'type' | 'createdAt';
+  /** 排序方向 */
+  sortDir?: 'asc' | 'desc';
+}
+
+/** 标注过滤结果 */
+export interface AnnotationFilterResult {
+  annotations: Annotation[];
+  totalCount: number;
+  filteredCount: number;
+}
+
 /** 创建空标注元数据 */
 export function createDefaultMetadata(): AnnotationMetadata {
   return {

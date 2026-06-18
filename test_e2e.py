@@ -1016,6 +1016,745 @@ def test_keyboard_shortcuts(cdp):
     report("键盘快捷键", True, f"zoom={result.get('zoomAfter', 'N/A')}")
 
 
+# ─── 新增测试：完整 API 可用性验证 ──────────────────────
+
+def test_all_api_methods(cdp):
+    """测试 29: 所有 verityAPI 方法可用性"""
+    result = evaluate(cdp, """
+        (function() {
+            var api = window.verityAPI;
+            if (!api) return { error: 'verityAPI not found' };
+            var methods = [
+                'openFile', 'saveFile', 'readFile', 'showDialog',
+                'getVersion', 'getPlatform',
+                'minimizeWindow', 'maximizeWindow', 'closeWindow', 'setWindowTitle',
+                'onMenuAction', 'onFileOpen', 'onBeforeClose',
+                'checkForUpdates', 'getTestFile',
+                'exportPDF', 'exportImages',
+                'extractPages', 'manipulatePages',
+                'applyEncryption', 'removeEncryption',
+                'detectFormFields', 'fillFormFields', 'flattenForm',
+                'signPDF', 'verifySignature', 'loadCertificate',
+                'checkLibreOffice', 'convertFile', 'batchConvert',
+                'convertToPDF', 'selectConvertFiles'
+            ];
+            var available = {};
+            var missing = [];
+            for (var m of methods) {
+                if (typeof api[m] === 'function') {
+                    available[m] = true;
+                } else {
+                    missing.push(m);
+                }
+            }
+            return {
+                total: methods.length,
+                found: Object.keys(available).length,
+                missing: missing,
+                version: typeof api.getVersion === 'function' ? api.getVersion() : 'N/A'
+            };
+        })()
+    """)
+    if isinstance(result, dict) and not result.get('error'):
+        found = result.get('found', 0)
+        total = result.get('total', 0)
+        missing = result.get('missing', [])
+        report("完整 API 方法", found == total,
+               f"{found}/{total} methods available" + (f", missing: {missing}" if missing else "") + f", version={result.get('version')}")
+    else:
+        report("完整 API 方法", False, str(result))
+
+
+# ─── 新增测试：加密对话框 ────────────────────────────────
+
+def test_encryption_dialog(cdp):
+    """测试 30: 加密与权限控制对话框"""
+    # 触发加密对话框
+    evaluate(cdp, "window.dispatchEvent(new CustomEvent('verity:encrypt'))")
+    time.sleep(0.8)
+
+    result = evaluate(cdp, """
+        (function() {
+            var overlay = document.querySelector('.dialog-overlay');
+            var dialog = document.querySelector('.encryption-dialog');
+            if (!dialog) return { visible: false };
+            var inputs = dialog.querySelectorAll('.form-input');
+            var header = dialog.querySelector('.dialog-header h3');
+            var footer = dialog.querySelector('.dialog-footer');
+            var applyBtn = footer ? footer.querySelector('.btn-primary') : null;
+            var cancelBtn = footer ? footer.querySelector('.btn-secondary') : null;
+            var advBtn = dialog.querySelector('.btn-secondary');
+            return {
+                visible: true,
+                title: header ? header.textContent.trim() : '',
+                inputCount: inputs.length,
+                hasApplyBtn: !!applyBtn,
+                applyText: applyBtn ? applyBtn.textContent.trim() : '',
+                hasCancelBtn: !!cancelBtn,
+                hasAdvancedBtn: !!advBtn,
+                advText: advBtn ? advBtn.textContent.trim() : '',
+            };
+        })()
+    """)
+
+    if isinstance(result, dict) and result.get('visible'):
+        report("加密对话框", True,
+               f"title='{result.get('title')}', inputs={result.get('inputCount')}, applyBtn={result.get('hasApplyBtn')}")
+
+        # 展开权限设置
+        evaluate(cdp, """
+            (function() {
+                var btns = document.querySelectorAll('.encryption-dialog .btn-secondary');
+                for (var b of btns) {
+                    if (b.textContent.indexOf('权限') >= 0) { b.click(); break; }
+                }
+            })()
+        """)
+        time.sleep(0.3)
+
+        perms = evaluate(cdp, """
+            (function() {
+                var panel = document.querySelector('.permissions-panel');
+                if (!panel) return { visible: false };
+                var items = panel.querySelectorAll('.perm-item');
+                var labels = [];
+                for (var item of items) {
+                    labels.push(item.textContent.trim());
+                }
+                return { visible: true, count: items.length, labels: labels };
+            })()
+        """)
+        report("权限设置面板", isinstance(perms, dict) and perms.get('visible') and perms.get('count', 0) >= 4,
+               f"permissions={perms.get('count', 0)}, labels={perms.get('labels', [])[:3]}")
+    else:
+        report("加密对话框", False, "dialog not visible")
+        report("权限设置面板", False, "dialog not opened")
+
+    # 关闭对话框
+    evaluate(cdp, """
+        (function() {
+            var closeBtn = document.querySelector('.encryption-dialog .dialog-close');
+            if (closeBtn) closeBtn.click();
+        })()
+    """)
+    time.sleep(0.3)
+
+
+# ─── 新增测试：数字签名对话框 ────────────────────────────
+
+def test_signature_dialog(cdp):
+    """测试 31: 数字签名对话框"""
+    evaluate(cdp, "window.dispatchEvent(new CustomEvent('verity:signature'))")
+    time.sleep(0.8)
+
+    result = evaluate(cdp, """
+        (function() {
+            var dialog = document.querySelector('.signature-dialog');
+            if (!dialog) return { visible: false };
+            var header = dialog.querySelector('.dialog-header h3');
+            var form = dialog.querySelector('.signature-form');
+            var radios = dialog.querySelectorAll('input[type="radio"]');
+            var inputs = dialog.querySelectorAll('.form-input');
+            var footer = dialog.querySelector('.dialog-footer');
+            var signBtn = footer ? footer.querySelector('.btn-primary') : null;
+            var verifyBtn = footer ? footer.querySelector('.btn-secondary') : null;
+            var radioLabels = [];
+            for (var r of dialog.querySelectorAll('.radio-item')) {
+                radioLabels.push(r.textContent.trim());
+            }
+            return {
+                visible: true,
+                title: header ? header.textContent.trim() : '',
+                hasForm: !!form,
+                radioCount: radios.length,
+                radioLabels: radioLabels,
+                inputCount: inputs.length,
+                hasSignBtn: !!signBtn,
+                signText: signBtn ? signBtn.textContent.trim() : '',
+                hasVerifyBtn: !!verifyBtn,
+            };
+        })()
+    """)
+
+    if isinstance(result, dict) and result.get('visible'):
+        report("数字签名对话框", True,
+               f"title='{result.get('title')}', radios={result.get('radioLabels')}, signBtn='{result.get('signText')}'")
+    else:
+        report("数字签名对话框", False, "dialog not visible")
+
+    # 关闭
+    evaluate(cdp, """
+        (function() {
+            var closeBtn = document.querySelector('.signature-dialog .dialog-close');
+            if (closeBtn) closeBtn.click();
+        })()
+    """)
+    time.sleep(0.3)
+
+
+# ─── 新增测试：格式转换对话框 ────────────────────────────
+
+def test_convert_dialog(cdp):
+    """测试 32: LibreOffice 格式转换对话框"""
+    evaluate(cdp, "window.dispatchEvent(new CustomEvent('verity:convert'))")
+    time.sleep(1.5)  # 等待 LibreOffice 检测
+
+    result = evaluate(cdp, """
+        (function() {
+            var dialog = document.querySelector('.convert-dialog');
+            if (!dialog) return { visible: false };
+            var header = dialog.querySelector('.dialog-header h2');
+            var tabs = dialog.querySelectorAll('.convert-tab');
+            var tabLabels = [];
+            for (var t of tabs) { tabLabels.push(t.textContent.trim()); }
+            var activeTab = dialog.querySelector('.convert-tab.active');
+
+            // 检查 LO 状态
+            var loUnavailable = document.querySelector('.lo-unavailable');
+            var loLoading = dialog.querySelector('.convert-loading');
+            var loVersion = dialog.querySelector('.lo-version');
+
+            // 格式卡片
+            var formatCards = dialog.querySelectorAll('.format-card');
+            var cardLabels = [];
+            for (var c of formatCards) {
+                var lbl = c.querySelector('.format-label');
+                if (lbl) cardLabels.push(lbl.textContent.trim());
+            }
+
+            return {
+                visible: true,
+                title: header ? header.textContent.trim() : '',
+                tabCount: tabs.length,
+                tabLabels: tabLabels,
+                activeTab: activeTab ? activeTab.textContent.trim() : '',
+                loUnavailable: !!loUnavailable,
+                loLoading: !!loLoading,
+                loVersion: loVersion ? loVersion.textContent.trim() : '',
+                formatCardCount: formatCards.length,
+                formatLabels: cardLabels,
+            };
+        })()
+    """)
+
+    if isinstance(result, dict) and result.get('visible'):
+        lo_status = 'unavailable' if result.get('loUnavailable') else ('loading' if result.get('loLoading') else 'available')
+        report("格式转换对话框", True,
+               f"title='{result.get('title')}', tabs={result.get('tabLabels')}, LO={lo_status}, formats={result.get('formatCardCount')}")
+
+        # 测试标签页切换
+        if result.get('tabCount', 0) >= 3:
+            evaluate(cdp, """
+                (function() {
+                    var tabs = document.querySelectorAll('.convert-tab');
+                    if (tabs.length >= 2) tabs[1].click();
+                })()
+            """)
+            time.sleep(0.3)
+            tab2 = evaluate(cdp, """
+                (function() {
+                    var active = document.querySelector('.convert-tab.active');
+                    return active ? active.textContent.trim() : '';
+                })()
+            """)
+            evaluate(cdp, """
+                (function() {
+                    var tabs = document.querySelectorAll('.convert-tab');
+                    if (tabs.length >= 3) tabs[2].click();
+                })()
+            """)
+            time.sleep(0.3)
+            tab3 = evaluate(cdp, """
+                (function() {
+                    var active = document.querySelector('.convert-tab.active');
+                    return active ? active.textContent.trim() : '';
+                })()
+            """)
+            report("转换标签切换", True, f"tab2='{tab2}', tab3='{tab3}'")
+        else:
+            report("转换标签切换", False, f"only {result.get('tabCount')} tabs")
+    else:
+        report("格式转换对话框", False, "dialog not visible")
+        report("转换标签切换", False, "dialog not opened")
+
+    # 关闭
+    evaluate(cdp, """
+        (function() {
+            var closeBtn = document.querySelector('.convert-dialog .dialog-close, .convert-dialog .dialog-close');
+            if (closeBtn) closeBtn.click();
+            else {
+                var overlay = document.querySelector('.dialog-overlay');
+                if (overlay) overlay.click();
+            }
+        })()
+    """)
+    time.sleep(0.3)
+
+
+# ─── 新增测试：图片导出对话框 ────────────────────────────
+
+def test_image_export_dialog(cdp):
+    """测试 33: PDF 转图片导出对话框"""
+    evaluate(cdp, "window.dispatchEvent(new CustomEvent('verity:exportImages'))")
+    time.sleep(0.8)
+
+    result = evaluate(cdp, """
+        (function() {
+            var dialog = document.querySelector('.modal-dialog');
+            if (!dialog) return { visible: false };
+            var header = dialog.querySelector('.modal-header h3');
+            var radios = dialog.querySelectorAll('input[type="radio"]');
+            var radioLabels = [];
+            for (var r of dialog.querySelectorAll('.radio-label')) {
+                radioLabels.push(r.textContent.trim());
+            }
+            var formGroups = dialog.querySelectorAll('.form-group');
+            var closeBtn = dialog.querySelector('.modal-close');
+            var footer = dialog.querySelector('.modal-footer');
+            var exportBtn = footer ? footer.querySelector('.btn-primary') : null;
+            return {
+                visible: true,
+                title: header ? header.textContent.trim() : '',
+                radioCount: radios.length,
+                radioLabels: radioLabels,
+                formGroupCount: formGroups.length,
+                hasCloseBtn: !!closeBtn,
+                hasExportBtn: !!exportBtn,
+                exportText: exportBtn ? exportBtn.textContent.trim() : '',
+            };
+        })()
+    """)
+
+    if isinstance(result, dict) and result.get('visible'):
+        report("图片导出对话框", True,
+               f"title='{result.get('title')}', radios={result.get('radioLabels')}, exportBtn='{result.get('exportText')}'")
+    else:
+        report("图片导出对话框", False, "dialog not visible")
+
+    # 关闭
+    evaluate(cdp, """
+        (function() {
+            var closeBtn = document.querySelector('.modal-dialog .modal-close');
+            if (closeBtn) closeBtn.click();
+        })()
+    """)
+    time.sleep(0.3)
+
+
+# ─── 新增测试：OCR 面板 ─────────────────────────────────
+
+def test_ocr_panel(cdp):
+    """测试 34: OCR 文字识别面板"""
+    # 点击 OCR 按钮
+    evaluate(cdp, """
+        (function() {
+            var btn = document.querySelector('.ocr-btn');
+            if (btn) btn.click();
+        })()
+    """)
+    time.sleep(0.8)
+
+    result = evaluate(cdp, """
+        (function() {
+            var panel = document.querySelector('.ocr-panel');
+            if (!panel) return { visible: false };
+            var header = panel.querySelector('.ocr-panel-header h3');
+            var selects = panel.querySelectorAll('select');
+            var langOptions = [];
+            if (selects.length > 0) {
+                for (var opt of selects[0].options) {
+                    langOptions.push(opt.textContent.trim());
+                }
+            }
+            var pageInput = panel.querySelector('input[type="number"]');
+            var recognizeBtn = panel.querySelector('.btn-primary');
+            var emptyState = panel.querySelector('.ocr-empty');
+            var closeBtn = panel.querySelector('.ocr-panel-close');
+            return {
+                visible: true,
+                title: header ? header.textContent.trim() : '',
+                langOptions: langOptions,
+                hasPageInput: !!pageInput,
+                hasRecognizeBtn: !!recognizeBtn,
+                recognizeText: recognizeBtn ? recognizeBtn.textContent.trim() : '',
+                hasEmptyState: !!emptyState,
+                hasCloseBtn: !!closeBtn,
+            };
+        })()
+    """)
+
+    if isinstance(result, dict) and result.get('visible'):
+        report("OCR 面板", True,
+               f"title='{result.get('title')}', langs={result.get('langOptions')}, btn='{result.get('recognizeText')}'")
+    else:
+        report("OCR 面板", False, "panel not visible")
+
+    # 关闭 OCR 面板
+    evaluate(cdp, """
+        (function() {
+            var closeBtn = document.querySelector('.ocr-panel-close');
+            if (closeBtn) closeBtn.click();
+        })()
+    """)
+    time.sleep(0.3)
+
+
+# ─── 新增测试：搜索面板 ─────────────────────────────────
+
+def test_search_panel(cdp):
+    """测试 35: 全文搜索替换面板"""
+    # Ctrl+F 打开搜索
+    evaluate(cdp, """
+        (function() {
+            document.dispatchEvent(new KeyboardEvent('keydown', {
+                key: 'f', ctrlKey: true, bubbles: true
+            }));
+        })()
+    """)
+    time.sleep(0.8)
+
+    result = evaluate(cdp, """
+        (function() {
+            var panel = document.querySelector('.search-panel');
+            if (!panel) return { visible: false };
+            var title = panel.querySelector('.search-panel-title');
+            var searchInput = panel.querySelector('.search-input');
+            var navBtns = panel.querySelectorAll('.search-nav-btn');
+            var replaceToggle = panel.querySelector('.search-action-btn');
+            var options = panel.querySelectorAll('.search-option');
+            var optionLabels = [];
+            for (var o of options) { optionLabels.push(o.textContent.trim()); }
+            var closeBtn = panel.querySelector('.search-close-btn');
+            return {
+                visible: true,
+                title: title ? title.textContent.trim() : '',
+                hasSearchInput: !!searchInput,
+                navBtnCount: navBtns.length,
+                hasReplaceToggle: !!replaceToggle,
+                replaceText: replaceToggle ? replaceToggle.textContent.trim() : '',
+                options: optionLabels,
+                hasCloseBtn: !!closeBtn,
+            };
+        })()
+    """)
+
+    if isinstance(result, dict) and result.get('visible'):
+        report("搜索面板", True,
+               f"title='{result.get('title')}', options={result.get('options')}, replaceToggle='{result.get('replaceText')}'")
+
+        # 切换替换模式
+        evaluate(cdp, """
+            (function() {
+                var btn = document.querySelector('.search-action-btn');
+                if (btn) btn.click();
+            })()
+        """)
+        time.sleep(0.3)
+
+        replace_result = evaluate(cdp, """
+            (function() {
+                var panel = document.querySelector('.search-panel');
+                var inputs = panel ? panel.querySelectorAll('.search-input') : [];
+                var title = panel ? panel.querySelector('.search-panel-title') : null;
+                var replaceBtns = panel ? panel.querySelectorAll('.search-replace-btn') : [];
+                return {
+                    inputCount: inputs.length,
+                    title: title ? title.textContent.trim() : '',
+                    replaceBtnCount: replaceBtns.length,
+                };
+            })()
+        """)
+        report("搜索替换模式",
+               isinstance(replace_result, dict) and replace_result.get('inputCount', 0) >= 2,
+               f"inputs={replace_result.get('inputCount')}, title='{replace_result.get('title')}', replaceBtns={replace_result.get('replaceBtnCount')}")
+    else:
+        report("搜索面板", False, "panel not visible")
+        report("搜索替换模式", False, "panel not opened")
+
+    # 关闭搜索面板
+    evaluate(cdp, """
+        (function() {
+            var closeBtn = document.querySelector('.search-close-btn');
+            if (closeBtn) closeBtn.click();
+        })()
+    """)
+    time.sleep(0.3)
+
+
+# ─── 新增测试：页面管理 ─────────────────────────────────
+
+def test_page_management(cdp):
+    """测试 36: 页面管理面板"""
+    # 切换到页面管理标签
+    evaluate(cdp, """
+        (function() {
+            var tabs = document.querySelectorAll('.sidebar-tab');
+            for (var t of tabs) {
+                if (t.textContent.trim() === '页面') { t.click(); break; }
+            }
+        })()
+    """)
+    time.sleep(0.8)
+
+    result = evaluate(cdp, """
+        (function() {
+            var panel = document.querySelector('.page-manager');
+            if (!panel) return { visible: false };
+            var toolbar = panel.querySelector('.page-manager-toolbar');
+            var btns = panel.querySelectorAll('.pm-btn');
+            var btnLabels = [];
+            for (var b of btns) { btnLabels.push(b.textContent.trim()); }
+            var thumbList = panel.querySelector('.page-thumb-list');
+            var thumbs = panel.querySelectorAll('.page-thumb-item');
+            var numberInput = panel.querySelector('.pm-number-input');
+            var hint = panel.querySelector('.pm-hint');
+            return {
+                visible: true,
+                hasToolbar: !!toolbar,
+                btnCount: btns.length,
+                btnLabels: btnLabels,
+                hasThumbList: !!thumbList,
+                thumbCount: thumbs.length,
+                hasNumberInput: !!numberInput,
+                hasHint: !!hint,
+            };
+        })()
+    """)
+
+    if isinstance(result, dict) and result.get('visible'):
+        report("页面管理面板", True,
+               f"buttons={result.get('btnLabels')}, thumbs={result.get('thumbCount')}")
+    else:
+        report("页面管理面板", False, "panel not visible")
+
+
+# ─── 新增测试：表单面板 ─────────────────────────────────
+
+def test_form_panel(cdp):
+    """测试 37: 表单识别与填充面板"""
+    # 切换到表单标签
+    evaluate(cdp, """
+        (function() {
+            var tabs = document.querySelectorAll('.sidebar-tab');
+            for (var t of tabs) {
+                if (t.textContent.trim() === '表单') { t.click(); break; }
+            }
+        })()
+    """)
+    time.sleep(1.0)
+
+    result = evaluate(cdp, """
+        (function() {
+            var panel = document.querySelector('.form-panel');
+            if (!panel) return { visible: false };
+            var actions = panel.querySelector('.form-panel-actions');
+            var btns = panel.querySelectorAll('.form-panel-actions button');
+            var btnLabels = [];
+            for (var b of btns) { btnLabels.push(b.textContent.trim()); }
+            var fieldList = panel.querySelector('.form-field-list');
+            var emptyMsg = panel.querySelector('.empty-message');
+            var loading = panel.querySelector('.form-loading');
+            var fieldCount = panel.querySelector('.form-field-count');
+            return {
+                visible: true,
+                hasActions: !!actions,
+                btnLabels: btnLabels,
+                hasFieldList: !!fieldList,
+                hasEmptyMsg: !!emptyMsg,
+                isLoading: !!loading,
+                fieldCountText: fieldCount ? fieldCount.textContent.trim() : '',
+            };
+        })()
+    """)
+
+    if isinstance(result, dict) and result.get('visible'):
+        has_content = result.get('hasFieldList') or result.get('hasEmptyMsg') or result.get('isLoading')
+        report("表单面板", True,
+               f"buttons={result.get('btnLabels')}, hasFields={result.get('hasFieldList')}, empty={result.get('hasEmptyMsg')}")
+    else:
+        report("表单面板", False, "panel not visible")
+
+
+# ─── 新增测试：标注搜索与过滤 ────────────────────────────
+
+def test_annotation_filter(cdp):
+    """测试 38: 标注搜索与过滤面板"""
+    # 切换到标注标签
+    evaluate(cdp, """
+        (function() {
+            var tabs = document.querySelectorAll('.sidebar-tab');
+            for (var t of tabs) {
+                if (t.textContent.trim() === '标注') { t.click(); break; }
+            }
+        })()
+    """)
+    time.sleep(0.8)
+
+    result = evaluate(cdp, """
+        (function() {
+            var panel = document.querySelector('.annotation-filter-panel');
+            if (!panel) return { visible: false };
+            var searchInput = panel.querySelector('.annotation-search-input');
+            var filterToggle = panel.querySelector('.filter-toggle-btn');
+            var sortSelect = panel.querySelector('.sort-select');
+            var sortOptions = [];
+            if (sortSelect) {
+                for (var opt of sortSelect.options) {
+                    sortOptions.push(opt.textContent.trim());
+                }
+            }
+            var resultCount = panel.querySelector('.filter-result-count');
+            var annList = panel.querySelector('.annotation-filtered-list');
+            var annItems = panel.querySelectorAll('.annotation-item');
+            return {
+                visible: true,
+                hasSearchInput: !!searchInput,
+                hasFilterToggle: !!filterToggle,
+                filterText: filterToggle ? filterToggle.textContent.trim() : '',
+                hasSortSelect: !!sortSelect,
+                sortOptions: sortOptions,
+                resultCount: resultCount ? resultCount.textContent.trim() : '',
+                hasAnnList: !!annList,
+                itemCount: annItems.length,
+            };
+        })()
+    """)
+
+    if isinstance(result, dict) and result.get('visible'):
+        report("标注搜索过滤", True,
+               f"sort={result.get('sortOptions')}, result='{result.get('resultCount')}', items={result.get('itemCount')}")
+
+        # 展开过滤器
+        evaluate(cdp, """
+            (function() {
+                var btn = document.querySelector('.filter-toggle-btn');
+                if (btn) btn.click();
+            })()
+        """)
+        time.sleep(0.3)
+
+        filters = evaluate(cdp, """
+            (function() {
+                var filtersPanel = document.querySelector('.annotation-filters');
+                if (!filtersPanel) return { visible: false };
+                var sections = filtersPanel.querySelectorAll('.filter-section');
+                var typeChips = filtersPanel.querySelectorAll('.type-chip');
+                var chipLabels = [];
+                for (var c of typeChips) { chipLabels.push(c.textContent.trim()); }
+                var pageInput = filtersPanel.querySelector('.filter-input');
+                var statusBtns = filtersPanel.querySelectorAll('.filter-btn');
+                var statusLabels = [];
+                for (var b of statusBtns) { statusLabels.push(b.textContent.trim()); }
+                return {
+                    visible: true,
+                    sectionCount: sections.length,
+                    typeChips: chipLabels,
+                    hasPageInput: !!pageInput,
+                    statusLabels: statusLabels,
+                };
+            })()
+        """)
+        report("标注过滤器展开",
+               isinstance(filters, dict) and filters.get('visible'),
+               f"types={filters.get('typeChips', [])[:5]}, status={filters.get('statusLabels')}")
+    else:
+        report("标注搜索过滤", False, "panel not visible")
+        report("标注过滤器展开", False, "panel not opened")
+
+
+# ─── 新增测试：侧边栏标签切换 ────────────────────────────
+
+def test_sidebar_tab_switching(cdp):
+    """测试 39: 侧边栏所有标签切换"""
+    result = evaluate(cdp, """
+        (function() {
+            var tabs = document.querySelectorAll('.sidebar-tab');
+            var tabLabels = [];
+            for (var t of tabs) { tabLabels.push(t.textContent.trim()); }
+
+            var results = {};
+            for (var t of tabs) {
+                t.click();
+                var label = t.textContent.trim();
+                // 检查对应的内容面板是否可见
+                var content = document.querySelector('.sidebar-content');
+                var hasContent = content && content.children.length > 0;
+                results[label] = {
+                    active: t.classList.contains('active'),
+                    hasContent: hasContent
+                };
+            }
+            return {
+                tabCount: tabs.length,
+                tabLabels: tabLabels,
+                results: results,
+            };
+        })()
+    """)
+
+    if isinstance(result, dict) and result.get('tabCount', 0) >= 4:
+        all_ok = True
+        for label, info in result.get('results', {}).items():
+            if not info.get('active'):
+                all_ok = False
+        report("侧边栏标签切换", all_ok,
+               f"tabs={result.get('tabLabels')}, count={result.get('tabCount')}")
+    else:
+        report("侧边栏标签切换", False, f"tabs={result.get('tabCount', 0)}")
+
+
+# ─── 新增测试：导出对话框 ────────────────────────────────
+
+def test_export_dialog(cdp):
+    """测试 40: PDF 导出对话框"""
+    evaluate(cdp, "window.dispatchEvent(new CustomEvent('verity:export'))")
+    time.sleep(0.8)
+
+    result = evaluate(cdp, """
+        (function() {
+            var dialog = document.querySelector('.export-dialog');
+            if (!dialog) return { visible: false };
+            var title = dialog.querySelector('.export-dialog-title');
+            var checkboxes = dialog.querySelectorAll('.export-dialog-checkbox');
+            var typeLabels = [];
+            for (var cb of checkboxes) {
+                typeLabels.push(cb.textContent.trim());
+            }
+            var pageInput = dialog.querySelector('.export-dialog-input');
+            var stats = dialog.querySelector('.export-dialog-stats');
+            var actions = dialog.querySelector('.export-dialog-actions');
+            var exportBtn = actions ? actions.querySelector('.btn-primary') : null;
+            var selectAllBtn = dialog.querySelector('.export-dialog-link');
+            return {
+                visible: true,
+                title: title ? title.textContent.trim() : '',
+                typeCount: checkboxes.length,
+                typeLabels: typeLabels,
+                hasPageInput: !!pageInput,
+                statsText: stats ? stats.textContent.trim().substring(0, 60) : '',
+                hasExportBtn: !!exportBtn,
+                exportText: exportBtn ? exportBtn.textContent.trim() : '',
+                hasSelectAll: !!selectAllBtn,
+            };
+        })()
+    """)
+
+    if isinstance(result, dict) and result.get('visible'):
+        report("导出对话框", True,
+               f"title='{result.get('title')}', types={result.get('typeCount')}, exportBtn='{result.get('exportText')}'")
+    else:
+        report("导出对话框", False, "dialog not visible")
+
+    # 关闭
+    evaluate(cdp, """
+        (function() {
+            var overlay = document.querySelector('.export-dialog-overlay');
+            if (overlay) overlay.click();
+        })()
+    """)
+    time.sleep(0.3)
+
+
 # ─── 主流程 ────────────────────────────────────────
 
 def main():
@@ -1085,6 +1824,7 @@ def main():
     print("─" * 60)
 
     tests = [
+        # === 基础功能 ===
         ("PDF 加载", test_pdf_loaded),
         ("工具栏渲染", test_toolbar_exists),
         ("标注层渲染", test_annotation_layer),
@@ -1099,12 +1839,14 @@ def main():
         ("状态栏", test_statusbar),
         ("导出 API", test_export_function_exists),
         ("导出按钮", test_export_button_click),
+        # === 标注绘制 ===
         ("椭圆绘制", test_draw_ellipse),
         ("箭头绘制", test_draw_arrow),
         ("直线绘制", test_draw_line),
         ("自由画笔绘制", test_draw_freehand),
         ("文本标注", test_draw_text),
         ("高亮标注", test_draw_highlight),
+        # === 标注操作 ===
         ("撤销/重做", test_undo_redo),
         ("属性面板", test_property_panel),
         ("Delete 删除", test_delete_annotation),
@@ -1113,6 +1855,30 @@ def main():
         ("多选标注", test_multi_selection),
         ("导出 API 调用", test_export_api_call),
         ("键盘快捷键", test_keyboard_shortcuts),
+        # === 完整 API 验证 ===
+        ("完整 API 方法", test_all_api_methods),
+        # === 加密与权限控制 ===
+        ("加密对话框", test_encryption_dialog),
+        # === 数字签名 ===
+        ("数字签名对话框", test_signature_dialog),
+        # === 格式转换 ===
+        ("格式转换对话框", test_convert_dialog),
+        # === 图片导出 ===
+        ("图片导出对话框", test_image_export_dialog),
+        # === OCR 文字识别 ===
+        ("OCR 面板", test_ocr_panel),
+        # === 全文搜索替换 ===
+        ("搜索面板", test_search_panel),
+        # === 页面管理 ===
+        ("页面管理面板", test_page_management),
+        # === 表单识别与填充 ===
+        ("表单面板", test_form_panel),
+        # === 标注搜索与过滤 ===
+        ("标注搜索过滤", test_annotation_filter),
+        # === 侧边栏标签切换 ===
+        ("侧边栏标签切换", test_sidebar_tab_switching),
+        # === 导出对话框 ===
+        ("导出对话框", test_export_dialog),
     ]
 
     for name, test_fn in tests:

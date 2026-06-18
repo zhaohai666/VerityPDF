@@ -29,7 +29,7 @@ export type Theme = 'light' | 'dark' | 'system';
 export type Language = 'zh-CN' | 'en-US';
 
 /** 侧边栏标签页 */
-export type SidebarTab = 'thumbnails' | 'outline' | 'annotations';
+export type SidebarTab = 'thumbnails' | 'outline' | 'annotations' | 'pages' | 'forms';
 
 /** 通用事件回调 */
 export type Callback<T = void> = (data: T) => void;

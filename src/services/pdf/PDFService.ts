@@ -187,6 +187,47 @@ export class PDFService {
   }
 
   /**
+   * 获取页面文本内容及位置信息（用于搜索高亮）
+   */
+  async getPageTextItems(pageNumber: number): Promise<Array<{
+    str: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }>> {
+    const page = await this.getPage(pageNumber);
+    const textContent = await page.getTextContent();
+    const viewport = page.getViewport({ scale: 1.0 });
+    return textContent.items
+      .filter((item): item is Extract<typeof item, { str: string }> => 'str' in item && typeof (item as Record<string, unknown>).str === 'string')
+      .map((item) => {
+        const t = item as { str: string; transform: number[]; width: number; height: number };
+        return {
+          str: t.str,
+          x: t.transform[4],
+          y: viewport.height - t.transform[5],
+          width: t.width,
+          height: Math.abs(t.transform[0]) * 0.6 || 12,
+        };
+      });
+  }
+
+  /**
+   * 批量获取所有页面文本（用于全文搜索）
+   */
+  async getAllPageTexts(onProgress?: (progress: number) => void): Promise<Map<number, string>> {
+    const result = new Map<number, string>();
+    const total = this.numPages;
+    for (let i = 1; i <= total; i++) {
+      const text = await this.getPageText(i);
+      result.set(i, text);
+      if (onProgress) onProgress(i / total);
+    }
+    return result;
+  }
+
+  /**
    * 获取大纲
    */
   async getOutline(): Promise<Array<{ title: string; pageNumber: number }> | null> {

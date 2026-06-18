@@ -3,6 +3,7 @@ import { useToolStore } from '@/stores/toolStore';
 import { usePdfStore } from '@/stores/pdfStore';
 import { useAnnotationStore } from '@/stores/annotationStore';
 import { useUIStore } from '@/stores/uiStore';
+import { useSearchStore } from '@/stores/searchStore';
 import type { ToolType } from '@/types';
 import { TOOL_LIST } from '@/types';
 
@@ -43,6 +44,18 @@ export function useKeyboardShortcuts(): void {
       if (ctrl && e.key === 'e') {
         e.preventDefault();
         window.dispatchEvent(new CustomEvent('verity:export'));
+        return;
+      }
+
+      // 搜索
+      if (ctrl && e.key === 'f') {
+        e.preventDefault();
+        const searchStore = useSearchStore.getState();
+        if (!searchStore.visible) {
+          searchStore.setVisible(true);
+        } else {
+          searchStore.setVisible(false);
+        }
         return;
       }
 

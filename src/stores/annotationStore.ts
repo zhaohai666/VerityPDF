@@ -1,6 +1,28 @@
 import { create } from 'zustand';
-import type { Annotation } from '@/types';
+import type { Annotation, AnnotationFilterOptions } from '@/types';
 import type { Comment } from '@/types/common';
+
+/** 解析页码范围字符串为 Set<number> */
+function parsePageRange(range: string): Set<number> {
+  const pages = new Set<number>();
+  const trimmed = range.trim();
+  if (!trimmed || trimmed === '*' || trimmed === 'all') return pages;
+  const parts = trimmed.split(',');
+  for (const part of parts) {
+    const p = part.trim();
+    if (!p) continue;
+    if (p.includes('-')) {
+      const [s, e] = p.split('-').map((v) => parseInt(v.trim(), 10));
+      if (!isNaN(s) && !isNaN(e) && s <= e) {
+        for (let i = Math.max(1, s); i <= e; i++) pages.add(i);
+      }
+    } else {
+      const n = parseInt(p, 10);
+      if (!isNaN(n) && n >= 1) pages.add(n);
+    }
+  }
+  return pages;
+}
 
 type Operation =
   | { type: 'add'; annotation: Annotation }
@@ -30,6 +52,12 @@ interface AnnotationState {
   undo: () => void;
   redo: () => void;
   reset: () => void;
+  // 搜索与过滤
+  filterOptions: AnnotationFilterOptions;
+  setFilterOptions: (options: AnnotationFilterOptions) => void;
+  getFilteredAnnotations: () => Annotation[];
+  searchAnnotations: (query: string) => Annotation[];
+
   addComment: (annotationId: string, author: string, text: string, parentId?: string) => void;
   removeComment: (commentId: string) => void;
   getCommentsByAnnotation: (annotationId: string) => Comment[];
@@ -45,9 +73,74 @@ export const useAnnotationStore = create<AnnotationState>((set, get) => ({
   undoStack: [],
   redoStack: [],
   comments: [],
+  filterOptions: {},
+
+  setFilterOptions: (options) => set({ filterOptions: options }),
+
+  getFilteredAnnotations: () => {
+    const { annotations, filterOptions: opts } = get();
+    let result = [...annotations];
+
+    // 关键词搜索
+    if (opts.query) {
+      const q = opts.query.toLowerCase();
+      result = result.filter((a) =>
+        (a.content && a.content.toLowerCase().includes(q)) ||
+        a.type.toLowerCase().includes(q)
+      );
+    }
+
+    // 按类型过滤
+    if (opts.types && opts.types.length > 0) {
+      const typeSet = new Set<string>(opts.types);
+      result = result.filter((a) => typeSet.has(a.type));
+    }
+
+    // 按页码范围过滤
+    if (opts.pageRange) {
+      const pages = parsePageRange(opts.pageRange);
+      if (pages.size > 0) {
+        result = result.filter((a) => pages.has(a.page));
+      }
+    }
+
+    // 按作者过滤
+    if (opts.author) {
+      const author = opts.author.toLowerCase();
+      result = result.filter((a) => a.metadata.author.toLowerCase().includes(author));
+    }
+
+    // 按锁定状态过滤
+    if (opts.locked !== undefined) {
+      result = result.filter((a) => a.metadata.locked === opts.locked);
+    }
+
+    // 排序
+    const sortBy = opts.sortBy || 'page';
+    const sortDir = opts.sortDir === 'desc' ? -1 : 1;
+    result.sort((a, b) => {
+      let cmp = 0;
+      if (sortBy === 'page') cmp = a.page - b.page;
+      else if (sortBy === 'type') cmp = a.type.localeCompare(b.type);
+      else if (sortBy === 'createdAt') cmp = a.metadata.createdAt.localeCompare(b.metadata.createdAt);
+      return cmp * sortDir;
+    });
+
+    return result;
+  },
+
+  searchAnnotations: (query) => {
+    const { annotations } = get();
+    if (!query) return annotations;
+    const q = query.toLowerCase();
+    return annotations.filter((a) =>
+      (a.content && a.content.toLowerCase().includes(q)) ||
+      a.type.toLowerCase().includes(q)
+    );
+  },
 
   setAnnotations: (annotations) => {
-    set({ annotations, isDirty: false, saveStatus: 'saved', lastSavedTime: Date.now(), undoStack: [], redoStack: [] });
+    set({ annotations, isDirty: false, saveStatus: 'saved', lastSavedTime: Date.now(), undoStack: [], redoStack: [], filterOptions: {} });
   },
 
   addAnnotation: (annotation) => {
@@ -135,6 +228,7 @@ export const useAnnotationStore = create<AnnotationState>((set, get) => ({
       undoStack: [],
       redoStack: [],
       comments: [],
+      filterOptions: {},
     }),
 
   undo: () => {

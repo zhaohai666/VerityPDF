@@ -4,13 +4,16 @@ import { Sidebar } from '@/components/sidebar/Sidebar';
 import { PDFViewer } from '@/components/viewer/PDFViewer';
 import { PropertyPanel } from '@/components/property/PropertyPanel';
 import { CommentPanel } from '@/components/comment/CommentPanel';
+import { SearchPanel } from '@/components/search/SearchPanel';
 import { StatusBar } from '@/components/common/StatusBar';
 import { Toast } from '@/components/common/Toast';
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
+import { OCRPanel } from '@/components/ocr/OCRPanel';
 import { useKeyboardShortcuts, useAutoSave } from '@/hooks';
 import { usePdfStore } from '@/stores/pdfStore';
 import { useAnnotationStore } from '@/stores/annotationStore';
 import { useUIStore } from '@/stores/uiStore';
+import { useSearchStore } from '@/stores/searchStore';
 import './i18n';
 
 const App: React.FC = () => {
@@ -18,6 +21,9 @@ const App: React.FC = () => {
   useKeyboardShortcuts();
   // 初始化自动保存
   useAutoSave();
+
+  // 搜索面板可见性
+  const searchVisible = useSearchStore((s) => s.visible);
 
   // 评论面板状态
   const selectedIds = useAnnotationStore((s) => s.selectedIds);
@@ -122,9 +128,13 @@ const App: React.FC = () => {
             <PDFViewer />
           </ErrorBoundary>
           <PropertyPanel />
+          {searchVisible && (
+            <SearchPanel pdfService={(window as unknown as { __pdfService: unknown }).__pdfService as never} />
+          )}
           {activeCommentId && (
             <CommentPanel annotationId={activeCommentId} onClose={() => setShowComments(false)} />
           )}
+          <OCRPanel />
         </div>
         <StatusBar />
         <Toast />

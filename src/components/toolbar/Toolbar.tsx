@@ -1,6 +1,7 @@
 import React, { useState, useRef, useCallback } from 'react';
 import { useToolStore } from '@/stores/toolStore';
 import { usePdfStore } from '@/stores/pdfStore';
+import { useOCRStore } from '@/stores/ocrStore';
 import { TOOL_LIST } from '@/types';
 import type { ToolType } from '@/types';
 
@@ -109,6 +110,8 @@ export const Toolbar: React.FC = () => {
   const activeTool = useToolStore((s) => s.activeTool);
   const setActiveTool = useToolStore((s) => s.setActiveTool);
   const { zoomIn, zoomOut, currentPage, documentInfo, zoomMode, setZoomMode, effectiveZoom, isLoaded } = usePdfStore();
+  const ocrPanelVisible = useOCRStore((s) => s.panelVisible);
+  const setOcrPanelVisible = useOCRStore((s) => s.setPanelVisible);
   const isDrawTool = ['rect', 'ellipse', 'arrow', 'line', 'freehand', 'text', 'highlight', 'stickyNote', 'wavyLine', 'redaction', 'measureDistance', 'measureArea', 'measureAngle'].includes(activeTool);
   const toolbarRef = useRef<HTMLDivElement>(null);
 
@@ -230,6 +233,72 @@ export const Toolbar: React.FC = () => {
               <path d="M20 18H4v2h16v-2z" fill="currentColor"/>
             </svg>
             <span className="toolbar-label">导出</span>
+          </button>
+          <button
+            className="toolbar-btn image-export-btn"
+            onClick={() => window.dispatchEvent(new CustomEvent('verity:exportImages'))}
+            disabled={!isLoaded}
+            title="导出为图片"
+            aria-label="导出为图片"
+          >
+            <svg className="toolbar-icon-svg" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+              <rect x="3" y="3" width="18" height="18" rx="2" fill="none" stroke="currentColor" strokeWidth="1.5"/>
+              <circle cx="8.5" cy="8.5" r="1.5" fill="currentColor"/>
+              <path d="M21 15l-5-5L5 21" fill="none" stroke="currentColor" strokeWidth="1.5"/>
+            </svg>
+            <span className="toolbar-label">图片</span>
+          </button>
+          <button
+            className="toolbar-btn encrypt-btn"
+            onClick={() => window.dispatchEvent(new CustomEvent('verity:encrypt'))}
+            disabled={!isLoaded}
+            title="加密与权限设置"
+            aria-label="加密与权限设置"
+          >
+            <svg className="toolbar-icon-svg" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+              <rect x="5" y="11" width="14" height="10" rx="2" fill="none" stroke="currentColor" strokeWidth="1.5"/>
+              <path d="M8 11V7a4 4 0 118 0v4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+            </svg>
+            <span className="toolbar-label">加密</span>
+          </button>
+          <button
+            className={`toolbar-btn ocr-btn ${ocrPanelVisible ? 'active' : ''}`}
+            onClick={() => setOcrPanelVisible(!ocrPanelVisible)}
+            disabled={!isLoaded}
+            title="OCR 文字识别"
+            aria-label="OCR 文字识别"
+          >
+            <svg className="toolbar-icon-svg" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+              <rect x="3" y="3" width="18" height="18" rx="2" fill="none" stroke="currentColor" strokeWidth="1.5"/>
+              <text x="6" y="16" fontSize="10" fontWeight="bold" fill="currentColor">Aa</text>
+            </svg>
+            <span className="toolbar-label">OCR</span>
+          </button>
+          <button
+            className="toolbar-btn signature-btn"
+            onClick={() => window.dispatchEvent(new CustomEvent('verity:signature'))}
+            disabled={!isLoaded}
+            title="数字签名"
+            aria-label="数字签名"
+          >
+            <svg className="toolbar-icon-svg" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+              <path d="M3 18c2-3 4 1 6-1s3-5 5-3 3 4 5 2" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+              <line x1="3" y1="21" x2="21" y2="21" stroke="currentColor" strokeWidth="1.5"/>
+            </svg>
+            <span className="toolbar-label">签名</span>
+          </button>
+          <button
+            className="toolbar-btn convert-btn"
+            onClick={() => window.dispatchEvent(new CustomEvent('verity:convert'))}
+            disabled={!isLoaded}
+            title="格式转换 (LibreOffice)"
+            aria-label="格式转换"
+          >
+            <svg className="toolbar-icon-svg" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+              <path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4z" fill="none" stroke="currentColor" strokeWidth="1.5"/>
+              <path d="M17 14v3h3M17 17l3-3" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+            </svg>
+            <span className="toolbar-label">转换</span>
           </button>
         </div>
       </div>
