@@ -47,7 +47,15 @@ const ThumbnailItem = memo(({ pageNumber, isActive, onClick }: {
   }, [pageNumber]);
 
   return (
-    <div className={`thumbnail-item ${isActive ? 'active' : ''}`} onClick={onClick}>
+    <div
+      className={`thumbnail-item ${isActive ? 'active' : ''}`}
+      onClick={onClick}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } }}
+      tabIndex={0}
+      role="button"
+      aria-label={`跳转到第 ${pageNumber} 页`}
+      aria-current={isActive ? 'page' : undefined}
+    >
       <canvas ref={canvasRef} className="thumbnail-canvas" />
       <div className="thumbnail-label">{pageNumber}</div>
     </div>

@@ -80,6 +80,15 @@ const App: React.FC = () => {
     return unsub;
   }, []);
 
+  // 关闭前检查未保存标注
+  useEffect(() => {
+    const unsub = window.verityAPI.onBeforeClose(async () => {
+      const isDirty = useAnnotationStore.getState().isDirty;
+      return !isDirty;
+    });
+    return unsub;
+  }, []);
+
   return (
     <ErrorBoundary>
       <div className="app-layout">

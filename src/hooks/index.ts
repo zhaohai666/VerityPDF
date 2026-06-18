@@ -39,6 +39,34 @@ export function useKeyboardShortcuts(): void {
         return;
       }
 
+      // 导出
+      if (ctrl && e.key === 'e') {
+        e.preventDefault();
+        window.dispatchEvent(new CustomEvent('verity:export'));
+        return;
+      }
+
+      // 全选标注
+      if (ctrl && e.key === 'a') {
+        e.preventDefault();
+        const ann = useAnnotationStore.getState();
+        const allIds = ann.annotations.map((a) => a.id);
+        if (allIds.length > 0) {
+          ann.selectAnnotation(allIds[0], false);
+          for (let i = 1; i < allIds.length; i++) {
+            ann.selectAnnotation(allIds[i], true);
+          }
+        }
+        return;
+      }
+
+      // Escape 取消绘制、清除选中
+      if (e.key === 'Escape') {
+        useToolStore.getState().setActiveTool('select');
+        useAnnotationStore.getState().clearSelection();
+        return;
+      }
+
       // 工具切换快捷键
       if (!ctrl && !shift) {
         const tool = TOOL_LIST.find((t) => t.shortcut === e.key.toUpperCase());

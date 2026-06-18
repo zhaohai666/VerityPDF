@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import { useToolStore } from '@/stores/toolStore';
 import { usePdfStore } from '@/stores/pdfStore';
 import { TOOL_LIST } from '@/types';
@@ -105,6 +105,32 @@ export const Toolbar: React.FC = () => {
   const setActiveTool = useToolStore((s) => s.setActiveTool);
   const { zoomIn, zoomOut, currentPage, documentInfo, zoomMode, setZoomMode, effectiveZoom, isLoaded } = usePdfStore();
   const isDrawTool = ['rect', 'ellipse', 'arrow', 'line', 'freehand', 'text', 'highlight', 'stickyNote'].includes(activeTool);
+  const toolbarRef = useRef<HTMLDivElement>(null);
+
+  // 工具栏方向键导航（roving tabindex 模式）
+  const handleToolbarKeyDown = useCallback((e: React.KeyboardEvent) => {
+    const toolbar = toolbarRef.current;
+    if (!toolbar) return;
+    const buttons = Array.from(toolbar.querySelectorAll<HTMLButtonElement>('.toolbar-btn:not([disabled])'));
+    const currentIndex = buttons.indexOf(e.target as HTMLButtonElement);
+    if (currentIndex === -1) return;
+
+    let nextIndex = -1;
+    if (e.key === 'ArrowRight') {
+      nextIndex = (currentIndex + 1) % buttons.length;
+    } else if (e.key === 'ArrowLeft') {
+      nextIndex = (currentIndex - 1 + buttons.length) % buttons.length;
+    } else if (e.key === 'Home') {
+      nextIndex = 0;
+    } else if (e.key === 'End') {
+      nextIndex = buttons.length - 1;
+    }
+
+    if (nextIndex >= 0) {
+      e.preventDefault();
+      buttons[nextIndex].focus();
+    }
+  }, []);
 
   // 触发导出（发送菜单事件）
   const handleExport = () => {
@@ -113,7 +139,7 @@ export const Toolbar: React.FC = () => {
   };
 
   return (
-    <div className="toolbar" role="toolbar" aria-label="工具栏">
+    <div className="toolbar" role="toolbar" aria-label="工具栏" aria-orientation="horizontal" ref={toolbarRef} onKeyDown={handleToolbarKeyDown}>
       <div className="toolbar-drag-area" />
       <div className="toolbar-content">
         <div className="toolbar-group toolbar-tools" role="group" aria-label="标注工具">

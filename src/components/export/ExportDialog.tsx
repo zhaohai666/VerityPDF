@@ -2,7 +2,7 @@ import React, { useState, useMemo, useCallback, memo } from 'react';
 import { useAnnotationStore } from '@/stores/annotationStore';
 import { usePdfStore } from '@/stores/pdfStore';
 import { useUIStore } from '@/stores/uiStore';
-import { ExportService } from '@/services/export/ExportService';
+import { ExportService, validatePageRange } from '@/services/export/ExportService';
 
 interface ExportDialogProps {
   open: boolean;
@@ -36,14 +36,21 @@ export const ExportDialog: React.FC<ExportDialogProps> = memo(({ open, onClose }
 
   const totalPages = documentInfo?.pageCount ?? 0;
 
+  // 页码范围验证
+  const pageRangeValidation = useMemo(() => {
+    if (!pageRange.trim()) return { valid: true, errors: [] as string[] };
+    return validatePageRange(pageRange, totalPages);
+  }, [pageRange, totalPages]);
+
   // 计算筛选后的标注数量
   const filteredCount = useMemo(() => {
+    if (!pageRangeValidation.valid) return 0;
     return exportService.filterAnnotations(annotations, {
       includeTypes: Array.from(selectedTypes),
       pageRange,
       totalPages,
     }).length;
-  }, [annotations, selectedTypes, pageRange, totalPages]);
+  }, [annotations, selectedTypes, pageRange, totalPages, pageRangeValidation.valid]);
 
   const toggleType = useCallback((type: string) => {
     setSelectedTypes((prev) => {
@@ -135,13 +142,21 @@ export const ExportDialog: React.FC<ExportDialogProps> = memo(({ open, onClose }
             <span>页码范围</span>
           </label>
           <input
-            className="export-dialog-input"
+            className={`export-dialog-input ${!pageRangeValidation.valid ? 'input-error' : ''}`}
             type="text"
             value={pageRange}
             onChange={(e) => setPageRange(e.target.value)}
             placeholder={`全部页（共 ${totalPages} 页），例如：1-5,8,10-12`}
+            aria-invalid={!pageRangeValidation.valid}
+            aria-describedby={pageRangeValidation.errors.length > 0 ? 'page-range-error' : undefined}
           />
-          <p className="export-dialog-hint">留空表示导出全部页</p>
+          {pageRangeValidation.errors.length > 0 ? (
+            <p className="export-dialog-error" id="page-range-error" role="alert">
+              {pageRangeValidation.errors[0]}
+            </p>
+          ) : (
+            <p className="export-dialog-hint">留空表示导出全部页</p>
+          )}
         </div>
 
         {/* 统计 */}
@@ -155,7 +170,7 @@ export const ExportDialog: React.FC<ExportDialogProps> = memo(({ open, onClose }
           <button
             className="btn-primary"
             onClick={handleExport}
-            disabled={exporting || filteredCount === 0}
+            disabled={exporting || filteredCount === 0 || !pageRangeValidation.valid}
           >
             {exporting ? '导出中...' : `导出 PDF（${filteredCount} 条标注）`}
           </button>

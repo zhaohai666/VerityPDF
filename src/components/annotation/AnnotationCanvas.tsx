@@ -1,7 +1,7 @@
-import React, { useRef, useState, useCallback, useEffect, useMemo, memo } from 'react';
+import React, { useRef, useState, useCallback, useEffect, useMemo } from 'react';
 import { useToolStore } from '@/stores/toolStore';
 import { useAnnotationStore } from '@/stores/annotationStore';
-import type { Annotation, ToolType, AnnotationStyle } from '@/types';
+import type { Annotation, ToolType } from '@/types';
 import { createDefaultMetadata } from '@/types';
 
 interface DrawingState {
@@ -39,147 +39,143 @@ interface AnnotationCanvasProps {
   containerRef: React.RefObject<HTMLDivElement>;
 }
 
-function styleToCSS(s: AnnotationStyle): React.CSSProperties {
-  return {
-    stroke: s.stroke,
-    strokeWidth: s.strokeWidth,
-    fill: s.fill === 'transparent' ? 'none' : s.fill,
-    opacity: s.opacity,
-    strokeDasharray: s.dash?.length ? s.dash.join(',') : undefined,
-  };
-}
+// ---- Canvas 2D 绘制工具函数 ----
 
-interface SingleAnnotationProps {
-  annotation: Annotation;
-  isSelected: boolean;
-}
+function drawAnnotationOnCanvas(
+  ctx: CanvasRenderingContext2D,
+  ann: Annotation,
+  w: number,
+  h: number,
+  isSelected: boolean,
+) {
+  const { style: s, position: p, size: sz } = ann;
+  ctx.save();
+  ctx.globalAlpha = s.opacity;
+  ctx.strokeStyle = s.stroke;
+  ctx.lineWidth = s.strokeWidth;
+  ctx.fillStyle = s.fill === 'transparent' ? 'transparent' : (s.fill || 'transparent');
+  if (s.dash && s.dash.length > 0) {
+    ctx.setLineDash(s.dash);
+  }
 
-const SingleAnnotation = memo(({ annotation, isSelected }: SingleAnnotationProps) => {
-  const st = styleToCSS(annotation.style);
-  const selectionBox = isSelected ? (
-    <rect
-      x={`${annotation.position.x * 100 - 0.3}%`}
-      y={`${annotation.position.y * 100 - 0.3}%`}
-      width={`${annotation.size.width * 100 + 0.6}%`}
-      height={`${annotation.size.height * 100 + 0.6}%`}
-      fill="none"
-      stroke="#1677ff"
-      strokeWidth="1.5"
-      strokeDasharray="4 2"
-    />
-  ) : null;
+  const px = p.x * w, py = p.y * h;
+  const sw = sz.width * w, sh = sz.height * h;
 
-  let shape: React.ReactNode = null;
-  switch (annotation.type) {
+  switch (ann.type) {
     case 'rect':
-      shape = (
-        <rect
-          x={`${annotation.position.x * 100}%`}
-          y={`${annotation.position.y * 100}%`}
-          width={`${annotation.size.width * 100}%`}
-          height={`${annotation.size.height * 100}%`}
-          style={st}
-        />
-      );
+      if (s.fill && s.fill !== 'transparent') ctx.fillRect(px, py, sw, sh);
+      ctx.strokeRect(px, py, sw, sh);
       break;
-    case 'ellipse':
-      shape = (
-        <ellipse
-          cx={`${annotation.position.x * 100}%`}
-          cy={`${annotation.position.y * 100}%`}
-          rx={`${(annotation.size.width / 2) * 100}%`}
-          ry={`${(annotation.size.height / 2) * 100}%`}
-          style={st}
-        />
-      );
+    case 'ellipse': {
+      const cx = px, cy = py;
+      const rx = (sz.width / 2) * w, ry = (sz.height / 2) * h;
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, Math.abs(rx), Math.abs(ry), 0, 0, Math.PI * 2);
+      if (s.fill && s.fill !== 'transparent') ctx.fill();
+      ctx.stroke();
       break;
+    }
     case 'arrow':
-    case 'line':
-      shape = (
-        <line
-          x1={`${annotation.position.x * 100}%`}
-          y1={`${annotation.position.y * 100}%`}
-          x2={`${annotation.endPoint.x * 100}%`}
-          y2={`${annotation.endPoint.y * 100}%`}
-          style={st}
-          markerEnd={annotation.type === 'arrow' ? 'url(#arrowhead)' : undefined}
-        />
-      );
+    case 'line': {
+      const x1 = p.x * w, y1 = p.y * h;
+      const x2 = (ann.endPoint?.x ?? p.x) * w, y2 = (ann.endPoint?.y ?? p.y) * h;
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+      // 箭头头部
+      if (ann.type === 'arrow') {
+        const angle = Math.atan2(y2 - y1, x2 - x1);
+        const headLen = 10;
+        ctx.beginPath();
+        ctx.moveTo(x2, y2);
+        ctx.lineTo(x2 - headLen * Math.cos(angle - Math.PI / 6), y2 - headLen * Math.sin(angle - Math.PI / 6));
+        ctx.lineTo(x2 - headLen * Math.cos(angle + Math.PI / 6), y2 - headLen * Math.sin(angle + Math.PI / 6));
+        ctx.closePath();
+        ctx.fillStyle = s.stroke;
+        ctx.fill();
+      }
       break;
+    }
     case 'freehand': {
-      if (!annotation.points || annotation.points.length < 2) break;
-      const d = annotation.points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x * 100} ${p.y * 100}`).join(' ');
-      shape = <path d={d} style={st} />;
+      const pts = ann.points;
+      if (pts && pts.length >= 2) {
+        ctx.beginPath();
+        ctx.moveTo(pts[0].x * w, pts[0].y * h);
+        for (let i = 1; i < pts.length; i++) {
+          ctx.lineTo(pts[i].x * w, pts[i].y * h);
+        }
+        ctx.stroke();
+      }
       break;
     }
     case 'highlight':
-      shape = (
-        <rect
-          x={`${annotation.position.x * 100}%`}
-          y={`${annotation.position.y * 100}%`}
-          width={`${annotation.size.width * 100}%`}
-          height={`${annotation.size.height * 100}%`}
-          fill={annotation.style.fill || annotation.style.stroke}
-          opacity={annotation.style.opacity || 0.3}
-        />
-      );
+      ctx.globalAlpha = s.opacity || 0.3;
+      ctx.fillStyle = s.fill || s.stroke;
+      ctx.fillRect(px, py, sw, sh);
       break;
-    case 'text':
-      shape = (
-        <foreignObject
-          x={`${annotation.position.x * 100}%`}
-          y={`${annotation.position.y * 100}%`}
-          width="30%"
-          height="10%"
-        >
-          <div
-            style={{
-              fontSize: annotation.style.fontSize || 14,
-              color: annotation.style.stroke,
-              fontFamily: annotation.style.fontFamily || 'sans-serif',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {annotation.content}
-          </div>
-        </foreignObject>
-      );
+    case 'text': {
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = s.stroke;
+      ctx.font = `${s.fontSize || 14}px ${s.fontFamily || 'sans-serif'}`;
+      ctx.textBaseline = 'top';
+      ctx.fillText(ann.content || '', px, py);
       break;
-    case 'stickyNote':
-      shape = (
-        <g>
-          <rect
-            x={`${annotation.position.x * 100}%`}
-            y={`${annotation.position.y * 100}%`}
-            width={`${annotation.size.width * 100}%`}
-            height={`${annotation.size.height * 100}%`}
-            fill="#FDE68A"
-            stroke="#B8860B"
-            strokeWidth="1"
-            opacity={0.9}
-            rx="2"
-          />
-          <foreignObject
-            x={`${annotation.position.x * 100 + 0.3}%`}
-            y={`${annotation.position.y * 100 + 0.3}%`}
-            width={`${annotation.size.width * 100 - 0.6}%`}
-            height={`${annotation.size.height * 100 - 0.6}%`}
-          >
-            <div style={{ fontSize: 11, color: '#333', padding: '2px', overflow: 'hidden', wordBreak: 'break-all' }}>
-              {annotation.content}
-            </div>
-          </foreignObject>
-        </g>
-      );
+    }
+    case 'stickyNote': {
+      // 便签背景
+      ctx.globalAlpha = 0.9;
+      ctx.fillStyle = '#FDE68A';
+      ctx.strokeStyle = '#B8860B';
+      ctx.lineWidth = 1;
+      const radius = 2;
+      ctx.beginPath();
+      ctx.moveTo(px + radius, py);
+      ctx.lineTo(px + sw - radius, py);
+      ctx.quadraticCurveTo(px + sw, py, px + sw, py + radius);
+      ctx.lineTo(px + sw, py + sh - radius);
+      ctx.quadraticCurveTo(px + sw, py + sh, px + sw - radius, py + sh);
+      ctx.lineTo(px + radius, py + sh);
+      ctx.quadraticCurveTo(px, py + sh, px, py + sh - radius);
+      ctx.lineTo(px, py + radius);
+      ctx.quadraticCurveTo(px, py, px + radius, py);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      // 便签文字
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = '#333';
+      ctx.font = '11px sans-serif';
+      ctx.textBaseline = 'top';
+      const text = ann.content || '';
+      const lines = text.split('\n');
+      const lineH = 13;
+      const padX = 3, padY = 3;
+      for (let i = 0; i < lines.length; i++) {
+        const ty = py + padY + i * lineH;
+        if (ty + lineH > py + sh) break;
+        ctx.fillText(lines[i], px + padX, ty, sw - padX * 2);
+      }
       break;
+    }
   }
 
-  return <g key={annotation.id}>{selectionBox}{shape}</g>;
-});
+  // 选中标注的选择框
+  if (isSelected) {
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = '#1677ff';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([4, 2]);
+    const margin = 3;
+    ctx.strokeRect(px - margin, py - margin, sw + margin * 2, sh + margin * 2);
+  }
 
-SingleAnnotation.displayName = 'SingleAnnotation';
+  ctx.restore();
+}
 
 export const AnnotationCanvas: React.FC<AnnotationCanvasProps> = ({ pageNumber, containerRef }) => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const offscreenCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const activeTool = useToolStore((s) => s.activeTool);
   const toolStyle = useToolStore((s) => s.toolStyle);
@@ -211,6 +207,95 @@ export const AnnotationCanvas: React.FC<AnnotationCanvasProps> = ({ pageNumber, 
   const pageAnnotations = useMemo(() => {
     return annotations.filter((a) => a.page === pageNumber);
   }, [annotations, pageNumber]);
+
+  // ---- Canvas 绘制逻辑 ----
+  const canvasSizeRef = useRef<{ w: number; h: number }>({ w: 0, h: 0 });
+
+  // 重绘离屏 Canvas（静态标注缓存）
+  const redrawStaticAnnotations = useCallback(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+    const w = rect.width;
+    const h = rect.height;
+    if (w <= 0 || h <= 0) return;
+
+    // 初始化或更新离屏 Canvas 尺寸
+    if (!offscreenCanvasRef.current) {
+      offscreenCanvasRef.current = document.createElement('canvas');
+    }
+    const oc = offscreenCanvasRef.current;
+    const dpr = window.devicePixelRatio || 1;
+    oc.width = w * dpr;
+    oc.height = h * dpr;
+    canvasSizeRef.current = { w: w * dpr, h: h * dpr };
+
+    const ctx = oc.getContext('2d');
+    if (!ctx) return;
+    ctx.clearRect(0, 0, oc.width, oc.height);
+    ctx.save();
+    ctx.scale(dpr, dpr);
+
+    for (const ann of pageAnnotations) {
+      drawAnnotationOnCanvas(ctx, ann, w, h, false);
+    }
+
+    ctx.restore();
+  }, [pageAnnotations, containerRef]);
+
+  // 将离屏 Canvas composite 到可见 Canvas + 绘制选中标注
+  const compositeToVisible = useCallback(() => {
+    const canvas = canvasRef.current;
+    const container = containerRef.current;
+    if (!canvas || !container) return;
+    const rect = container.getBoundingClientRect();
+    const w = rect.width;
+    const h = rect.height;
+    if (w <= 0 || h <= 0) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = w * dpr;
+    canvas.height = h * dpr;
+    canvas.style.width = `${w}px`;
+    canvas.style.height = `${h}px`;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Composite 离屏缓存
+    if (offscreenCanvasRef.current) {
+      ctx.drawImage(offscreenCanvasRef.current, 0, 0);
+    }
+
+    // 绘制选中标注（覆盖选择框）
+    ctx.save();
+    ctx.scale(dpr, dpr);
+    for (const ann of pageAnnotations) {
+      if (selectedIds.includes(ann.id)) {
+        drawAnnotationOnCanvas(ctx, ann, w, h, true);
+      }
+    }
+    ctx.restore();
+  }, [pageAnnotations, selectedIds, containerRef]);
+
+  // 标注变化时重绘离屏 + composite
+  useEffect(() => {
+    redrawStaticAnnotations();
+    compositeToVisible();
+  }, [redrawStaticAnnotations, compositeToVisible]);
+
+  // 窗口 resize 时重绘
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const observer = new ResizeObserver(() => {
+      redrawStaticAnnotations();
+      compositeToVisible();
+    });
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [containerRef, redrawStaticAnnotations, compositeToVisible]);
 
   const getRelativeCoords = useCallback((e: React.MouseEvent | MouseEvent): { x: number; y: number } | null => {
     const container = containerRef.current;
@@ -458,6 +543,15 @@ export const AnnotationCanvas: React.FC<AnnotationCanvasProps> = ({ pageNumber, 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [drawing.isDrawing, activeTool, freehandVersion]);
 
+  // SVG 预览样式（仅用于绘制中的临时形状）
+  const previewStyle = useMemo(() => ({
+    stroke: toolStyle.stroke,
+    strokeWidth: toolStyle.strokeWidth,
+    fill: toolStyle.fill === 'transparent' ? 'none' : toolStyle.fill,
+    opacity: toolStyle.opacity,
+    strokeDasharray: toolStyle.dash?.length ? toolStyle.dash.join(',') : undefined,
+  }), [toolStyle]);
+
   const renderPreview = useMemo(() => {
     if (!drawing.isDrawing) return null;
     const { startX, startY, currentX, currentY } = drawing;
@@ -465,7 +559,7 @@ export const AnnotationCanvas: React.FC<AnnotationCanvasProps> = ({ pageNumber, 
     const y = Math.min(startY, currentY) * 100;
     const w = Math.abs(currentX - startX) * 100;
     const h = Math.abs(currentY - startY) * 100;
-    const st = styleToCSS(toolStyle);
+    const st = previewStyle;
 
     switch (activeTool) {
       case 'rect':
@@ -485,7 +579,7 @@ export const AnnotationCanvas: React.FC<AnnotationCanvasProps> = ({ pageNumber, 
       default:
         return null;
     }
-  }, [drawing, activeTool, toolStyle, freehandPathD]);
+  }, [drawing, activeTool, previewStyle, toolStyle.stroke, freehandPathD]);
 
   const isInteractive = activeTool === 'select' || activeTool === 'eraser' || isDrawTool || isClickTool;
   const cursor = activeTool === 'select' ? (drag.isDragging ? 'grabbing' : 'default')
@@ -496,9 +590,27 @@ export const AnnotationCanvas: React.FC<AnnotationCanvasProps> = ({ pageNumber, 
 
   return (
     <>
+      {/* Canvas 层：静态标注高性能渲染（不受 DOM 节点数量限制） */}
+      <canvas
+        ref={canvasRef}
+        role="img"
+        aria-label={`第 ${pageNumber} 页标注层，包含 ${pageAnnotations.length} 个标注`}
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          pointerEvents: 'none',
+        }}
+      />
+
+      {/* SVG 层：仅用于绘制预览（交互式临时形状） */}
       <svg
         ref={svgRef}
         className="annotation-svg"
+        role="img"
+        aria-hidden={!drawing.isDrawing}
         style={{
           cursor,
           position: 'absolute',
@@ -519,13 +631,6 @@ export const AnnotationCanvas: React.FC<AnnotationCanvasProps> = ({ pageNumber, 
             <polygon points="0 0, 10 3.5, 0 7" fill={toolStyle.stroke} />
           </marker>
         </defs>
-        {pageAnnotations.map((ann) => (
-          <SingleAnnotation
-            key={ann.id}
-            annotation={ann}
-            isSelected={selectedIds.includes(ann.id)}
-          />
-        ))}
         {renderPreview}
       </svg>
 

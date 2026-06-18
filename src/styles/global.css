@@ -1424,3 +1424,84 @@ button {
   white-space: pre-wrap;
   word-break: break-all;
 }
+
+/* ========================================
+   导出对话框 - 页码范围验证错误
+   ======================================== */
+.export-dialog-input.input-error {
+  border-color: var(--danger-color);
+  box-shadow: 0 0 0 2px rgba(255, 77, 79, 0.15);
+}
+
+.export-dialog-error {
+  color: var(--danger-color);
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+/* ========================================
+   可访问性 - 高对比度模式
+   ======================================== */
+@media (prefers-contrast: high) {
+  :root {
+    --border-color: #000000;
+    --accent-color: #0000cc;
+    --text-primary: #000000;
+    --text-secondary: #333333;
+  }
+
+  [data-theme='dark'] {
+    --border-color: #ffffff;
+    --accent-color: #6699ff;
+    --text-primary: #ffffff;
+    --text-secondary: #cccccc;
+  }
+
+  .toolbar-btn {
+    border: 1px solid var(--border-color) !important;
+  }
+
+  .toolbar-btn.active {
+    outline: 2px solid var(--accent-color);
+    outline-offset: -2px;
+  }
+
+  .btn-primary, .btn-secondary {
+    border: 2px solid var(--border-color);
+  }
+
+  .sidebar-tab {
+    border-bottom: 2px solid transparent;
+  }
+
+  .sidebar-tab.active {
+    border-bottom-color: var(--accent-color);
+  }
+
+  .status-bar {
+    border-top: 1px solid var(--border-color);
+  }
+}
+
+/* ========================================
+   可访问性 - 焦点可见性
+   ======================================== */
+:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 2px;
+}
+
+.toolbar-btn:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: -2px;
+}
+
+.sidebar-tab:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: -2px;
+}
+
+.export-dialog-input:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 0;
+}

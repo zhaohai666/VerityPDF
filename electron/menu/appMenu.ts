@@ -71,11 +71,12 @@ export function createAppMenu(win: BrowserWindow): void {
       submenu: [
         {
           label: '撤销',
-          // accelerator 由渲染进程 useKeyboardShortcuts 处理，此处不设以避免拦截
+          accelerator: 'CmdOrCtrl+Z',
           click: () => sendAction('edit:undo'),
         },
         {
           label: '重做',
+          accelerator: 'CmdOrCtrl+Shift+Z',
           click: () => sendAction('edit:redo'),
         },
         { type: 'separator' },

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, shell, dialog } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { createAppMenu } from './menu/appMenu';
@@ -51,10 +51,32 @@ function createWindow(): void {
   // 注册 IPC 处理器
   registerIpcHandlers(mainWindow);
 
-  // 窗口关闭处理
+  // 窗口关闭处理：检查未保存标注，提示用户确认
+  let isClosing = false;
   mainWindow.on('close', (e) => {
-    // 可以在这里添加未保存提示
-    void e;
+    if (isClosing) return;
+    e.preventDefault();
+    mainWindow?.webContents.send('app:beforeClose');
+  });
+
+  ipcMain.on('app:canClose', (_event, canClose: boolean) => {
+    if (canClose) {
+      isClosing = true;
+      mainWindow?.close();
+    } else {
+      const choice = dialog.showMessageBoxSync(mainWindow!, {
+        type: 'warning',
+        buttons: ['取消', '放弃保存并关闭'],
+        defaultId: 0,
+        cancelId: 0,
+        title: '未保存的更改',
+        message: '有未保存的标注更改，是否放弃保存并关闭？',
+      });
+      if (choice === 1) {
+        isClosing = true;
+        mainWindow?.close();
+      }
+    }
   });
 
   mainWindow.on('closed', () => {
@@ -67,6 +89,7 @@ function createWindow(): void {
     ipcMain.removeAllListeners('window:maximize');
     ipcMain.removeAllListeners('window:close');
     ipcMain.removeAllListeners('window:setTitle');
+    ipcMain.removeAllListeners('app:canClose');
     console.log('[Main] IPC handlers cleaned up');
   });
 }
