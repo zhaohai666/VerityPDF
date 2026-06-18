@@ -126,6 +126,7 @@ export function useAutoSave(interval = 5000): void {
   const isDirty = useAnnotationStore((s) => s.isDirty);
   const setSaveStatus = useAnnotationStore((s) => s.setSaveStatus);
   const annotations = useAnnotationStore((s) => s.annotations);
+  const comments = useAnnotationStore((s) => s.comments);
   const filePath = usePdfStore((s) => s.filePath);
 
   const save = useCallback(async () => {
@@ -142,6 +143,7 @@ export function useAutoSave(interval = 5000): void {
         updatedAt: new Date().toISOString(),
         viewState: { currentPage: 1, zoom: 1, zoomMode: 'fitWidth' as const, rotation: 0 as const, scrollMode: 'continuous' as const },
         annotations,
+        comments,
       };
       await window.verityAPI.saveFile(JSON.stringify(project, null, 2), filePath.replace(/\.pdf$/i, '.verity'));
       setSaveStatus('saved');
@@ -149,7 +151,7 @@ export function useAutoSave(interval = 5000): void {
     } catch {
       setSaveStatus('error');
     }
-  }, [filePath, isDirty, annotations, setSaveStatus]);
+  }, [filePath, isDirty, annotations, comments, setSaveStatus]);
 
   // 防抖自动保存：标注停止变化后 interval ms 触发，每次变化重置计时器
   useEffect(() => {
@@ -171,6 +173,7 @@ export function useAutoSave(interval = 5000): void {
           createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
           viewState: { currentPage: 1, zoom: 1, zoomMode: 'fitWidth' as const, rotation: 0 as const, scrollMode: 'continuous' as const },
           annotations: state.annotations,
+          comments: state.comments,
         };
         window.verityAPI.saveFile(JSON.stringify(project, null, 2), fp.replace(/\.pdf$/i, '.verity'));
       }

@@ -40,3 +40,13 @@ export interface AsyncResult<T> {
   data?: T;
   error?: string;
 }
+
+/** 评论（附加到标注上） */
+export interface Comment {
+  id: string;
+  annotationId: string;
+  author: string;
+  text: string;
+  createdAt: string;
+  parentId?: string; // 线程回复：父评论 ID
+}

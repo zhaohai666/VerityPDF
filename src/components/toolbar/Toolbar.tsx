@@ -19,6 +19,11 @@ const ICONS: Record<string, React.ReactNode> = {
   stamp: <><circle cx="12" cy="10" r="6" fill="none" stroke="currentColor" strokeWidth="1.5"/><line x1="12" y1="16" x2="12" y2="20" stroke="currentColor" strokeWidth="2"/><line x1="8" y1="20" x2="16" y2="20" stroke="currentColor" strokeWidth="1.5"/></>,
   signature: <path d="M3 18c2-3 4 1 6-1s3-5 5-3 3 4 5 2" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>,
   eraser: <><rect x="6" y="4" width="12" height="8" rx="1" fill="none" stroke="currentColor" strokeWidth="1.5" transform="rotate(-30 12 8)"/><line x1="3" y1="20" x2="21" y2="20" stroke="currentColor" strokeWidth="1.5"/></>,
+  wavyLine: <path d="M3 12c2-4 4 4 6 0s4 4 6 0 4 4 6 0" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>,
+  redaction: <><rect x="3" y="5" width="18" height="14" fill="currentColor" opacity="0.9"/><line x1="3" y1="5" x2="21" y2="19" stroke="currentColor" strokeWidth="1"/></>,
+  measureDistance: <><line x1="4" y1="18" x2="20" y2="6" stroke="currentColor" strokeWidth="1.5"/><circle cx="4" cy="18" r="2" fill="currentColor"/><circle cx="20" cy="6" r="2" fill="currentColor"/><text x="8" y="15" fontSize="7" fill="currentColor">d</text></>,
+  measureArea: <polygon points="4,18 12,4 20,18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>,
+  measureAngle: <><line x1="4" y1="18" x2="12" y2="6" stroke="currentColor" strokeWidth="1.5"/><line x1="12" y1="6" x2="20" y2="18" stroke="currentColor" strokeWidth="1.5"/><path d="M9 10 A4 4 0 0 1 15 10" fill="none" stroke="currentColor" strokeWidth="1"/></>,
 };
 
 const PRESET_COLORS = [
@@ -104,7 +109,7 @@ export const Toolbar: React.FC = () => {
   const activeTool = useToolStore((s) => s.activeTool);
   const setActiveTool = useToolStore((s) => s.setActiveTool);
   const { zoomIn, zoomOut, currentPage, documentInfo, zoomMode, setZoomMode, effectiveZoom, isLoaded } = usePdfStore();
-  const isDrawTool = ['rect', 'ellipse', 'arrow', 'line', 'freehand', 'text', 'highlight', 'stickyNote'].includes(activeTool);
+  const isDrawTool = ['rect', 'ellipse', 'arrow', 'line', 'freehand', 'text', 'highlight', 'stickyNote', 'wavyLine', 'redaction', 'measureDistance', 'measureArea', 'measureAngle'].includes(activeTool);
   const toolbarRef = useRef<HTMLDivElement>(null);
 
   // 工具栏方向键导航（roving tabindex 模式）
@@ -187,6 +192,32 @@ export const Toolbar: React.FC = () => {
         <div className="toolbar-divider" />
 
         <div className="toolbar-group toolbar-actions">
+          <button
+            className="toolbar-btn comment-toggle-btn"
+            onClick={() => window.dispatchEvent(new CustomEvent('verity:toggleComments'))}
+            disabled={!isLoaded}
+            title="评论"
+            aria-label="打开评论面板"
+          >
+            <svg className="toolbar-icon-svg" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+              <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2v10z" fill="none" stroke="currentColor" strokeWidth="1.5"/>
+            </svg>
+            <span className="toolbar-label">评论</span>
+          </button>
+          <button
+            className="toolbar-btn summary-btn"
+            onClick={() => window.dispatchEvent(new CustomEvent('verity:exportSummary'))}
+            disabled={!isLoaded}
+            title="批注总结报告"
+            aria-label="查看批注总结报告"
+          >
+            <svg className="toolbar-icon-svg" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+              <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" fill="none" stroke="currentColor" strokeWidth="1.5"/>
+              <line x1="9" y1="12" x2="15" y2="12" stroke="currentColor" strokeWidth="1.5"/>
+              <line x1="9" y1="16" x2="13" y2="16" stroke="currentColor" strokeWidth="1.5"/>
+            </svg>
+            <span className="toolbar-label">总结</span>
+          </button>
           <button
             className="toolbar-btn export-btn"
             onClick={handleExport}

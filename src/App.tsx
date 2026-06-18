@@ -1,8 +1,9 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Toolbar } from '@/components/toolbar/Toolbar';
 import { Sidebar } from '@/components/sidebar/Sidebar';
 import { PDFViewer } from '@/components/viewer/PDFViewer';
 import { PropertyPanel } from '@/components/property/PropertyPanel';
+import { CommentPanel } from '@/components/comment/CommentPanel';
 import { StatusBar } from '@/components/common/StatusBar';
 import { Toast } from '@/components/common/Toast';
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
@@ -18,7 +19,19 @@ const App: React.FC = () => {
   // 初始化自动保存
   useAutoSave();
 
-  // PDF 卸载时同步清理标注 Store，防止新文档残留旧标注
+  // 评论面板状态
+  const selectedIds = useAnnotationStore((s) => s.selectedIds);
+  const [showComments, setShowComments] = useState(false);
+  const activeCommentId = showComments && selectedIds.length === 1 ? selectedIds[0] : null;
+
+  // 监听工具栏评论按钮事件
+  useEffect(() => {
+    const handler = () => setShowComments((prev) => !prev);
+    window.addEventListener('verity:toggleComments', handler);
+    return () => window.removeEventListener('verity:toggleComments', handler);
+  }, []);
+  
+  // PDF 卸载时同步清理标注 Store，防止新文档残留标注
   const isLoaded = usePdfStore((s) => s.isLoaded);
   useEffect(() => {
     if (!isLoaded) {
@@ -109,6 +122,9 @@ const App: React.FC = () => {
             <PDFViewer />
           </ErrorBoundary>
           <PropertyPanel />
+          {activeCommentId && (
+            <CommentPanel annotationId={activeCommentId} onClose={() => setShowComments(false)} />
+          )}
         </div>
         <StatusBar />
         <Toast />

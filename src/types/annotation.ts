@@ -11,7 +11,12 @@ export type AnnotationType =
   | 'highlight'
   | 'stickyNote'
   | 'stamp'
-  | 'signature';
+  | 'signature'
+  | 'redaction'
+  | 'wavyLine'
+  | 'measureDistance'
+  | 'measureArea'
+  | 'measureAngle';
 
 /** 标注样式 */
 export interface AnnotationStyle {
@@ -104,10 +109,46 @@ export interface StampAnnotation extends BaseAnnotation {
   imagePath: string;
 }
 
+/** 测量单位 */
+export type MeasureUnit = 'pt' | 'mm' | 'cm' | 'in';
+
 /** 签名标注 */
 export interface SignatureAnnotation extends BaseAnnotation {
   type: 'signature';
   imagePath: string;
+}
+
+/** 涂黑标注 */
+export interface RedactionAnnotation extends BaseAnnotation {
+  type: 'redaction';
+}
+
+/** 波浪线标注 */
+export interface WavyLineAnnotation extends BaseAnnotation {
+  type: 'wavyLine';
+  endPoint: Point;
+}
+
+/** 距离测量标注 */
+export interface MeasureDistanceAnnotation extends BaseAnnotation {
+  type: 'measureDistance';
+  endPoint: Point;
+  unit: MeasureUnit;
+}
+
+/** 面积测量标注 */
+export interface MeasureAreaAnnotation extends BaseAnnotation {
+  type: 'measureArea';
+  points: Point[];
+  unit: MeasureUnit;
+}
+
+/** 角度测量标注 */
+export interface MeasureAngleAnnotation extends BaseAnnotation {
+  type: 'measureAngle';
+  startPoint: Point;
+  midPoint: Point;
+  endPoint: Point;
 }
 
 /** 标注联合类型 */
@@ -121,7 +162,12 @@ export type Annotation =
   | HighlightAnnotation
   | StickyNoteAnnotation
   | StampAnnotation
-  | SignatureAnnotation;
+  | SignatureAnnotation
+  | RedactionAnnotation
+  | WavyLineAnnotation
+  | MeasureDistanceAnnotation
+  | MeasureAreaAnnotation
+  | MeasureAngleAnnotation;
 
 /** 标注操作（用于撤销/重做） */
 export interface AnnotationAction {

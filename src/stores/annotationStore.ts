@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { Annotation } from '@/types';
+import type { Comment } from '@/types/common';
 
 type Operation =
   | { type: 'add'; annotation: Annotation }
@@ -14,6 +15,7 @@ interface AnnotationState {
   lastSavedTime: number | null;
   undoStack: Operation[];
   redoStack: Operation[];
+  comments: Comment[];
 
   setAnnotations: (annotations: Annotation[]) => void;
   addAnnotation: (annotation: Annotation) => void;
@@ -28,6 +30,10 @@ interface AnnotationState {
   undo: () => void;
   redo: () => void;
   reset: () => void;
+  addComment: (annotationId: string, author: string, text: string, parentId?: string) => void;
+  removeComment: (commentId: string) => void;
+  getCommentsByAnnotation: (annotationId: string) => Comment[];
+  setComments: (comments: Comment[]) => void;
 }
 
 export const useAnnotationStore = create<AnnotationState>((set, get) => ({
@@ -38,6 +44,7 @@ export const useAnnotationStore = create<AnnotationState>((set, get) => ({
   lastSavedTime: null,
   undoStack: [],
   redoStack: [],
+  comments: [],
 
   setAnnotations: (annotations) => {
     set({ annotations, isDirty: false, saveStatus: 'saved', lastSavedTime: Date.now(), undoStack: [], redoStack: [] });
@@ -127,6 +134,7 @@ export const useAnnotationStore = create<AnnotationState>((set, get) => ({
       lastSavedTime: null,
       undoStack: [],
       redoStack: [],
+      comments: [],
     }),
 
   undo: () => {
@@ -201,6 +209,38 @@ export const useAnnotationStore = create<AnnotationState>((set, get) => ({
         saveStatus: 'unsaved' as const,
       };
     });
+  },
+
+  addComment: (annotationId, author, text, parentId) => {
+    const comment: Comment = {
+      id: `cmt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      annotationId,
+      author,
+      text,
+      createdAt: new Date().toISOString(),
+      parentId,
+    };
+    set((state) => ({
+      comments: [...state.comments, comment],
+      isDirty: true,
+      saveStatus: 'unsaved',
+    }));
+  },
+
+  removeComment: (commentId) => {
+    set((state) => ({
+      comments: state.comments.filter((c) => c.id !== commentId && c.parentId !== commentId),
+      isDirty: true,
+      saveStatus: 'unsaved',
+    }));
+  },
+
+  getCommentsByAnnotation: (annotationId) => {
+    return get().comments.filter((c) => c.annotationId === annotationId);
+  },
+
+  setComments: (comments) => {
+    set({ comments });
   },
 }));
 

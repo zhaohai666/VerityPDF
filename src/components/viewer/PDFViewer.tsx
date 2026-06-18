@@ -6,6 +6,7 @@ import { useUIStore } from '@/stores/uiStore';
 import { PDFService } from '@/services/pdf/PDFService';
 import { PageRenderer } from './PageRenderer';
 import { ExportDialog } from '@/components/export/ExportDialog';
+import { SummaryDialog } from '@/components/export/SummaryDialog';
 
 const pdfService = new PDFService();
 
@@ -36,6 +37,7 @@ export const PDFViewer: React.FC = () => {
   // 加载阶段跟踪：提供有意义的进度反馈
   const [loadingPhase, setLoadingPhase] = useState<'idle' | 'reading' | 'parsing' | 'preparing' | 'done'>('idle');
   const [showExportDialog, setShowExportDialog] = useState(false);
+  const [showSummaryDialog, setShowSummaryDialog] = useState(false);
 
   useEffect(() => {
     const el = scrollContainerRef.current;
@@ -135,6 +137,10 @@ export const PDFViewer: React.FC = () => {
           if (project.annotations && Array.isArray(project.annotations)) {
             useAnnotationStore.getState().setAnnotations(project.annotations);
             console.log('[Viewer] Loaded', project.annotations.length, 'annotations from', verityPath.split(/[\\/]/).pop());
+          }
+          if (project.comments && Array.isArray(project.comments)) {
+            useAnnotationStore.getState().setComments(project.comments);
+            console.log('[Viewer] Loaded', project.comments.length, 'comments');
           }
         }
       } catch {
@@ -280,11 +286,14 @@ export const PDFViewer: React.FC = () => {
       loadFileFromPath(fp);
     });
     const handleExportEvent = () => handleExportPDF();
+    const handleSummaryExport = () => setShowSummaryDialog(true);
     window.addEventListener('verity:export', handleExportEvent);
+    window.addEventListener('verity:exportSummary', handleSummaryExport);
     return () => {
       unsubMenu();
       unsubFile();
       window.removeEventListener('verity:export', handleExportEvent);
+      window.removeEventListener('verity:exportSummary', handleSummaryExport);
     };
   }, [handleOpenFile, loadFileFromPath, handleExportPDF]);
 
@@ -437,6 +446,7 @@ export const PDFViewer: React.FC = () => {
         </div>
       </div>
       <ExportDialog open={showExportDialog} onClose={() => setShowExportDialog(false)} />
+      <SummaryDialog open={showSummaryDialog} onClose={() => setShowSummaryDialog(false)} />
     </>
   );
 };

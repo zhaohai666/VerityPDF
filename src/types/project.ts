@@ -1,5 +1,6 @@
 /** .verity 项目文件格式 */
 import type { Annotation } from './annotation';
+import type { Comment } from './common';
 import type { ViewState, PDFDocumentInfo } from './pdf';
 
 export interface VerityProjectFile {
@@ -16,6 +17,7 @@ export interface VerityProjectFile {
   updatedAt: string;
   viewState: ViewState;
   annotations: Annotation[];
+  comments?: Comment[];
 }
 
 /** 创建空的 .verity 项目结构 */
