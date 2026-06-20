@@ -18,6 +18,9 @@ interface PDFState {
   rotation: Rotation;
   scrollMode: ScrollMode;
 
+  // 低内存模式（页数 > 500 或文件 > 100MB 时自动启用）
+  lowMemoryMode: boolean;
+
   // 大纲
   outline: PDFOutlineItem[];
 
@@ -35,6 +38,7 @@ interface PDFState {
   setRotation: (rotation: Rotation) => void;
   setScrollMode: (mode: ScrollMode) => void;
   setOutline: (outline: PDFOutlineItem[]) => void;
+  setLowMemoryMode: (enabled: boolean) => void;
   zoomIn: () => void;
   zoomOut: () => void;
   nextPage: () => void;
@@ -56,6 +60,7 @@ export const usePdfStore = create<PDFState>((set, get) => ({
   zoomMode: 'fitWidth',
   rotation: 0,
   scrollMode: 'continuous',
+  lowMemoryMode: false,
   outline: [],
 
   setFilePath: (path) => set({ filePath: path }),
@@ -84,6 +89,7 @@ export const usePdfStore = create<PDFState>((set, get) => ({
   },
   setScrollMode: (mode) => set({ scrollMode: mode }),
   setOutline: (outline) => set({ outline }),
+  setLowMemoryMode: (enabled) => set({ lowMemoryMode: enabled }),
 
   zoomIn: () => {
     const { zoom } = get();
@@ -127,6 +133,7 @@ export const usePdfStore = create<PDFState>((set, get) => ({
       zoomMode: 'fitWidth',
       rotation: 0,
       scrollMode: 'continuous',
+      lowMemoryMode: false,
       outline: [],
     }),
 }));

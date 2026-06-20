@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { promisify } from 'util';
+import { app } from 'electron';
 
 const execFileAsync = promisify(execFile);
 
@@ -59,21 +60,32 @@ export interface ConvertOptions {
  */
 export class LibreOfficeService {
   private sofficePath: string;
+  private detectedSource: 'portable' | 'system' | 'not-found' = 'not-found';
 
   constructor() {
     this.sofficePath = this.findSoffice();
   }
 
+  /** 获取检测到的 LibreOffice 路径与来源 */
+  getDetectedPath(): { path: string; source: 'portable' | 'system' | 'not-found' } {
+    return { path: this.sofficePath, source: this.detectedSource };
+  }
+
   /** 检测 LibreOffice 是否可用 */
-  async isAvailable(): Promise<{ available: boolean; version?: string; path: string }> {
+  async isAvailable(): Promise<{ available: boolean; version?: string; path: string; source?: string }> {
     try {
       const { stdout } = await execFileAsync(this.sofficePath, ['--version'], {
         timeout: 10000,
         windowsHide: true,
       });
-      return { available: true, version: stdout.trim(), path: this.sofficePath };
+      return {
+        available: true,
+        version: stdout.trim(),
+        path: this.sofficePath,
+        source: this.detectedSource,
+      };
     } catch {
-      return { available: false, path: this.sofficePath };
+      return { available: false, path: this.sofficePath, source: this.detectedSource };
     }
   }
 
@@ -212,8 +224,44 @@ export class LibreOfficeService {
     }
   }
 
-  /** 查找 soffice 可执行文件 */
+  /** 查找 soffice 可执行文件（优先便携版，回退系统安装） */
   private findSoffice(): string {
+    // 便携版候选路径（优先级最高）
+    const portablePaths: string[] = [];
+
+    if (process.platform === 'win32') {
+      // vendor/libreoffice/program/soffice.exe
+      const appPath = app.getAppPath();
+      portablePaths.push(path.join(appPath, 'vendor', 'libreoffice', 'program', 'soffice.exe'));
+      // resources/LibreOffice/program/soffice.exe (打包后)
+      if (app.isPackaged) {
+        portablePaths.push(path.join(process.resourcesPath || '', 'LibreOffice', 'program', 'soffice.exe'));
+      }
+      // 开发环境: 项目根/resources/LibreOffice/
+      portablePaths.push(path.join(appPath, 'resources', 'LibreOffice', 'program', 'soffice.exe'));
+    } else if (process.platform === 'darwin') {
+      const appPath = app.getAppPath();
+      portablePaths.push(path.join(appPath, 'vendor', 'LibreOffice.app', 'Contents', 'MacOS', 'soffice'));
+      if (app.isPackaged) {
+        portablePaths.push(path.join(process.resourcesPath || '', 'LibreOffice.app', 'Contents', 'MacOS', 'soffice'));
+      }
+    } else {
+      // Linux
+      const appPath = app.getAppPath();
+      portablePaths.push(path.join(appPath, 'vendor', 'libreoffice', 'program', 'soffice'));
+      if (app.isPackaged) {
+        portablePaths.push(path.join(process.resourcesPath || '', 'libreoffice', 'program', 'soffice'));
+      }
+    }
+
+    for (const p of portablePaths) {
+      if (fs.existsSync(p)) {
+        this.detectedSource = 'portable';
+        return p;
+      }
+    }
+
+    // 系统安装路径
     if (process.platform === 'win32') {
       const candidates = [
         'C:\\Program Files\\LibreOffice\\program\\soffice.exe',
@@ -224,12 +272,24 @@ export class LibreOfficeService {
       const pf86 = process.env['ProgramFiles(x86)'];
       if (pf) candidates.push(path.join(pf, 'LibreOffice', 'program', 'soffice.exe'));
       if (pf86) candidates.push(path.join(pf86, 'LibreOffice', 'program', 'soffice.exe'));
-      for (const c of candidates) { if (fs.existsSync(c)) return c; }
+      for (const c of candidates) {
+        if (fs.existsSync(c)) {
+          this.detectedSource = 'system';
+          return c;
+        }
+      }
+      this.detectedSource = 'not-found';
       return 'soffice.exe';
     } else if (process.platform === 'darwin') {
       const mac = '/Applications/LibreOffice.app/Contents/MacOS/soffice';
-      return fs.existsSync(mac) ? mac : 'soffice';
+      if (fs.existsSync(mac)) {
+        this.detectedSource = 'system';
+        return mac;
+      }
+      this.detectedSource = 'not-found';
+      return 'soffice';
     }
+    this.detectedSource = 'not-found';
     return 'soffice';
   }
 

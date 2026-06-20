@@ -44,6 +44,12 @@ const api: VerityAPI = {
     return () => ipcRenderer.removeListener('app:beforeClose', handler);
   },
 
+  onRendererRecovered: (callback: (info: { crashReason: string; reloadAttempt: number }) => void) => {
+    const handler = (_: Electron.IpcRendererEvent, info: { crashReason: string; reloadAttempt: number }) => callback(info);
+    ipcRenderer.on('app:rendererRecovered', handler);
+    return () => ipcRenderer.removeListener('app:rendererRecovered', handler);
+  },
+
   checkForUpdates: async () => ({ hasUpdate: false }),
 
   getTestFile: () => wrapInvoke<string | null>('app:getTestFile', {}),
@@ -63,8 +69,14 @@ const api: VerityAPI = {
   applyEncryption: (pdfData, options) =>
     wrapInvoke<ArrayBuffer>('encrypt:apply', { pdfData, options }),
 
-  removeEncryption: (pdfData) =>
-    wrapInvoke<ArrayBuffer>('encrypt:remove', { pdfData }),
+  removeEncryption: (pdfData, password) =>
+    wrapInvoke<ArrayBuffer>('encrypt:remove', { pdfData, password }),
+
+  decryptWithPassword: (pdfData, password) =>
+    wrapInvoke<ArrayBuffer>('encrypt:decrypt', { pdfData, password }),
+
+  checkQpdf: () =>
+    wrapInvoke<{ available: boolean; version?: string }>('encrypt:checkQpdf', {}),
 
   detectFormFields: (pdfData) =>
     wrapInvoke('form:detect', { pdfData }),
@@ -98,6 +110,46 @@ const api: VerityAPI = {
 
   selectConvertFiles: (extensions) =>
     wrapInvoke<string[]>('convert:selectFiles', { extensions }),
+
+  repairPDF: (filePath) =>
+    wrapInvoke<ArrayBuffer>('pdf:repair', { filePath }),
+
+  // 批量页面操作
+  batchRotate: (pdfData, options) =>
+    wrapInvoke<ArrayBuffer>('batch:pageOperate', { pdfData, options }),
+
+  detectBlankPages: (filePath, threshold) =>
+    wrapInvoke<{ blankIndices: number[]; totalChecked: number }>('batch:detectBlank', { filePath, threshold }),
+
+  batchCrop: (pdfData, options) =>
+    wrapInvoke<ArrayBuffer>('batch:crop', { pdfData, options }),
+
+  // 水印/页码/页眉页脚
+  addWatermark: (pdfData, options) =>
+    wrapInvoke<ArrayBuffer>('batch:addWatermark', { pdfData, options }),
+
+  addPageNumbers: (pdfData, options) =>
+    wrapInvoke<ArrayBuffer>('batch:addPageNumbers', { pdfData, options }),
+
+  addHeaderFooter: (pdfData, options) =>
+    wrapInvoke<ArrayBuffer>('batch:addHeaderFooter', { pdfData, options }),
+
+  // 页面基础处理
+  multiMergePdfs: (filePaths) =>
+    wrapInvoke<ArrayBuffer>('pdf:multiMerge', { filePaths }),
+
+  splitPdf: (pdfData, ranges, outputDir) =>
+    wrapInvoke<string[]>('pdf:split', { pdfData, ranges, outputDir }),
+
+  selectPdfFiles: () =>
+    wrapInvoke<string[]>('pdf:selectFiles', {}),
+
+  // 批量操作进度监听
+  onBatchProgress: (callback) => {
+    const handler = (_: Electron.IpcRendererEvent, info: { progress: number; message: string }) => callback(info);
+    ipcRenderer.on('batch:progress', handler);
+    return () => ipcRenderer.removeListener('batch:progress', handler);
+  },
 };
 
 contextBridge.exposeInMainWorld('verityAPI', api);

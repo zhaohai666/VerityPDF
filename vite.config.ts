@@ -48,5 +48,17 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
+    sourcemap: false,
+    cssCodeSplit: true,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom'],
+          'vendor-pdfjs': ['pdfjs-dist'],
+          'vendor-konva': ['konva', 'react-konva'],
+          'vendor-tesseract': ['tesseract.js'],
+        },
+      },
+    },
   },
 });

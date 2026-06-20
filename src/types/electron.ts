@@ -10,6 +10,7 @@ export const IPC_CHANNELS = {
   // PDF 操作
   PDF_LOAD: 'pdf:load',
   PDF_GET_INFO: 'pdf:getInfo',
+  PDF_REPAIR: 'pdf:repair',
 
   // 标注操作
   ANNOTATION_SAVE: 'annotation:save',
@@ -26,6 +27,8 @@ export const IPC_CHANNELS = {
   // 加密
   ENCRYPT_APPLY: 'encrypt:apply',
   ENCRYPT_REMOVE: 'encrypt:remove',
+  ENCRYPT_DECRYPT: 'encrypt:decrypt',
+  ENCRYPT_CHECK_QPDF: 'encrypt:checkQpdf',
 
   // 表单
   FORM_DETECT: 'form:detect',
@@ -44,6 +47,20 @@ export const IPC_CHANNELS = {
   CONVERT_TO_PDF: 'convert:toPdf',
   CONVERT_SELECT_FILES: 'convert:selectFiles',
 
+  // 批量页面操作
+  BATCH_PAGE_OPERATE: 'batch:pageOperate',
+  BATCH_DETECT_BLANK: 'batch:detectBlank',
+  BATCH_CROP: 'batch:crop',
+  BATCH_ADD_WATERMARK: 'batch:addWatermark',
+  BATCH_ADD_PAGE_NUMBERS: 'batch:addPageNumbers',
+  BATCH_ADD_HEADER_FOOTER: 'batch:addHeaderFooter',
+  BATCH_PROGRESS: 'batch:progress',
+
+  // 页面基础处理
+  PDF_MULTI_MERGE: 'pdf:multiMerge',
+  PDF_SPLIT: 'pdf:split',
+  PDF_SELECT_FILES: 'pdf:selectFiles',
+
   // 应用
   APP_VERSION: 'app:getVersion',
   APP_PLATFORM: 'app:getPlatform',
@@ -61,6 +78,7 @@ export const IPC_CHANNELS = {
   MENU_ACTION: 'menu:action',
   FILE_OPENED: 'file:opened',
   BEFORE_CLOSE: 'app:beforeClose',
+  RENDERER_RECOVERED: 'app:rendererRecovered',
 } as const;
 
 /** IPC 通道类型 */
@@ -104,6 +122,7 @@ export interface VerityAPI {
   onMenuAction(callback: (action: string) => void): () => void;
   onFileOpen(callback: (filePath: string) => void): () => void;
   onBeforeClose(callback: () => Promise<boolean>): () => void;
+  onRendererRecovered(callback: (info: { crashReason: string; reloadAttempt: number }) => void): () => void;
 
   // 更新
   checkForUpdates(): Promise<UpdateInfo>;
@@ -123,7 +142,9 @@ export interface VerityAPI {
 
   // 加密
   applyEncryption(pdfData: string, options: EncryptionOptions): Promise<ArrayBuffer>;
-  removeEncryption(pdfData: string): Promise<ArrayBuffer>;
+  removeEncryption(pdfData: string, password?: string): Promise<ArrayBuffer>;
+  decryptWithPassword(pdfData: string, password: string): Promise<ArrayBuffer>;
+  checkQpdf(): Promise<{ available: boolean; version?: string }>;
 
   // 表单
   detectFormFields(pdfData: string): Promise<FormFieldInfo[]>;
@@ -141,6 +162,27 @@ export interface VerityAPI {
   batchConvert(inputPaths: string[], options: ConvertOptions): Promise<BatchConvertResult>;
   convertToPDF(inputPath: string, outputDir: string): Promise<ConvertResult>;
   selectConvertFiles(extensions: string[]): Promise<string[]>;
+
+  // PDF 修复
+  repairPDF(filePath: string): Promise<ArrayBuffer>;
+
+  // 批量页面操作
+  batchRotate(pdfData: string, options: BatchRotateOptions): Promise<ArrayBuffer>;
+  detectBlankPages(filePath: string, threshold: number): Promise<{ blankIndices: number[]; totalChecked: number }>;
+  batchCrop(pdfData: string, options: BatchCropOptions): Promise<ArrayBuffer>;
+
+  // 水印/页码/页眉页脚
+  addWatermark(pdfData: string, options: WatermarkOptions): Promise<ArrayBuffer>;
+  addPageNumbers(pdfData: string, options: PageNumberOptions): Promise<ArrayBuffer>;
+  addHeaderFooter(pdfData: string, options: HeaderFooterOptions): Promise<ArrayBuffer>;
+
+  // 批量操作进度监听
+  onBatchProgress(callback: (info: { progress: number; message: string }) => void): () => void;
+
+  // 页面基础处理
+  multiMergePdfs(filePaths: string[]): Promise<ArrayBuffer>;
+  splitPdf(pdfData: string, ranges: string[], outputDir: string): Promise<string[]>;
+  selectPdfFiles(): Promise<string[]>;
 }
 
 /** 页面操作类型 */
@@ -208,4 +250,51 @@ export interface BatchConvertResult {
   totalFiles: number;
   successCount: number;
   failCount: number;
+}
+
+/** 批量旋转选项 */
+export interface BatchRotateOptions {
+  pageIndices: number[];
+  angle: 90 | 180 | 270;
+}
+
+/** 批量裁剪选项 */
+export interface BatchCropOptions {
+  pageIndices: number[];
+  margin: { top: number; right: number; bottom: number; left: number };
+}
+
+/** 水印选项 */
+export interface WatermarkOptions {
+  type: 'text' | 'image';
+  content: string;
+  opacity: number;
+  rotation: number;
+  fontSize?: number;
+  fontFamily?: string;
+  color?: string;
+  position?: 'center' | 'tile';
+  tileSpacing?: number;
+  pageIndices?: number[];
+}
+
+/** 页码选项 */
+export interface PageNumberOptions {
+  position: 'bottom-center' | 'bottom-right' | 'bottom-left' | 'top-center' | 'top-right' | 'top-left';
+  style: 'arabic' | 'roman' | 'dash' | 'of-total';
+  fontSize: number;
+  fontFamily?: string;
+  color?: string;
+  startIndex: number;
+  pageIndices?: number[];
+}
+
+/** 页眉页脚选项 */
+export interface HeaderFooterOptions {
+  headerText?: string;
+  footerText?: string;
+  fontSize: number;
+  fontFamily?: string;
+  color?: string;
+  pageIndices?: number[];
 }

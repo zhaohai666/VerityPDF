@@ -153,6 +153,18 @@ export class PageCacheManager {
     return this.cache.size;
   }
 
+  /**
+   * 动态调整最大缓存条目数（低内存模式降级用）
+   */
+  setMaxEntries(maxEntries: number): void {
+    this.maxEntries = maxEntries;
+    // 如果当前缓存超出新上限，逐步淘汰
+    while (this.cache.size > this.maxEntries) {
+      this.evictLRU();
+    }
+    logger.info(`Max entries updated to ${maxEntries}`);
+  }
+
   getStats(): { size: number; memory: number; hitRate: string } {
     return {
       size: this.cache.size,

@@ -48,6 +48,40 @@ function createWindow(): void {
     console.log(`${prefix} ${message}`);
   });
 
+  // 渲染进程崩溃隔离：自动重载并通知用户
+  let crashReloadCount = 0;
+  const MAX_RELOAD_ATTEMPTS = 3;
+  mainWindow.webContents.on('render-process-gone', (_event, details) => {
+    console.error('[Main] Render process gone:', details.reason, 'exitCode:', details.exitCode);
+    if (crashReloadCount < MAX_RELOAD_ATTEMPTS) {
+      crashReloadCount++;
+      console.log(`[Main] Auto-reloading renderer (attempt ${crashReloadCount}/${MAX_RELOAD_ATTEMPTS})`);
+      setTimeout(() => {
+        mainWindow?.webContents.reload();
+        // 重载后通知用户崩溃已恢复
+        setTimeout(() => {
+          mainWindow?.webContents.send('app:rendererRecovered', {
+            crashReason: details.reason,
+            reloadAttempt: crashReloadCount,
+          });
+        }, 1000);
+      }, 500);
+    } else {
+      console.error('[Main] Max reload attempts reached, showing error dialog');
+      dialog.showMessageBox(mainWindow!, {
+        type: 'error',
+        title: '渲染崩溃',
+        message: '应用渲染进程多次崩溃，无法自动恢复。请重启应用。',
+        buttons: ['重启应用'],
+      }).then(({ response }) => {
+        if (response === 0) {
+          app.relaunch();
+          app.exit(0);
+        }
+      });
+    }
+  });
+
   // 注册 IPC 处理器
   registerIpcHandlers(mainWindow);
 

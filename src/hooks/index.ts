@@ -173,6 +173,30 @@ export function useAutoSave(interval = 5000): void {
     return () => clearTimeout(timer);
   }, [isDirty, interval, save]);
 
+  // 草稿定时保存：每 30 秒将当前进度写入 .verity.draft
+  useEffect(() => {
+    const draftTimer = setInterval(() => {
+      const fp = usePdfStore.getState().filePath;
+      if (!fp) return;
+      const state = useAnnotationStore.getState();
+      // 只有有标注数据时才保存草稿
+      if (state.annotations.length === 0 && state.comments.length === 0) return;
+      const draft = {
+        version: '1.0',
+        format: 'verity-draft' as const,
+        pdfPath: fp,
+        savedAt: new Date().toISOString(),
+        annotations: state.annotations,
+        comments: state.comments,
+      };
+      const draftPath = fp.replace(/\.pdf$/i, '.verity.draft');
+      window.verityAPI.saveFile(JSON.stringify(draft, null, 2), draftPath).catch(() => {
+        // 草稿保存失败时静默处理
+      });
+    }, 30_000);
+    return () => clearInterval(draftTimer);
+  }, []);
+
   // 页面卸载 / 关闭时强制保存，防止数据丢失
   useEffect(() => {
     const handleBeforeUnload = () => {

@@ -10,7 +10,9 @@ const ocrService = new OCRService();
 const LANG_OPTIONS = [
   { value: 'eng', label: '英文' },
   { value: 'chi_sim', label: '简体中文' },
-  { value: 'eng+chi_sim', label: '英文 + 中文' },
+  { value: 'chi_tra', label: '繁体中文' },
+  { value: 'eng+chi_sim', label: '英文 + 简体中文' },
+  { value: 'eng+chi_tra', label: '英文 + 繁体中文' },
   { value: 'jpn', label: '日文' },
   { value: 'kor', label: '韩文' },
 ];
@@ -30,8 +32,9 @@ const STATUS_LABELS: Record<string, string> = {
 export const OCRPanel: React.FC = () => {
   const {
     isRecognizing, progress, result, selectedPage, language, panelVisible,
+    regionMode, selectedRegion,
     setIsRecognizing, setProgress, setResult, setSelectedPage,
-    setLanguage, setPanelVisible,
+    setLanguage, setPanelVisible, setRegionMode, setSelectedRegion,
   } = useOCRStore();
 
   const currentPage = usePdfStore((s) => s.currentPage);
@@ -53,19 +56,37 @@ export const OCRPanel: React.FC = () => {
 
     try {
       await ocrService.initWorker(language, (p) => setProgress(p));
-      const ocrResult = await ocrService.recognizePage(
-        pdfService,
-        selectedPage || currentPage,
-        2.0,
-        (p) => setProgress(p)
-      );
-      setResult(ocrResult);
+
+      if (regionMode && selectedRegion) {
+        // 选区识别模式
+        const canvas = document.createElement('canvas');
+        await pdfService.renderPage(selectedPage || currentPage, canvas, 2.0);
+        const scale = 2.0;
+        const region = {
+          x: selectedRegion.x * scale,
+          y: selectedRegion.y * scale,
+          width: selectedRegion.width * scale,
+          height: selectedRegion.height * scale,
+        };
+        const ocrResult = await ocrService.recognizeRegion(canvas, region, (p) => setProgress(p));
+        canvas.remove();
+        setResult(ocrResult);
+      } else {
+        // 整页识别
+        const ocrResult = await ocrService.recognizePage(
+          pdfService,
+          selectedPage || currentPage,
+          2.0,
+          (p) => setProgress(p)
+        );
+        setResult(ocrResult);
+      }
     } catch (err) {
       showToast('OCR 识别失败: ' + (err instanceof Error ? err.message : '未知错误'), 'error');
     } finally {
       setIsRecognizing(false);
     }
-  }, [selectedPage, currentPage, language]);
+  }, [selectedPage, currentPage, language, regionMode, selectedRegion]);
 
   // 复制结果
   const handleCopy = useCallback(async () => {
@@ -89,6 +110,22 @@ export const OCRPanel: React.FC = () => {
       ocrService.destroy().catch(() => {});
     };
   }, []);
+
+  // 选区绘制交互（在 PDF 页面上拖拽绘制矩形）
+  useEffect(() => {
+    if (!regionMode || !panelVisible) return;
+    const handleRegionSelect = (e: CustomEvent) => {
+      const detail = e.detail as { x: number; y: number; width: number; height: number };
+      if (detail && detail.width > 5 && detail.height > 5) {
+        setSelectedRegion(detail);
+        showToast('已选定识别区域，点击“开始识别”', 'info');
+      }
+    };
+    window.addEventListener('verity:ocr-region-selected', handleRegionSelect as EventListener);
+    return () => {
+      window.removeEventListener('verity:ocr-region-selected', handleRegionSelect as EventListener);
+    };
+  }, [regionMode, panelVisible, setSelectedRegion, showToast]);
 
   if (!panelVisible) return null;
 
@@ -115,6 +152,23 @@ export const OCRPanel: React.FC = () => {
             </select>
           </div>
 
+          {/* 识别模式切换 */}
+          <div className="ocr-control-group">
+            <label>识别模式</label>
+            <div className="ocr-mode-btns">
+              <button
+                className={`btn-small ${!regionMode ? 'active' : ''}`}
+                onClick={() => setRegionMode(false)}
+                disabled={isRecognizing}
+              >整页识别</button>
+              <button
+                className={`btn-small ${regionMode ? 'active' : ''}`}
+                onClick={() => setRegionMode(true)}
+                disabled={isRecognizing}
+              >选区识别</button>
+            </div>
+          </div>
+
           {/* 页码选择 */}
           <div className="ocr-control-group">
             <label>页码</label>
@@ -131,9 +185,9 @@ export const OCRPanel: React.FC = () => {
           <button
             className="btn-primary"
             onClick={handleRecognizePage}
-            disabled={isRecognizing || !isLoaded}
+            disabled={isRecognizing || !isLoaded || (regionMode && !selectedRegion)}
           >
-            {isRecognizing ? '识别中...' : '开始识别'}
+            {isRecognizing ? '识别中...' : regionMode ? '识别选区' : '开始识别'}
           </button>
 
           {result && (
@@ -141,6 +195,16 @@ export const OCRPanel: React.FC = () => {
               复制结果
             </button>
           )}
+
+          {/* 生成可搜索 PDF 入口 */}
+          <div className="ocr-divider" />
+          <button
+            className="btn-secondary ocr-searchable-btn"
+            onClick={() => window.dispatchEvent(new CustomEvent('verity:ocr-searchable'))}
+            disabled={!isLoaded || isRecognizing}
+          >
+            生成可搜索 PDF
+          </button>
         </div>
 
         {/* 进度 */}
@@ -184,7 +248,7 @@ export const OCRPanel: React.FC = () => {
         {/* 空状态 */}
         {!result && !isRecognizing && (
           <div className="ocr-empty">
-            <p>选择页码和语言后点击"开始识别"</p>
+            <p>{regionMode ? '点击“选区识别”后在页面上拖拽绘制识别区域' : '选择页码和语言后点击“开始识别”'}</p>
             <p className="hint">首次使用需下载语言数据（约 10MB）</p>
           </div>
         )}

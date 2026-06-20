@@ -9,6 +9,7 @@ interface OCRState {
   selectedRegion: { x: number; y: number; width: number; height: number } | null;
   language: string;
   panelVisible: boolean;
+  regionMode: boolean;
 
   setIsRecognizing: (v: boolean) => void;
   setProgress: (p: { status: string; progress: number }) => void;
@@ -17,6 +18,7 @@ interface OCRState {
   setSelectedRegion: (r: { x: number; y: number; width: number; height: number } | null) => void;
   setLanguage: (l: string) => void;
   setPanelVisible: (v: boolean) => void;
+  setRegionMode: (v: boolean) => void;
   reset: () => void;
 }
 
@@ -28,6 +30,7 @@ export const useOCRStore = create<OCRState>((set) => ({
   selectedRegion: null,
   language: 'eng+chi_sim',
   panelVisible: false,
+  regionMode: false,
 
   setIsRecognizing: (v) => set({ isRecognizing: v }),
   setProgress: (p) => set({ progress: p }),
@@ -36,10 +39,12 @@ export const useOCRStore = create<OCRState>((set) => ({
   setSelectedRegion: (r) => set({ selectedRegion: r }),
   setLanguage: (l) => set({ language: l }),
   setPanelVisible: (v) => set({ panelVisible: v }),
+  setRegionMode: (v) => set({ regionMode: v, selectedRegion: v ? null : undefined as unknown as null }),
   reset: () => set({
     isRecognizing: false,
     progress: { status: '', progress: 0 },
     result: null,
     selectedRegion: null,
+    regionMode: false,
   }),
 }));

@@ -1,0 +1,284 @@
+{
+  "version": "1.0",
+  "description": "VerityPDF 兼容性测试样本清单",
+  "lastUpdated": "2024-01-01",
+  "samples": [
+    {
+      "id": "basic-text",
+      "name": "基础文本 PDF",
+      "file": "basic-text.pdf",
+      "category": "basic",
+      "description": "纯文本内容，无复杂排版",
+      "expectedResults": {
+        "render": true,
+        "textExtraction": true,
+        "search": true,
+        "annotations": true
+      }
+    },
+    {
+      "id": "cjk-content",
+      "name": "中日韩文字 PDF",
+      "file": "cjk-content.pdf",
+      "category": "font",
+      "description": "包含中文、日文、韩文字符的文档",
+      "expectedResults": {
+        "render": true,
+        "textExtraction": true,
+        "fontFallback": true,
+        "search": true
+      }
+    },
+    {
+      "id": "embedded-fonts",
+      "name": "嵌入字体 PDF",
+      "file": "embedded-fonts.pdf",
+      "category": "font",
+      "description": "使用嵌入字体的文档（Type1, TrueType, OpenType）",
+      "expectedResults": {
+        "render": true,
+        "textExtraction": true,
+        "fontFallback": false
+      }
+    },
+    {
+      "id": "scanned-image",
+      "name": "扫描图片 PDF",
+      "file": "scanned-image.pdf",
+      "category": "image",
+      "description": "纯图片扫描生成的 PDF，无文本层",
+      "expectedResults": {
+        "render": true,
+        "textExtraction": false,
+        "ocr": true
+      }
+    },
+    {
+      "id": "high-res-images",
+      "name": "高分辨率图片 PDF",
+      "file": "high-res-images.pdf",
+      "category": "image",
+      "description": "包含大量高分辨率图片的文档",
+      "expectedResults": {
+        "render": true,
+        "performance": "moderate",
+        "memoryUsage": "high"
+      }
+    },
+    {
+      "id": "large-document-1000",
+      "name": "大文档（1000+ 页）",
+      "file": "large-document-1000.pdf",
+      "category": "performance",
+      "description": "超过 1000 页的大型文档",
+      "expectedResults": {
+        "render": true,
+        "lowMemoryMode": true,
+        "scrollPerformance": "smooth",
+        "search": true
+      }
+    },
+    {
+      "id": "large-document-5000",
+      "name": "超大文档（5000+ 页）",
+      "file": "large-document-5000.pdf",
+      "category": "performance",
+      "description": "超过 5000 页的超大型文档",
+      "expectedResults": {
+        "render": true,
+        "lowMemoryMode": true,
+        "cacheEfficiency": true
+      }
+    },
+    {
+      "id": "encrypted-user-password",
+      "name": "用户密码加密 PDF",
+      "file": "encrypted-user-password.pdf",
+      "category": "encryption",
+      "description": "使用用户密码加密的文档",
+      "expectedResults": {
+        "passwordPrompt": true,
+        "decryptAndRender": true,
+        "textExtraction": true
+      }
+    },
+    {
+      "id": "encrypted-owner-password",
+      "name": "所有者密码 PDF",
+      "file": "encrypted-owner-password.pdf",
+      "category": "encryption",
+      "description": "使用所有者密码限制编辑的文档",
+      "expectedResults": {
+        "render": true,
+        "annotationRestricted": true
+      }
+    },
+    {
+      "id": "pdfa-archive",
+      "name": "PDF/A 归档文档",
+      "file": "pdfa-archive.pdf",
+      "category": "format",
+      "description": "PDF/A-1a 或 PDF/A-2b 归档格式",
+      "expectedResults": {
+        "render": true,
+        "pdfaDetection": true,
+        "readOnlyHint": true
+      }
+    },
+    {
+      "id": "pdf-x-print",
+      "name": "PDF/X 印刷文档",
+      "file": "pdf-x-print.pdf",
+      "category": "format",
+      "description": "PDF/X-1a 或 PDF/X-4 印刷格式",
+      "expectedResults": {
+        "render": true,
+        "colorRendering": "accurate"
+      }
+    },
+    {
+      "id": "interactive-forms",
+      "name": "交互式表单 PDF",
+      "file": "interactive-forms.pdf",
+      "category": "forms",
+      "description": "包含文本框、复选框、下拉列表等表单字段",
+      "expectedResults": {
+        "render": true,
+        "formDetection": true,
+        "formFill": true,
+        "formFlatten": true
+      }
+    },
+    {
+      "id": "annotations-heavy",
+      "name": "大量标注 PDF",
+      "file": "annotations-heavy.pdf",
+      "category": "annotations",
+      "description": "包含 500+ 标注的文档",
+      "expectedResults": {
+        "render": true,
+        "annotationLoad": true,
+        "annotationPerformance": "smooth"
+      }
+    },
+    {
+      "id": "mixed-page-sizes",
+      "name": "混合页面尺寸 PDF",
+      "file": "mixed-page-sizes.pdf",
+      "category": "layout",
+      "description": "包含不同尺寸页面（A4、Letter、自定义）的文档",
+      "expectedResults": {
+        "render": true,
+        "pageSizeAdapt": true,
+        "scrollPerformance": true
+      }
+    },
+    {
+      "id": "landscape-orientation",
+      "name": "横向页面 PDF",
+      "file": "landscape-orientation.pdf",
+      "category": "layout",
+      "description": "横向（Landscape）方向的文档",
+      "expectedResults": {
+        "render": true,
+        "fitWidth": true,
+        "rotation": true
+      }
+    },
+    {
+      "id": "rotated-pages",
+      "name": "旋转页面 PDF",
+      "file": "rotated-pages.pdf",
+      "category": "layout",
+      "description": "包含 90°/180°/270° 旋转页面的文档",
+      "expectedResults": {
+        "render": true,
+        "rotationHandling": true
+      }
+    },
+    {
+      "id": "corrupted-xref",
+      "name": "损坏交叉引用 PDF",
+      "file": "corrupted-xref.pdf",
+      "category": "repair",
+      "description": "交叉引用表损坏的文档",
+      "expectedResults": {
+        "repairAttempt": true,
+        "pdfLibRepair": true
+      }
+    },
+    {
+      "id": "corrupted-truncated",
+      "name": "截断 PDF",
+      "file": "corrupted-truncated.pdf",
+      "category": "repair",
+      "description": "文件末尾被截断的损坏文档",
+      "expectedResults": {
+        "repairAttempt": true,
+        "partialRecovery": true
+      }
+    },
+    {
+      "id": "hyperlinks-bookmarks",
+      "name": "超链接和书签 PDF",
+      "file": "hyperlinks-bookmarks.pdf",
+      "category": "navigation",
+      "description": "包含内部链接、外部链接和书签导航的文档",
+      "expectedResults": {
+        "render": true,
+        "outlineLoad": true,
+        "bookmarkNavigation": true
+      }
+    },
+    {
+      "id": "multi-column",
+      "name": "多栏排版 PDF",
+      "file": "multi-column.pdf",
+      "category": "layout",
+      "description": "双栏或三栏排版的学术论文",
+      "expectedResults": {
+        "render": true,
+        "textExtraction": true,
+        "search": true
+      }
+    },
+    {
+      "id": "transparent-objects",
+      "name": "透明对象 PDF",
+      "file": "transparent-objects.pdf",
+      "category": "graphics",
+      "description": "包含透明度、渐变、混合模式的文档",
+      "expectedResults": {
+        "render": true,
+        "transparencyRendering": "accurate"
+      }
+    },
+    {
+      "id": "signed-document",
+      "name": "数字签名 PDF",
+      "file": "signed-document.pdf",
+      "category": "security",
+      "description": "已数字签名的文档",
+      "expectedResults": {
+        "render": true,
+        "signatureVerification": true
+      }
+    }
+  ],
+  "categories": {
+    "basic": "基础功能测试",
+    "font": "字体与文字渲染",
+    "image": "图片处理",
+    "performance": "性能与内存",
+    "encryption": "加密与权限",
+    "format": "PDF 格式兼容",
+    "forms": "表单交互",
+    "annotations": "标注性能",
+    "layout": "页面布局",
+    "repair": "损坏修复",
+    "navigation": "导航与链接",
+    "graphics": "图形渲染",
+    "security": "数字签名"
+  },
+  "notes": "实际的 PDF 样本文件需要手动收集并放入 test/samples/ 目录中。文件名应与上述 file 字段匹配。"
+}

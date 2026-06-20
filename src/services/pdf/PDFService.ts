@@ -2,6 +2,7 @@ import * as pdfjsLib from 'pdfjs-dist';
 import { TextLayer } from 'pdfjs-dist';
 import type { PDFDocumentInfo } from '@/types';
 import { Logger } from '@/utils';
+import { PageCacheManager } from './PageCacheManager';
 
 const logger = new Logger('PDFService');
 
@@ -16,6 +17,12 @@ export class PDFService {
   private renderTasks = new Map<number, pdfjsLib.RenderTask>();
   // 页面文本内容缓存：getTextContent() 开销大，同页面只需取一次
   private textContentCache = new Map<number, Awaited<ReturnType<pdfjsLib.PDFPageProxy['getTextContent']>>>();
+  // 画布缓存池：复用已渲染页面，避免重复渲染
+  private pageCache: PageCacheManager = new PageCacheManager(40, 512);
+  // PDF/A 检测结果
+  private _isPDFA: boolean = false;
+  // 加密文档标记
+  private _isEncrypted: boolean = false;
 
   /**
    * 加载 PDF 文档
@@ -34,6 +41,8 @@ export class PDFService {
         cMapUrl: '/cmaps/',
         cMapPacked: true,
         standardFontDataUrl: '/standard_fonts/',
+        disableFontFace: false,  // 允许字体回退渲染
+        isEvalSupported: false,  // 禁用 eval 提高安全性
       });
 
       if (options?.onProgress) {
@@ -45,7 +54,24 @@ export class PDFService {
       }
 
       this.pdfDocument = await loadingTask.promise;
+      this._isEncrypted = !!options?.password;
       logger.info(`PDF loaded: ${this.pdfDocument.numPages} pages`);
+
+      // PDF/A 检测：检查元数据中的 PDF/A 标记
+      try {
+        const metadata = await this.pdfDocument.getMetadata();
+        const metadataStr = (metadata as { metadata?: { getAll?: () => string } })?.metadata?.getAll?.() || '';
+        // PDF/A 在 XMP 元数据中声明
+        this._isPDFA = metadataStr.includes('pdfaid:part') ||
+                       metadataStr.includes('pdfaid:conformance') ||
+                       (typeof metadataStr === 'string' && metadataStr.includes('PDF/A'));
+        if (this._isPDFA) {
+          logger.info('Document detected as PDF/A (read-only archive format)');
+        }
+      } catch {
+        // 元数据读取失败不影响加载
+      }
+
       return this.pdfDocument;
     } catch (err) {
       logger.error('Failed to load PDF:', err);
@@ -92,7 +118,7 @@ export class PDFService {
   }
 
   /**
-   * 渲染页面到 Canvas
+   * 渲染页面到 Canvas（集成缓存池）
    */
   async renderPage(
     pageNumber: number,
@@ -104,6 +130,21 @@ export class PDFService {
     const prevTask = this.renderTasks.get(pageNumber);
     if (prevTask) {
       prevTask.cancel();
+    }
+
+    // 缓存命中：直接复用已渲染画布
+    const cached = this.pageCache.get(pageNumber, scale, rotation);
+    if (cached) {
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = cached.canvas.width;
+      canvas.height = cached.canvas.height;
+      canvas.style.width = `${cached.canvas.width / dpr}px`;
+      canvas.style.height = `${cached.canvas.height / dpr}px`;
+      const ctx = canvas.getContext('2d')!;
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.drawImage(cached.canvas, 0, 0);
+      logger.debug(`Page ${pageNumber} served from cache`);
+      return;
     }
 
     try {
@@ -127,6 +168,9 @@ export class PDFService {
       this.renderTasks.set(pageNumber, renderTask);
 
       await renderTask.promise;
+
+      // 渲染成功后写入缓存池
+      this.pageCache.set(pageNumber, canvas, scale, rotation);
       logger.debug(`Page ${pageNumber} rendered at scale ${scale}`);
     } catch (err) {
       if (err instanceof Error && err.name === 'RenderingCancelledException') return;
@@ -241,6 +285,13 @@ export class PDFService {
   }
 
   /**
+   * 获取缓存管理器（供外部配置，如低内存模式）
+   */
+  getPageCache(): PageCacheManager {
+    return this.pageCache;
+  }
+
+  /**
    * 销毁文档
    */
   async destroy(): Promise<void> {
@@ -249,6 +300,7 @@ export class PDFService {
       this.pdfDocument = null;
       this.textContentCache.clear();
       this.renderTasks.clear();
+      this.pageCache.clear();
       logger.info('PDF document destroyed');
     }
   }
@@ -259,5 +311,13 @@ export class PDFService {
 
   get isLoaded(): boolean {
     return this.pdfDocument !== null;
+  }
+
+  get isPDFA(): boolean {
+    return this._isPDFA;
+  }
+
+  get isEncrypted(): boolean {
+    return this._isEncrypted;
   }
 }

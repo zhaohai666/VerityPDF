@@ -8,6 +8,9 @@ import { EncryptionService } from '../encryption/EncryptionService';
 import { FormService } from '../form/FormService';
 import { SignatureService } from '../signature/SignatureService';
 import { LibreOfficeService } from '../convert/LibreOfficeService';
+import { PDFRepairService } from '../repair/PDFRepairService';
+import { BatchPageService } from '../batch/BatchPageService';
+import { WatermarkService } from '../batch/WatermarkService';
 
 const MAX_FILE_SIZE = 500 * 1024 * 1024;
 const ALLOWED_EXTENSIONS = ['.pdf'];
@@ -262,11 +265,25 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     return encryptionService.applyEncryption(arrayBuffer, options);
   });
 
-  registerIpcHandler<{ pdfData: string }, ArrayBuffer>('encrypt:remove', async ({ pdfData }) => {
+  registerIpcHandler<{ pdfData: string; password?: string }, ArrayBuffer>('encrypt:remove', async ({ pdfData, password }) => {
     if (!pdfData) throw new Error('无效的 PDF 数据');
     const binary = Buffer.from(pdfData, 'base64');
     const arrayBuffer = binary.buffer.slice(binary.byteOffset, binary.byteOffset + binary.byteLength) as ArrayBuffer;
-    return encryptionService.removeEncryption(arrayBuffer);
+    return encryptionService.removeEncryption(arrayBuffer, password);
+  });
+
+  // 已知密码解密
+  registerIpcHandler<{ pdfData: string; password: string }, ArrayBuffer>('encrypt:decrypt', async ({ pdfData, password }) => {
+    if (!pdfData) throw new Error('无效的 PDF 数据');
+    if (!password) throw new Error('请输入密码');
+    const binary = Buffer.from(pdfData, 'base64');
+    const arrayBuffer = binary.buffer.slice(binary.byteOffset, binary.byteOffset + binary.byteLength) as ArrayBuffer;
+    return encryptionService.removeEncryption(arrayBuffer, password);
+  });
+
+  // 检测 QPDF 可用性
+  registerIpcHandler<{}, { available: boolean; version?: string }>('encrypt:checkQpdf', async () => {
+    return encryptionService.isQpdfAvailable();
   });
 
   // 表单 IPC
@@ -419,6 +436,165 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     }];
     const result = await dialog.showOpenDialog(mainWindow, {
       filters,
+      properties: ['openFile', 'multiSelections'],
+    });
+    return result.canceled ? [] : result.filePaths;
+  });
+
+  // PDF 修复
+  const pdfRepairService = new PDFRepairService();
+  registerIpcHandler<{
+    filePath: string;
+  }, ArrayBuffer>('pdf:repair', async ({ filePath }) => {
+    if (!filePath) throw new Error('无效的文件路径');
+    return pdfRepairService.repair(filePath);
+  });
+
+  // 批量页面操作
+  const batchPageService = new BatchPageService();
+  batchPageService.setMainWindow(mainWindow);
+  const watermarkService = new WatermarkService();
+  watermarkService.setMainWindow(mainWindow);
+
+  registerIpcHandler<{
+    pdfData: string;
+    options: { pageIndices: number[]; angle: number };
+  }, ArrayBuffer>('batch:pageOperate', async ({ pdfData, options }) => {
+    if (!pdfData) throw new Error('无效的 PDF 数据');
+    const binary = Buffer.from(pdfData, 'base64');
+    const arrayBuffer = binary.buffer.slice(binary.byteOffset, binary.byteOffset + binary.byteLength) as ArrayBuffer;
+    return batchPageService.batchRotate(arrayBuffer, options);
+  });
+
+  registerIpcHandler<{
+    filePath: string;
+    threshold: number;
+  }, { blankIndices: number[]; totalChecked: number }>('batch:detectBlank', async ({ filePath, threshold }) => {
+    if (!filePath) throw new Error('无效的文件路径');
+    return batchPageService.detectBlankPages(filePath, threshold);
+  });
+
+  registerIpcHandler<{
+    pdfData: string;
+    options: { pageIndices: number[]; margin: { top: number; right: number; bottom: number; left: number } };
+  }, ArrayBuffer>('batch:crop', async ({ pdfData, options }) => {
+    if (!pdfData) throw new Error('无效的 PDF 数据');
+    const binary = Buffer.from(pdfData, 'base64');
+    const arrayBuffer = binary.buffer.slice(binary.byteOffset, binary.byteOffset + binary.byteLength) as ArrayBuffer;
+    return batchPageService.batchCrop(arrayBuffer, options);
+  });
+
+  registerIpcHandler<{
+    pdfData: string;
+    options: {
+      type: 'text' | 'image'; content: string; opacity: number; rotation: number;
+      fontSize?: number; fontFamily?: string; color?: string;
+      position?: 'center' | 'tile'; tileSpacing?: number; pageIndices?: number[];
+    };
+  }, ArrayBuffer>('batch:addWatermark', async ({ pdfData, options }) => {
+    if (!pdfData) throw new Error('无效的 PDF 数据');
+    const binary = Buffer.from(pdfData, 'base64');
+    const arrayBuffer = binary.buffer.slice(binary.byteOffset, binary.byteOffset + binary.byteLength) as ArrayBuffer;
+    return watermarkService.addWatermark(arrayBuffer, options);
+  });
+
+  registerIpcHandler<{
+    pdfData: string;
+    options: {
+      position: string; style: string; fontSize: number;
+      fontFamily?: string; color?: string; startIndex: number; pageIndices?: number[];
+    };
+  }, ArrayBuffer>('batch:addPageNumbers', async ({ pdfData, options }) => {
+    if (!pdfData) throw new Error('无效的 PDF 数据');
+    const binary = Buffer.from(pdfData, 'base64');
+    const arrayBuffer = binary.buffer.slice(binary.byteOffset, binary.byteOffset + binary.byteLength) as ArrayBuffer;
+    return watermarkService.addPageNumbers(arrayBuffer, options as Parameters<typeof watermarkService.addPageNumbers>[1]);
+  });
+
+  registerIpcHandler<{
+    pdfData: string;
+    options: {
+      headerText?: string; footerText?: string; fontSize: number;
+      fontFamily?: string; color?: string; pageIndices?: number[];
+    };
+  }, ArrayBuffer>('batch:addHeaderFooter', async ({ pdfData, options }) => {
+    if (!pdfData) throw new Error('无效的 PDF 数据');
+    const binary = Buffer.from(pdfData, 'base64');
+    const arrayBuffer = binary.buffer.slice(binary.byteOffset, binary.byteOffset + binary.byteLength) as ArrayBuffer;
+    return watermarkService.addHeaderFooter(arrayBuffer, options);
+  });
+
+  // 页面基础处理：多文件合并
+  registerIpcHandler<{
+    filePaths: string[];
+  }, ArrayBuffer>('pdf:multiMerge', async ({ filePaths }) => {
+    if (!filePaths || filePaths.length < 2) throw new Error('至少需要两个 PDF 文件');
+    const newDoc = await PDFDocument.create();
+    for (const fp of filePaths) {
+      const safePath = validateFilePath(fp);
+      if (!fs.existsSync(safePath)) throw new Error(`文件不存在: ${fp}`);
+      const data = fs.readFileSync(safePath);
+      const srcDoc = await PDFDocument.load(data, { ignoreEncryption: true });
+      const pages = await newDoc.copyPages(srcDoc, srcDoc.getPageIndices());
+      pages.forEach((p) => newDoc.addPage(p));
+    }
+    const bytes = await newDoc.save();
+    return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+  });
+
+  // 页面基础处理：按范围拆分
+  registerIpcHandler<{
+    pdfData: string;
+    ranges: string[];
+    outputDir: string;
+  }, string[]>('pdf:split', async ({ pdfData, ranges, outputDir }) => {
+    if (!pdfData) throw new Error('无效的 PDF 数据');
+    if (!ranges || ranges.length === 0) throw new Error('请指定拆分范围');
+    const safeDir = path.resolve(outputDir);
+    if (!fs.existsSync(safeDir)) fs.mkdirSync(safeDir, { recursive: true });
+
+    const binary = Buffer.from(pdfData, 'base64');
+    const srcDoc = await PDFDocument.load(binary, { ignoreEncryption: true });
+    const totalPages = srcDoc.getPageCount();
+    const outputPaths: string[] = [];
+
+    for (let r = 0; r < ranges.length; r++) {
+      const rangeStr = ranges[r].trim();
+      if (!rangeStr) continue;
+      const indices: number[] = [];
+      const parts = rangeStr.split(',').map((s) => s.trim());
+      for (const part of parts) {
+        const m = part.match(/^(\d+)\s*-\s*(\d+)$/);
+        if (m) {
+          const start = Math.max(1, parseInt(m[1], 10));
+          const end = Math.min(totalPages, parseInt(m[2], 10));
+          for (let p = start; p <= end; p++) indices.push(p - 1);
+        } else {
+          const n = parseInt(part, 10);
+          if (n >= 1 && n <= totalPages) indices.push(n - 1);
+        }
+      }
+      if (indices.length === 0) continue;
+
+      const partDoc = await PDFDocument.create();
+      const copiedPages = await partDoc.copyPages(srcDoc, indices);
+      copiedPages.forEach((p) => partDoc.addPage(p));
+      const partBytes = await partDoc.save();
+      const fileName = `part_${r + 1}_pages_${rangeStr.replace(/[,\s]/g, '_')}.pdf`;
+      const filePath = path.join(safeDir, fileName);
+      fs.writeFileSync(filePath, partBytes);
+      outputPaths.push(filePath);
+    }
+
+    return outputPaths;
+  });
+
+  // 页面基础处理：选择多个 PDF 文件
+  registerIpcHandler<{
+    extensions?: string[];
+  }, string[]>('pdf:selectFiles', async () => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      filters: [{ name: 'PDF 文件', extensions: ['pdf'] }],
       properties: ['openFile', 'multiSelections'],
     });
     return result.canceled ? [] : result.filePaths;

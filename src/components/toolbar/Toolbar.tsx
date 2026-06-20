@@ -300,6 +300,49 @@ export const Toolbar: React.FC = () => {
             </svg>
             <span className="toolbar-label">转换</span>
           </button>
+          <button
+            className="toolbar-btn batch-btn"
+            onClick={() => window.dispatchEvent(new CustomEvent('verity:batch'))}
+            disabled={!isLoaded}
+            title="批量页面操作（旋转/空白页/裁剪）"
+            aria-label="批量页面操作"
+          >
+            <svg className="toolbar-icon-svg" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+              <rect x="3" y="3" width="7" height="7" rx="1" fill="none" stroke="currentColor" strokeWidth="1.5"/>
+              <rect x="14" y="3" width="7" height="7" rx="1" fill="none" stroke="currentColor" strokeWidth="1.5"/>
+              <rect x="3" y="14" width="7" height="7" rx="1" fill="none" stroke="currentColor" strokeWidth="1.5"/>
+              <rect x="14" y="14" width="7" height="7" rx="1" fill="none" stroke="currentColor" strokeWidth="1.5"/>
+            </svg>
+            <span className="toolbar-label">批量</span>
+          </button>
+          <button
+            className="toolbar-btn watermark-btn"
+            onClick={() => window.dispatchEvent(new CustomEvent('verity:watermark'))}
+            disabled={!isLoaded}
+            title="水印/页码/页眉页脚"
+            aria-label="水印/页码/页眉页脚"
+          >
+            <svg className="toolbar-icon-svg" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+              <text x="4" y="16" fontSize="11" fontWeight="bold" fill="currentColor" opacity="0.6">W</text>
+              <path d="M14 8l2 8 2-4 2 4 2-8" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            <span className="toolbar-label">水印</span>
+          </button>
+          <button
+            className="toolbar-btn pageops-btn"
+            onClick={() => window.dispatchEvent(new CustomEvent('verity:pageops'))}
+            disabled={!isLoaded}
+            title="合并/拆分/提取页面"
+            aria-label="页面基础操作"
+          >
+            <svg className="toolbar-icon-svg" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+              <rect x="2" y="3" width="8" height="10" rx="1" fill="none" stroke="currentColor" strokeWidth="1.5"/>
+              <rect x="14" y="3" width="8" height="10" rx="1" fill="none" stroke="currentColor" strokeWidth="1.5"/>
+              <path d="M6 16v5M18 16v5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+              <path d="M3 18h6M15 18h6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+            </svg>
+            <span className="toolbar-label">页面</span>
+          </button>
         </div>
       </div>
     </div>

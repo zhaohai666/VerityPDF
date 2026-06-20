@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useCallback, useMemo, memo } from 'react';
 import { PDFService } from '@/services/pdf/PDFService';
 import { AnnotationCanvas } from '@/components/annotation/AnnotationCanvas';
 import { useToolStore } from '@/stores/toolStore';
+import { usePdfStore } from '@/stores/pdfStore';
 
 interface PageRendererProps {
   pageNumber: number;
@@ -25,17 +26,24 @@ function computeScale(
   pageSize: { width: number; height: number },
   zoom: number,
   zoomMode: string,
-  containerWidth?: number
+  containerWidth?: number,
+  lowMemoryMode?: boolean
 ): number {
+  let scale: number;
   if (zoomMode === 'fitWidth' && containerWidth && containerWidth > 0) {
-    return (containerWidth - 40) / pageSize.width;
-  }
-  if (zoomMode === 'fitPage') {
+    scale = (containerWidth - 40) / pageSize.width;
+  } else if (zoomMode === 'fitPage') {
     const availH = window.innerHeight - 160;
     const availW = containerWidth ? containerWidth - 40 : 800;
-    return Math.min(availH / pageSize.height, availW / pageSize.width);
+    scale = Math.min(availH / pageSize.height, availW / pageSize.width);
+  } else {
+    scale = zoom;
   }
-  return zoom;
+  // 低内存模式：限制渲染精度上限 1.5
+  if (lowMemoryMode && scale > 1.5) {
+    scale = 1.5;
+  }
+  return scale;
 }
 
 const PageModeContext: React.FC<PageModeProps> = memo(({ pageNumber, containerRef }) => {
@@ -76,6 +84,7 @@ export const PageRenderer = memo(({
   // 单独跟踪 TextLayer 的比例/旋转，避免与 Canvas 同步触发不必要的重建
   const textLayerScaleRef = useRef<number>(0);
   const textLayerRotationRef = useRef<number>(-1);
+  const lowMemoryMode = usePdfStore((s) => s.lowMemoryMode);
 
   const needsWidth = (zoomMode === 'fitWidth' || zoomMode === 'fitPage');
   const ready = !needsWidth || (containerWidth !== undefined && containerWidth > 0);
@@ -87,7 +96,7 @@ export const PageRenderer = memo(({
     if (!canvasRef.current || !textLayerRef.current) return;
 
     const pageSize = await pdfService.getPageSize(pageNumber);
-    const scale = computeScale(pageSize, zoom, zoomMode, containerWidth);
+    const scale = computeScale(pageSize, zoom, zoomMode, containerWidth, lowMemoryMode);
 
     if (Math.abs(scale - lastScaleRef.current) < 0.001 && rotation === 0) return;
     lastScaleRef.current = scale;
@@ -102,7 +111,7 @@ export const PageRenderer = memo(({
       textLayerScaleRef.current = scale;
       textLayerRotationRef.current = rotation;
     }
-  }, [pageNumber, pdfService, zoom, rotation, containerWidth, zoomMode]);
+  }, [pageNumber, pdfService, zoom, rotation, containerWidth, zoomMode, lowMemoryMode]);
 
   useEffect(() => {
     if (!ready) return;
@@ -144,7 +153,7 @@ export const PageRenderer = memo(({
     const updateDimensions = async () => {
       try {
         const pageSize = await pdfService.getPageSize(pageNumber);
-        const scale = computeScale(pageSize, zoom, zoomMode, containerWidth);
+        const scale = computeScale(pageSize, zoom, zoomMode, containerWidth, lowMemoryMode);
 
         const width = pageSize.width * scale;
         const height = pageSize.height * scale;

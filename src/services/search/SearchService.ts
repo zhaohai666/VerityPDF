@@ -1,7 +1,18 @@
 import { PDFService } from '@/services/pdf/PDFService';
 import { Logger } from '@/utils';
+import { SearchWorkerBridge } from './SearchWorkerBridge';
 
 const logger = new Logger('SearchService');
+
+/** Worker 桥接实例（懒初始化） */
+let workerBridge: SearchWorkerBridge | null = null;
+
+function getWorkerBridge(): SearchWorkerBridge {
+  if (!workerBridge) {
+    workerBridge = new SearchWorkerBridge();
+  }
+  return workerBridge;
+}
 
 /** 搜索结果项 */
 export interface SearchResultItem {
@@ -25,9 +36,32 @@ export interface SearchOptions {
  */
 export class SearchService {
   /**
-   * 在所有页面中搜索关键词
+   * 在所有页面中搜索关键词（优先使用 Web Worker）
    */
   async search(
+    pdfService: PDFService,
+    query: string,
+    options: SearchOptions = { caseSensitive: false, wholeWord: false },
+    onProgress?: (progress: number) => void
+  ): Promise<SearchResultItem[]> {
+    if (!query || !pdfService.isLoaded) return [];
+
+    // 尝试使用 Worker 进行搜索（大文档性能更优）
+    try {
+      const bridge = getWorkerBridge();
+      return await bridge.search(pdfService, query, options, onProgress);
+    } catch (err) {
+      logger.warn('Worker search failed, falling back to main thread:', err);
+    }
+
+    // 回退到主线程搜索
+    return this.searchMainThread(pdfService, query, options, onProgress);
+  }
+
+  /**
+   * 主线程搜索（Worker 失败时的回退方案）
+   */
+  private async searchMainThread(
     pdfService: PDFService,
     query: string,
     options: SearchOptions = { caseSensitive: false, wholeWord: false },

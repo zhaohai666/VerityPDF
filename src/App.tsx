@@ -1,20 +1,22 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, Suspense } from 'react';
 import { Toolbar } from '@/components/toolbar/Toolbar';
 import { Sidebar } from '@/components/sidebar/Sidebar';
 import { PDFViewer } from '@/components/viewer/PDFViewer';
 import { PropertyPanel } from '@/components/property/PropertyPanel';
-import { CommentPanel } from '@/components/comment/CommentPanel';
-import { SearchPanel } from '@/components/search/SearchPanel';
 import { StatusBar } from '@/components/common/StatusBar';
 import { Toast } from '@/components/common/Toast';
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
-import { OCRPanel } from '@/components/ocr/OCRPanel';
 import { useKeyboardShortcuts, useAutoSave } from '@/hooks';
 import { usePdfStore } from '@/stores/pdfStore';
 import { useAnnotationStore } from '@/stores/annotationStore';
 import { useUIStore } from '@/stores/uiStore';
 import { useSearchStore } from '@/stores/searchStore';
 import './i18n';
+
+// 非核心模块懒加载
+const CommentPanel = React.lazy(() => import('@/components/comment/CommentPanel').then(m => ({ default: m.CommentPanel })));
+const SearchPanel = React.lazy(() => import('@/components/search/SearchPanel').then(m => ({ default: m.SearchPanel })));
+const OCRPanel = React.lazy(() => import('@/components/ocr/OCRPanel').then(m => ({ default: m.OCRPanel })));
 
 const App: React.FC = () => {
   // 初始化全局快捷键
@@ -129,12 +131,18 @@ const App: React.FC = () => {
           </ErrorBoundary>
           <PropertyPanel />
           {searchVisible && (
-            <SearchPanel pdfService={(window as unknown as { __pdfService: unknown }).__pdfService as never} />
+            <Suspense fallback={null}>
+              <SearchPanel pdfService={(window as unknown as { __pdfService: unknown }).__pdfService as never} />
+            </Suspense>
           )}
           {activeCommentId && (
-            <CommentPanel annotationId={activeCommentId} onClose={() => setShowComments(false)} />
+            <Suspense fallback={null}>
+              <CommentPanel annotationId={activeCommentId} onClose={() => setShowComments(false)} />
+            </Suspense>
           )}
-          <OCRPanel />
+          <Suspense fallback={null}>
+            <OCRPanel />
+          </Suspense>
         </div>
         <StatusBar />
         <Toast />
