@@ -389,6 +389,19 @@ export const Toolbar: React.FC = () => {
             </svg>
             <span className="toolbar-label">压缩</span>
           </button>
+          <button
+            className="toolbar-btn redaction-btn"
+            onClick={() => window.dispatchEvent(new CustomEvent('verity:redaction'))}
+            disabled={!isLoaded}
+            title="密文擦除（永久删除标记区域内容）"
+            aria-label="密文擦除"
+          >
+            <svg className="toolbar-icon-svg" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+              <rect x="3" y="5" width="18" height="14" fill="currentColor" opacity="0.9"/>
+              <line x1="3" y1="5" x2="21" y2="19" stroke="currentColor" strokeWidth="1"/>
+            </svg>
+            <span className="toolbar-label">擦除</span>
+          </button>
         </div>
       </div>
     </div>

@@ -85,6 +85,10 @@ const api: VerityAPI = {
   smartCompress: (pdfData, options) =>
     wrapInvoke<ArrayBuffer>('compress:smart', { pdfData, options }),
 
+  // 密文擦除
+  redactPdf: (pdfData, rects) =>
+    wrapInvoke<ArrayBuffer>('redact:apply', { pdfData, rects }),
+
   detectFormFields: (pdfData) =>
     wrapInvoke('form:detect', { pdfData }),
 
@@ -102,6 +106,12 @@ const api: VerityAPI = {
 
   loadCertificate: (p12Path, password) =>
     wrapInvoke('signature:loadCert', { p12Path, password }),
+
+  signPades: (pdfData, options) =>
+    wrapInvoke('signature:signPades', { pdfData, options }),
+
+  verifyPades: (pdfData) =>
+    wrapInvoke('signature:verifyPades', { pdfData }),
 
   checkLibreOffice: () =>
     wrapInvoke('convert:check', {}),

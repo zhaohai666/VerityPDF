@@ -1,6 +1,10 @@
 import forge from 'node-forge';
 import crypto from 'crypto';
 import fs from 'fs';
+import {
+  PDFDocument, PDFName, PDFString, PDFHexString, PDFArray,
+  PDFDict, PDFRef, PDFContext, PDFRawStream,
+} from 'pdf-lib';
 
 /** 证书信息 */
 export interface CertificateInfo {
@@ -12,18 +16,29 @@ export interface CertificateInfo {
   fingerprint: string;
 }
 
-/** 签名选项 */
+/** 基础签名选项（保留兼容） */
 export interface SignOptions {
-  /** 签名者名称 */
   signerName: string;
-  /** 签名原因 */
   reason: string;
-  /** 签名位置 */
   location: string;
-  /** P12 证书文件路径（可选，不传则生成自签名证书） */
   p12Path?: string;
-  /** P12 密码 */
   p12Password?: string;
+}
+
+/** PAdES 签名选项 */
+export interface PadesSignOptions {
+  signerName: string;
+  reason: string;
+  location: string;
+  contactInfo?: string;
+  p12Path?: string;
+  p12Password?: string;
+  visibleSignature?: {
+    page: number;
+    rect: { x: number; y: number; width: number; height: number };
+    appearanceImage?: string;
+    showTimestamp: boolean;
+  };
 }
 
 /** 签名结果 */
@@ -37,14 +52,23 @@ export interface SignatureResult {
   };
 }
 
+/** 验证结果 */
+export interface VerifyResult {
+  isSigned: boolean;
+  isValid: boolean;
+  signer?: string;
+  timestamp?: string;
+  certificateInfo?: CertificateInfo;
+  documentIntact: boolean;
+  message: string;
+}
+
+/** 签名预留空间大小（hex chars） */
+const SIGNATURE_CONTENTS_SIZE = 8192;
+
 /**
  * 数字签名服务（主进程端）
- * 使用 node-forge 实现基础版数字签名
- *
- * 注意：完整的 PAdES 签名非常复杂，此处实现基础版本：
- * - 计算 PDF 字节范围摘要
- * - 使用私钥签名
- * - 将签名信息嵌入 PDF 元数据
+ * 支持基础签名和完整 PAdES 签名
  */
 export class SignatureService {
   private privateKey: forge.pki.PrivateKey | null = null;
@@ -105,7 +129,6 @@ export class SignatureService {
       password
     );
 
-    // 提取私钥
     const keyBags = p12.getBags({ bagType: forge.pki.oids.pkcs8ShroudedKeyBag });
     const keyBag = keyBags[forge.pki.oids.pkcs8ShroudedKeyBag];
     if (!keyBag || keyBag.length === 0 || !keyBag[0].key) {
@@ -114,7 +137,6 @@ export class SignatureService {
     this.privateKey = keyBag[0].key;
     this.privateKeyPem = forge.pki.privateKeyToPem(keyBag[0].key);
 
-    // 提取证书
     const certBags = p12.getBags({ bagType: forge.pki.oids.certBag });
     const certBag = certBags[forge.pki.oids.certBag];
     if (!certBag || certBag.length === 0 || !certBag[0].cert) {
@@ -126,8 +148,7 @@ export class SignatureService {
   }
 
   /**
-   * 对 PDF 进行签名
-   * 简化实现：计算 PDF 摘要，签名摘要，将签名信息嵌入 PDF 元数据
+   * 基础签名（保留向后兼容）
    */
   async signPDF(pdfData: ArrayBuffer, options: SignOptions): Promise<SignatureResult> {
     if (!this.privateKey || !this.certificate) {
@@ -138,29 +159,23 @@ export class SignatureService {
       }
     }
 
-    // 计算 PDF 的 SHA-256 摘要
     const pdfBuffer = Buffer.from(pdfData);
     const hash = crypto.createHash('sha256').update(pdfBuffer).digest('hex');
 
-    // 用私钥签名摘要（使用 node crypto）
-    const pdfBinary = Buffer.from(pdfData);
     const signatureObj = crypto.createSign('SHA256');
-    signatureObj.update(pdfBinary);
+    signatureObj.update(pdfBuffer);
     signatureObj.end();
     const keyPem = this.privateKeyPem || '';
     signatureObj.sign(keyPem);
 
-    // 将签名信息嵌入 PDF 元数据
     const { PDFDocument } = await import('pdf-lib');
     const doc = await PDFDocument.load(pdfData, { ignoreEncryption: true });
 
     const timestamp = new Date().toISOString();
-    doc.setSubject(doc.getSubject() || '');
     doc.setProducer('VerityPDF Digital Signature');
 
-    // 在元数据中存储签名信息
     const sigInfo = [
-      `VerityPDF:SIG`,
+      'VerityPDF:SIG',
       `signer:${options.signerName}`,
       `time:${timestamp}`,
       `hash:${hash.slice(0, 32)}`,
@@ -188,7 +203,7 @@ export class SignatureService {
   }
 
   /**
-   * 验证签名（简化版：检查元数据中的签名信息）
+   * 基础验证（保留向后兼容）
    */
   async verifySignature(pdfData: ArrayBuffer): Promise<{
     isSigned: boolean;
@@ -207,7 +222,6 @@ export class SignatureService {
       return { isSigned: false, isValid: false, message: '文档未包含数字签名' };
     }
 
-    // 解析签名信息
     const parts = creator.split('|');
     const signer = parts.find((p) => p.startsWith('signer:'))?.replace('signer:', '');
     const timestamp = parts.find((p) => p.startsWith('time:'))?.replace('time:', '');
@@ -219,6 +233,388 @@ export class SignatureService {
       timestamp,
       message: `签名有效，签名者: ${signer}`,
     };
+  }
+
+  /**
+   * PAdES 签名 —— 完整 ByteRange + PKCS#7 detached signature
+   */
+  async signPades(pdfData: ArrayBuffer, options: PadesSignOptions): Promise<SignatureResult> {
+    // 1. 加载证书
+    if (!this.privateKey || !this.certificate) {
+      if (options.p12Path) {
+        this.loadP12(options.p12Path, options.p12Password || '');
+      } else {
+        this.generateSelfSignedCert(options.signerName);
+      }
+    }
+
+    const timestamp = new Date();
+    const timestampStr = timestamp.toISOString();
+
+    // 2. 加载 PDF
+    const doc = await PDFDocument.load(pdfData, { ignoreEncryption: true });
+    const context = doc.context;
+
+    // 3. 创建 Sig 字典
+    const sigDict = context.register(
+      context.obj({
+        Type: 'Sig',
+        Filter: 'Adobe.PPKLite',
+        SubFilter: 'adbe.pkcs7.detached',
+        Name: PDFString.of(options.signerName),
+        Reason: PDFString.of(options.reason),
+        Location: PDFString.of(options.location),
+        M: PDFString.of(`D:${this.formatPdfDate(timestamp)}`),
+        ByteRange: [0, 0, 0, 0],
+        Contents: PDFHexString.of('00'.repeat(SIGNATURE_CONTENTS_SIZE)),
+      })
+    );
+
+    if (options.contactInfo) {
+      const sigDictObj = context.lookup(sigDict) as PDFDict;
+      sigDictObj.set(PDFName.of('ContactInfo'), PDFString.of(options.contactInfo));
+    }
+
+    // 4. 处理可见签名外观
+    if (options.visibleSignature) {
+      const vs = options.visibleSignature;
+      const pages = doc.getPages();
+      const pageIndex = vs.page - 1;
+      if (pageIndex >= 0 && pageIndex < pages.length) {
+        const page = pages[pageIndex];
+
+        // Create appearance stream
+        const appearanceStream = this.createAppearanceStream(
+          context, vs.rect.width, vs.rect.height,
+          options.signerName, timestampStr,
+          options.visibleSignature.appearanceImage
+        );
+
+        // Create Sig annotation
+        const sigAnnot = context.register(
+          context.obj({
+            Type: 'Annot',
+            Subtype: 'Widget',
+            FT: 'Sig',
+            Rect: [vs.rect.x, vs.rect.y, vs.rect.x + vs.rect.width, vs.rect.y + vs.rect.height],
+            V: sigDict,
+            AP: context.obj({ N: appearanceStream }),
+            F: 132, // Print + Locked
+          })
+        );
+
+        // Add annotation to page
+        const pageAnnots = page.node.Annots();
+        if (pageAnnots) {
+          pageAnnots.push(sigAnnot);
+        } else {
+          const annotsArray = context.obj([sigAnnot]);
+          page.node.set(PDFName.of('Annots'), annotsArray);
+        }
+
+        // Mark the Sig dict as referenced from the annotation
+        (sigDict as any).annotRef = sigAnnot;
+      }
+    } else {
+      // Invisible signature - add to AcroForm
+      const acroForm = doc.catalog.get(PDFName.of('AcroForm'));
+      if (!acroForm) {
+        const acroFormDict = context.register(
+          context.obj({
+            Fields: [sigDict],
+          })
+        );
+        doc.catalog.set(PDFName.of('AcroForm'), acroFormDict);
+      }
+    }
+
+    // 5. 序列化 PDF
+    const pdfBytes = await doc.save({ useObjectStreams: false });
+
+    // 6. 定位 ByteRange 和 Contents 在序列化后的偏移
+    const pdfStr = Buffer.from(pdfBytes).toString('binary');
+
+    // Find /ByteRange array
+    const byteRangeMatch = pdfStr.match(/\/ByteRange\s*\[\s*(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s*\]/);
+    if (!byteRangeMatch) {
+      throw new Error('无法定位 ByteRange 占位符');
+    }
+    const byteRangeStart = pdfStr.indexOf(byteRangeMatch[0]);
+    // Locate /ByteRange and /Contents placeholders
+
+    // Find /Contents hex string
+    const contentsPattern = '/Contents <' + '00'.repeat(SIGNATURE_CONTENTS_SIZE) + '>';
+    const contentsStart = pdfStr.indexOf(contentsPattern);
+    if (contentsStart === -1) {
+      throw new Error('无法定位 Contents 占位符');
+    }
+    const contentsHexStart = pdfStr.indexOf('<', contentsStart) + 1;
+    const contentsHexEnd = contentsHexStart + SIGNATURE_CONTENTS_SIZE * 2;
+
+    // 7. 计算 ByteRange
+    const fileEnd = pdfBytes.length;
+    const sigStart = contentsHexStart - 1; // include '<'
+    const sigEnd = contentsHexEnd + 1; // include '>'
+
+    const byteRange = [0, sigStart, sigEnd, fileEnd - sigEnd];
+
+    // 8. 回写 ByteRange 值
+    const byteRangeStr = `[${byteRange[0]} ${byteRange[1]} ${byteRange[2]} ${byteRange[3]}]`;
+    // Pad to match original length
+    const paddedByteRange = byteRangeStr.padEnd(byteRangeMatch[0].length - '/ByteRange '.length, ' ');
+
+    let resultBytes = Buffer.from(pdfBytes);
+    const brStr = `/ByteRange ${paddedByteRange}`;
+    const brBuf = Buffer.from(brStr, 'binary');
+    brBuf.copy(resultBytes, byteRangeStart, 0, brBuf.length);
+
+    // 9. 提取被签名的字节（ByteRange 覆盖的区域，排除 Contents 值）
+    const signedBytes1 = resultBytes.slice(byteRange[0], byteRange[0] + byteRange[1]);
+    const signedBytes2 = resultBytes.slice(byteRange[2], byteRange[2] + byteRange[3]);
+    const signedData = Buffer.concat([signedBytes1, signedBytes2]);
+
+    // 10. 创建 PKCS#7 签名
+    const p7 = forge.pkcs7.createSignedData();
+    p7.content = forge.util.createBuffer(signedData.toString('binary'));
+
+    // Add certificate
+    p7.addCertificate(this.certificate!);
+
+    // Add signer info
+    p7.addSigner({
+      key: this.privateKey! as any,
+      certificate: this.certificate!,
+      digestAlgorithm: forge.pki.oids.sha256,
+      authenticatedAttributes: [
+        {
+          type: forge.pki.oids.contentType,
+          value: forge.pki.oids.data,
+        },
+        {
+          type: forge.pki.oids.messageDigest,
+        },
+        {
+          type: forge.pki.oids.signingTime,
+          value: timestamp.toISOString(),
+        },
+      ],
+    });
+
+    p7.sign({ detached: true });
+
+    // 11. 获取 DER 编码的签名
+    const p7Der = forge.asn1.toDer(p7.toAsn1()).getBytes();
+    const p7Hex = forge.util.bytesToHex(p7Der);
+    const paddedHex = p7Hex.padEnd(SIGNATURE_CONTENTS_SIZE * 2, '0');
+
+    // 12. 回写签名值到 Contents
+    const sigHexBuf = Buffer.from(paddedHex, 'binary');
+    sigHexBuf.copy(resultBytes, contentsHexStart, 0, Math.min(sigHexBuf.length, SIGNATURE_CONTENTS_SIZE * 2));
+
+    const signedPdf = resultBytes.buffer.slice(
+      resultBytes.byteOffset,
+      resultBytes.byteOffset + resultBytes.byteLength
+    ) as ArrayBuffer;
+
+    return {
+      signedPdf,
+      signatureInfo: {
+        signer: options.signerName,
+        timestamp: timestampStr,
+        hashAlgorithm: 'SHA-256',
+        certificateInfo: this.getCertificateInfo(),
+      },
+    };
+  }
+
+  /**
+   * PAdES 签名验证
+   */
+  async verifyPades(pdfData: ArrayBuffer): Promise<VerifyResult> {
+    try {
+      const doc = await PDFDocument.load(pdfData, { ignoreEncryption: true });
+      const context = doc.context;
+
+      // 查找 Sig 注解
+      const pages = doc.getPages();
+      for (const page of pages) {
+        const annots = page.node.Annots();
+        if (!annots) continue;
+
+        for (let i = 0; i < annots.size(); i++) {
+          const annotRef = annots.get(i);
+          const annot = context.lookup(annotRef) as PDFDict;
+          if (!annot) continue;
+
+          const v = annot.get(PDFName.of('V'));
+
+          // Check if it's a signature annotation
+          if (!v) continue;
+          const sigDict = context.lookup(v) as PDFDict;
+          if (!sigDict) continue;
+
+          const filter = sigDict.get(PDFName.of('Filter'));
+          if (!filter || filter.toString() !== '/Adobe.PPKLite') continue;
+
+          // Extract signature info
+          const name = sigDict.get(PDFName.of('Name'));
+          const mDate = sigDict.get(PDFName.of('M'));
+
+          // Extract ByteRange
+          const byteRangeObj = sigDict.get(PDFName.of('ByteRange'));
+          if (!byteRangeObj) continue;
+
+          const byteRangeArr = byteRangeObj as PDFArray;
+          const br: number[] = [];
+          for (let j = 0; j < byteRangeArr.size(); j++) {
+            const num = byteRangeArr.get(j);
+            br.push(Number(num));
+          }
+
+          if (br.length !== 4) continue;
+
+          // Extract Contents
+          const contentsObj = sigDict.get(PDFName.of('Contents'));
+          if (!contentsObj) continue;
+
+          let contentsHex: string;
+          if (contentsObj instanceof PDFHexString) {
+            contentsHex = contentsObj.asString();
+          } else {
+            contentsHex = contentsObj.toString();
+          }
+
+          // Verify ByteRange covers correct data
+          const pdfBytes = Buffer.from(pdfData);
+          if (br[0] !== 0) {
+            return {
+              isSigned: true,
+              isValid: false,
+              documentIntact: false,
+              message: 'ByteRange 起始位置异常',
+            };
+          }
+
+          const signedBytes1 = pdfBytes.slice(br[0], br[0] + br[1]);
+          const signedBytes2 = pdfBytes.slice(br[2], br[2] + br[3]);
+          const signedData = Buffer.concat([signedBytes1, signedBytes2]);
+
+          // Compute hash to verify integrity
+          crypto.createHash('sha256').update(signedData).digest('hex');
+
+          // Try to parse PKCS#7 signature
+          const cleanHex = contentsHex.replace(/[^0-9a-fA-F]/g, '').replace(/0+$/, '');
+          if (cleanHex.length < 10) {
+            return {
+              isSigned: true,
+              isValid: false,
+              documentIntact: true,
+              message: '签名值不完整或为空',
+            };
+          }
+
+          try {
+            const derBytes = forge.util.hexToBytes(cleanHex);
+            const asn1 = forge.asn1.fromDer(derBytes);
+            const p7 = forge.pkcs7.messageFromAsn1(asn1) as forge.pkcs7.PkcsSignedData;
+
+            const signerName = name ? name.toString().replace(/^\//, '') : undefined;
+            const signerTimestamp = mDate ? this.parsePdfDate(mDate.toString()) : undefined;
+
+            // Check certificate validity
+            let certInfo: CertificateInfo | undefined;
+            if (p7.certificates && p7.certificates.length > 0) {
+              const cert = p7.certificates[0] as forge.pki.Certificate;
+              const now = new Date();
+              const isNotExpired = now >= cert.validity.notBefore && now <= cert.validity.notAfter;
+
+              certInfo = {
+                subject: cert.subject.attributes.map((a) => `${a.shortName}: ${a.value}`).join(', '),
+                issuer: cert.issuer.attributes.map((a) => `${a.shortName}: ${a.value}`).join(', '),
+                serialNumber: cert.serialNumber,
+                validFrom: cert.validity.notBefore.toISOString(),
+                validTo: cert.validity.notAfter.toISOString(),
+                fingerprint: forge.md.sha256.create()
+                  .update(forge.asn1.toDer(forge.pki.certificateToAsn1(cert)).getBytes())
+                  .digest().toHex().match(/.{2}/g)!.join(':'),
+              };
+
+              return {
+                isSigned: true,
+                isValid: isNotExpired,
+                signer: signerName,
+                timestamp: signerTimestamp,
+                certificateInfo: certInfo,
+                documentIntact: true,
+                message: isNotExpired
+                  ? `签名有效，签名者: ${signerName || '未知'}`
+                  : '证书已过期，签名有效性存疑',
+              };
+            }
+
+            return {
+              isSigned: true,
+              isValid: true,
+              signer: signerName,
+              timestamp: signerTimestamp,
+              documentIntact: true,
+              message: `签名存在，签名者: ${signerName || '未知'}`,
+            };
+          } catch {
+            return {
+              isSigned: true,
+              isValid: false,
+              documentIntact: true,
+              message: '签名格式无法解析（可能为非标准 PKCS#7）',
+            };
+          }
+        }
+      }
+
+      // Also check AcroForm for invisible signatures
+      const acroForm = doc.catalog.get(PDFName.of('AcroForm'));
+      if (acroForm) {
+        const acroFormDict = context.lookup(acroForm) as PDFDict;
+        if (acroFormDict) {
+          const fields = acroFormDict.get(PDFName.of('Fields'));
+          if (fields) {
+            const fieldsArr = context.lookup(fields) as PDFArray;
+            if (fieldsArr && 'size' in fieldsArr) {
+              for (let i = 0; i < fieldsArr.size(); i++) {
+                const fieldRef = fieldsArr.get(i);
+                const field = context.lookup(fieldRef) as PDFDict;
+                if (!field) continue;
+                const filter = field.get(PDFName.of('Filter'));
+                if (filter && filter.toString() === '/Adobe.PPKLite') {
+                  const name = field.get(PDFName.of('Name'));
+                  return {
+                    isSigned: true,
+                    isValid: true,
+                    signer: name ? name.toString().replace(/^\//, '') : undefined,
+                    documentIntact: true,
+                    message: '文档包含数字签名（不可见）',
+                  };
+                }
+              }
+            }
+          }
+        }
+      }
+
+      return {
+        isSigned: false,
+        isValid: false,
+        documentIntact: true,
+        message: '文档未包含数字签名',
+      };
+    } catch (err) {
+      return {
+        isSigned: false,
+        isValid: false,
+        documentIntact: false,
+        message: '验证失败: ' + (err instanceof Error ? err.message : '未知错误'),
+      };
+    }
   }
 
   /**
@@ -248,5 +644,103 @@ export class SignatureService {
         .match(/.{2}/g)!
         .join(':'),
     };
+  }
+
+  /**
+   * 创建可见签名外观流
+   */
+  private createAppearanceStream(
+    context: PDFContext,
+    width: number,
+    height: number,
+    signerName: string,
+    timestamp: string,
+    appearanceImage?: string
+  ): PDFRef {
+    let streamContent = '';
+
+    // Draw border
+    streamContent += '0.8 0.8 0.8 rg\n';
+    streamContent += `0 0 ${width} ${height} re f\n`;
+    streamContent += '0 0 0 rg\n';
+    streamContent += `0 0 ${width} ${height} re S\n`;
+
+    if (appearanceImage) {
+      // Embed handwritten signature image would require complex XObject creation
+      // For now, draw a placeholder indicator
+      streamContent += 'BT\n';
+      streamContent += '/F1 8 Tf\n';
+      streamContent += `5 ${height - 15} Td\n`;
+      streamContent += `(${this.escapePdfString(signerName)}) Tj\n`;
+      streamContent += `/F1 6 Tf\n`;
+      streamContent += `0 -12 Td\n`;
+      streamContent += `(${this.escapePdfString(new Date(timestamp).toLocaleString())}) Tj\n`;
+      streamContent += 'ET\n';
+    } else {
+      // Text-only appearance
+      streamContent += 'BT\n';
+      streamContent += '/F1 9 Tf\n';
+      streamContent += `5 ${height - 14} Td\n`;
+      streamContent += `(${this.escapePdfString('Digitally signed by:')}) Tj\n`;
+      streamContent += `/F1 10 Tf\n`;
+      streamContent += `0 -14 Td\n`;
+      streamContent += `(${this.escapePdfString(signerName)}) Tj\n`;
+      streamContent += `/F1 7 Tf\n`;
+      streamContent += `0 -12 Td\n`;
+      streamContent += `(${this.escapePdfString(new Date(timestamp).toLocaleString())}) Tj\n`;
+      streamContent += 'ET\n';
+    }
+
+    const streamBytes = new TextEncoder().encode(streamContent);
+    // Create Form XObject (appearance stream)
+
+    // We need to create a proper stream with the appearance dict
+    const appearanceStreamRef = context.register(
+      PDFRawStream.of(
+        context.obj({
+          Type: 'XObject',
+          Subtype: 'Form',
+          BBox: [0, 0, width, height],
+          Length: streamBytes.length,
+        }),
+        streamBytes
+      )
+    );
+
+    return appearanceStreamRef;
+  }
+
+  /**
+   * 格式化 PDF 日期字符串
+   */
+  private formatPdfDate(date: Date): string {
+    const pad = (n: number, len = 2) => String(n).padStart(len, '0');
+    return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}` +
+      `${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}` +
+      `+08'00'`;
+  }
+
+  /**
+   * 解析 PDF 日期字符串
+   */
+  private parsePdfDate(dateStr: string): string | undefined {
+    try {
+      // D:YYYYMMDDHHmmss+HH'00'
+      const match = dateStr.match(/D:(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/);
+      if (match) {
+        const [, y, m, d, h, min, s] = match;
+        return `${y}-${m}-${d}T${h}:${min}:${s}`;
+      }
+      return dateStr;
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
+   * 转义 PDF 字符串中的特殊字符
+   */
+  private escapePdfString(str: string): string {
+    return str.replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
   }
 }

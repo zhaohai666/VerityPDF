@@ -34,6 +34,9 @@ export const IPC_CHANNELS = {
   COMPRESS_CHECK_GS: 'compress:checkGs',
   COMPRESS_SMART: 'compress:smart',
 
+  // 密文擦除
+  REDACT_APPLY: 'redact:apply',
+
   // 表单
   FORM_DETECT: 'form:detect',
   FORM_FILL: 'form:fill',
@@ -43,6 +46,8 @@ export const IPC_CHANNELS = {
   SIGNATURE_SIGN: 'signature:sign',
   SIGNATURE_VERIFY: 'signature:verify',
   SIGNATURE_LOAD_CERT: 'signature:loadCert',
+  SIGNATURE_PADES: 'signature:signPades',
+  SIGNATURE_VERIFY_PADES: 'signature:verifyPades',
 
   // 格式转换
   CONVERT_CHECK: 'convert:check',
@@ -167,6 +172,9 @@ export interface VerityAPI {
   checkGhostscript(): Promise<{ available: boolean; version?: string }>;
   smartCompress(pdfData: string, options: SmartCompressOptions): Promise<ArrayBuffer>;
 
+  // 密文擦除
+  redactPdf(pdfData: string, rects: RedactionRect[]): Promise<ArrayBuffer>;
+
   // 表单
   detectFormFields(pdfData: string): Promise<FormFieldInfo[]>;
   fillFormFields(pdfData: string, values: Record<string, string | boolean>): Promise<ArrayBuffer>;
@@ -176,6 +184,8 @@ export interface VerityAPI {
   signPDF(pdfData: string, options: SignatureOptions): Promise<unknown>;
   verifySignature(pdfData: string): Promise<unknown>;
   loadCertificate(p12Path: string, password: string): Promise<unknown>;
+  signPades(pdfData: string, options: PadesSignOptions): Promise<SignatureResult>;
+  verifyPades(pdfData: string): Promise<VerifyResult>;
 
   // 格式转换
   checkLibreOffice(): Promise<{ available: boolean; version?: string; path: string }>;
@@ -269,6 +279,63 @@ export interface SignatureOptions {
   location: string;
   p12Path?: string;
   p12Password?: string;
+}
+
+/** PAdES 签名选项 */
+export interface PadesSignOptions {
+  signerName: string;
+  reason: string;
+  location: string;
+  contactInfo?: string;
+  p12Path?: string;
+  p12Password?: string;
+  visibleSignature?: {
+    page: number;
+    rect: { x: number; y: number; width: number; height: number };
+    appearanceImage?: string;  // base64 PNG
+    showTimestamp: boolean;
+  };
+}
+
+/** 签名结果 */
+export interface SignatureResult {
+  signedPdf: ArrayBuffer;
+  signatureInfo: {
+    signer: string;
+    timestamp: string;
+    hashAlgorithm: string;
+    certificateInfo: CertificateInfo;
+  };
+}
+
+/** 证书信息 */
+export interface CertificateInfo {
+  subject: string;
+  issuer: string;
+  serialNumber: string;
+  validFrom: string;
+  validTo: string;
+  fingerprint: string;
+}
+
+/** 签名验证结果 */
+export interface VerifyResult {
+  isSigned: boolean;
+  isValid: boolean;
+  signer?: string;
+  timestamp?: string;
+  certificateInfo?: CertificateInfo;
+  documentIntact: boolean;
+  message: string;
+}
+
+/** 擦除矩形（PDF 点坐标） */
+export interface RedactionRect {
+  page: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 }
 
 /** 格式转换选项 */

@@ -13,6 +13,7 @@ import { BatchPageService } from '../batch/BatchPageService';
 import { WatermarkService } from '../batch/WatermarkService';
 import { TaskQueueService, type PipelineStep } from '../batch/TaskQueueService';
 import { CompressService } from '../batch/CompressService';
+import { RedactionService } from '../redaction/RedactionService';
 
 const MAX_FILE_SIZE = 500 * 1024 * 1024;
 const ALLOWED_EXTENSIONS = ['.pdf'];
@@ -359,6 +360,46 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   registerIpcHandler<{ p12Path: string; password: string }, unknown>('signature:loadCert', async ({ p12Path, password }) => {
     if (!p12Path) throw new Error('无效的证书路径');
     return signatureService.loadP12(p12Path, password);
+  });
+
+  // PAdES 签名
+  registerIpcHandler<{
+    pdfData: string;
+    options: {
+      signerName: string; reason: string; location: string; contactInfo?: string;
+      p12Path?: string; p12Password?: string;
+      visibleSignature?: {
+        page: number; rect: { x: number; y: number; width: number; height: number };
+        appearanceImage?: string; showTimestamp: boolean;
+      };
+    };
+  }, unknown>('signature:signPades', async ({ pdfData, options }) => {
+    if (!pdfData) throw new Error('无效的 PDF 数据');
+    const binary = Buffer.from(pdfData, 'base64');
+    const arrayBuffer = binary.buffer.slice(binary.byteOffset, binary.byteOffset + binary.byteLength) as ArrayBuffer;
+    return signatureService.signPades(arrayBuffer, options as any);
+  });
+
+  registerIpcHandler<{ pdfData: string }, unknown>('signature:verifyPades', async ({ pdfData }) => {
+    if (!pdfData) throw new Error('无效的 PDF 数据');
+    const binary = Buffer.from(pdfData, 'base64');
+    const arrayBuffer = binary.buffer.slice(binary.byteOffset, binary.byteOffset + binary.byteLength) as ArrayBuffer;
+    return signatureService.verifyPades(arrayBuffer);
+  });
+
+  // 密文擦除 IPC
+  const redactionService = new RedactionService();
+
+  registerIpcHandler<{
+    pdfData: string;
+    rects: Array<{ page: number; x: number; y: number; width: number; height: number }>;
+  }, ArrayBuffer>('redact:apply', async ({ pdfData, rects }) => {
+    if (!pdfData) throw new Error('无效的 PDF 数据');
+    if (!rects || rects.length === 0) throw new Error('没有擦除区域');
+    const binary = Buffer.from(pdfData, 'base64');
+    const arrayBuffer = binary.buffer.slice(binary.byteOffset, binary.byteOffset + binary.byteLength) as ArrayBuffer;
+    const result = await redactionService.redact(arrayBuffer, rects);
+    return result.data;
   });
 
   // 页面操作 IPC（删除/重排/插入/合并）
