@@ -70,6 +70,13 @@
       "dist/**/*",
       "dist-electron/**/*"
     ],
+    "extraResources": [
+      {
+        "from": "vendor",
+        "to": "vendor",
+        "filter": ["**/*"]
+      }
+    ],
     "mac": {
       "target": "dmg",
       "icon": "resources/icon.png"

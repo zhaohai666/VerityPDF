@@ -32,9 +32,10 @@ const STATUS_LABELS: Record<string, string> = {
 export const OCRPanel: React.FC = () => {
   const {
     isRecognizing, progress, result, selectedPage, language, panelVisible,
-    regionMode, selectedRegion,
+    regionMode, selectedRegion, preprocessOptions,
     setIsRecognizing, setProgress, setResult, setSelectedPage,
     setLanguage, setPanelVisible, setRegionMode, setSelectedRegion,
+    setPreprocessOptions,
   } = useOCRStore();
 
   const currentPage = usePdfStore((s) => s.currentPage);
@@ -72,11 +73,12 @@ export const OCRPanel: React.FC = () => {
         canvas.remove();
         setResult(ocrResult);
       } else {
-        // 整页识别
+        // 整页识别（传入预处理选项）
         const ocrResult = await ocrService.recognizePage(
           pdfService,
           selectedPage || currentPage,
           2.0,
+          { preprocess: preprocessOptions },
           (p) => setProgress(p)
         );
         setResult(ocrResult);
@@ -86,7 +88,7 @@ export const OCRPanel: React.FC = () => {
     } finally {
       setIsRecognizing(false);
     }
-  }, [selectedPage, currentPage, language, regionMode, selectedRegion]);
+  }, [selectedPage, currentPage, language, regionMode, selectedRegion, preprocessOptions]);
 
   // 复制结果
   const handleCopy = useCallback(async () => {
@@ -195,6 +197,70 @@ export const OCRPanel: React.FC = () => {
               复制结果
             </button>
           )}
+
+          {/* 图像增强面板 */}
+          <details className="ocr-enhance-panel">
+            <summary>图像增强 (OpenCV)</summary>
+            <div className="ocr-enhance-options">
+              <label className="ocr-enhance-row">
+                <input
+                  type="checkbox"
+                  checked={preprocessOptions.denoise}
+                  onChange={(e) => setPreprocessOptions({ ...preprocessOptions, denoise: e.target.checked })}
+                  disabled={isRecognizing}
+                />
+                去噪
+              </label>
+              {preprocessOptions.denoise && (
+                <label className="ocr-enhance-row ocr-enhance-slider">
+                  强度: {preprocessOptions.denoiseStrength}
+                  <input
+                    type="range"
+                    min={1} max={10} step={1}
+                    value={preprocessOptions.denoiseStrength}
+                    onChange={(e) => setPreprocessOptions({ ...preprocessOptions, denoiseStrength: Number(e.target.value) })}
+                    disabled={isRecognizing}
+                  />
+                </label>
+              )}
+              <label className="ocr-enhance-row">
+                <input
+                  type="checkbox"
+                  checked={preprocessOptions.deskew}
+                  onChange={(e) => setPreprocessOptions({ ...preprocessOptions, deskew: e.target.checked })}
+                  disabled={isRecognizing}
+                />
+                倾斜校正
+              </label>
+              <label className="ocr-enhance-row">
+                <input
+                  type="checkbox"
+                  checked={preprocessOptions.contrastEnhance}
+                  onChange={(e) => setPreprocessOptions({ ...preprocessOptions, contrastEnhance: e.target.checked })}
+                  disabled={isRecognizing}
+                />
+                对比度增强
+              </label>
+              <label className="ocr-enhance-row">
+                <input
+                  type="checkbox"
+                  checked={preprocessOptions.sharpen}
+                  onChange={(e) => setPreprocessOptions({ ...preprocessOptions, sharpen: e.target.checked })}
+                  disabled={isRecognizing}
+                />
+                锐化
+              </label>
+              <label className="ocr-enhance-row">
+                <input
+                  type="checkbox"
+                  checked={preprocessOptions.binarize}
+                  onChange={(e) => setPreprocessOptions({ ...preprocessOptions, binarize: e.target.checked })}
+                  disabled={isRecognizing}
+                />
+                二值化 (OTSU)
+              </label>
+            </div>
+          </details>
 
           {/* 生成可搜索 PDF 入口 */}
           <div className="ocr-divider" />

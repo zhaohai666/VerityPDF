@@ -28,6 +28,7 @@ export const FormatConvertDialog: React.FC<FormatConvertDialogProps> = ({ open, 
   const [activeTab, setActiveTab] = useState<TabKey>('export');
   const [loAvailable, setLoAvailable] = useState<boolean | null>(null);
   const [loVersion, setLoVersion] = useState('');
+  const [loSource, setLoSource] = useState('');
   const [targetFormat, setTargetFormat] = useState('docx');
   const [imageDpi, setImageDpi] = useState(300);
   const [jpegQuality, setJpegQuality] = useState(95);
@@ -46,6 +47,7 @@ export const FormatConvertDialog: React.FC<FormatConvertDialogProps> = ({ open, 
     window.verityAPI.checkLibreOffice().then((info) => {
       setLoAvailable(info.available);
       setLoVersion(info.version || '');
+      setLoSource((info as { source?: string }).source || '');
     }).catch(() => {
       setLoAvailable(false);
     });
@@ -184,7 +186,13 @@ export const FormatConvertDialog: React.FC<FormatConvertDialogProps> = ({ open, 
       <div className="dialog convert-dialog" onClick={(e) => e.stopPropagation()}>
         <div className="dialog-header">
           <h2>格式转换</h2>
-          {loVersion && <span className="lo-version">{loVersion}</span>}
+          {loVersion && (
+            <span className="lo-version">
+              {loVersion}
+              {loSource === 'portable' && <span className="lo-source-tag portable">内置便携版</span>}
+              {loSource === 'system' && <span className="lo-source-tag system">系统安装</span>}
+            </span>
+          )}
           <button className="dialog-close" onClick={onClose} aria-label="关闭">&times;</button>
         </div>
 

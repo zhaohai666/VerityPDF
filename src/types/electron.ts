@@ -30,6 +30,10 @@ export const IPC_CHANNELS = {
   ENCRYPT_DECRYPT: 'encrypt:decrypt',
   ENCRYPT_CHECK_QPDF: 'encrypt:checkQpdf',
 
+  // 压缩
+  COMPRESS_CHECK_GS: 'compress:checkGs',
+  COMPRESS_SMART: 'compress:smart',
+
   // 表单
   FORM_DETECT: 'form:detect',
   FORM_FILL: 'form:fill',
@@ -60,6 +64,19 @@ export const IPC_CHANNELS = {
   PDF_MULTI_MERGE: 'pdf:multiMerge',
   PDF_SPLIT: 'pdf:split',
   PDF_SELECT_FILES: 'pdf:selectFiles',
+
+  // 任务队列
+  TASK_SUBMIT: 'task:submit',
+  TASK_CANCEL: 'task:cancel',
+  TASK_CANCEL_ALL: 'task:cancelAll',
+  TASK_RETRY: 'task:retry',
+  TASK_GET_STATUS: 'task:getStatus',
+  TASK_CLEAR_COMPLETED: 'task:clearCompleted',
+  TASK_REMOVE: 'task:remove',
+  TASK_PROGRESS: 'task:progress',
+  TASK_COMPLETED: 'task:completed',
+  TASK_SELECT_OUTPUT: 'task:selectOutput',
+  TASK_SELECT_INPUTS: 'task:selectInputs',
 
   // 应用
   APP_VERSION: 'app:getVersion',
@@ -146,6 +163,10 @@ export interface VerityAPI {
   decryptWithPassword(pdfData: string, password: string): Promise<ArrayBuffer>;
   checkQpdf(): Promise<{ available: boolean; version?: string }>;
 
+  // 压缩
+  checkGhostscript(): Promise<{ available: boolean; version?: string }>;
+  smartCompress(pdfData: string, options: SmartCompressOptions): Promise<ArrayBuffer>;
+
   // 表单
   detectFormFields(pdfData: string): Promise<FormFieldInfo[]>;
   fillFormFields(pdfData: string, values: Record<string, string | boolean>): Promise<ArrayBuffer>;
@@ -183,6 +204,19 @@ export interface VerityAPI {
   multiMergePdfs(filePaths: string[]): Promise<ArrayBuffer>;
   splitPdf(pdfData: string, ranges: string[], outputDir: string): Promise<string[]>;
   selectPdfFiles(): Promise<string[]>;
+
+  // 任务队列
+  submitTask(options: TaskSubmitOptions): Promise<string>;
+  cancelTask(taskId: string): Promise<void>;
+  cancelAllTasks(): Promise<void>;
+  retryTask(taskId: string): Promise<string | null>;
+  getTaskStatus(): Promise<TaskQueueStatus>;
+  clearCompletedTasks(): Promise<void>;
+  removeTask(taskId: string): Promise<void>;
+  selectOutputDir(): Promise<string | null>;
+  selectInputFiles(extensions: string[]): Promise<string[]>;
+  onTaskProgress(callback: (task: TaskItemInfo) => void): () => void;
+  onTaskCompleted(callback: (task: TaskItemInfo) => void): () => void;
 }
 
 /** 页面操作类型 */
@@ -204,6 +238,16 @@ export interface EncryptionOptions {
     fillForms: boolean;
     extract: boolean;
   };
+}
+
+/** 智能压缩选项 */
+export interface SmartCompressOptions {
+  preset?: 'minimum' | 'balanced' | 'highQuality';
+  imageDpi?: number;
+  imageQuality?: number;
+  grayscale?: boolean;
+  removeMetadata?: boolean;
+  fontSubset?: boolean;
 }
 
 /** 表单字段信息 */
@@ -297,4 +341,58 @@ export interface HeaderFooterOptions {
   fontFamily?: string;
   color?: string;
   pageIndices?: number[];
+}
+
+// ========== 任务队列类型 ==========
+
+/** 任务类型 */
+export type TaskType = 'convert' | 'watermark' | 'encrypt' | 'compress' | 'pipeline';
+
+/** 工作流步骤 */
+export interface PipelineStep {
+  type: 'watermark' | 'encrypt' | 'compress' | 'convert' | 'rotate' | 'pageNumbers';
+  options: Record<string, unknown>;
+  label: string;
+}
+
+/** 工作流模板 */
+export interface WorkflowTemplate {
+  id: string;
+  name: string;
+  steps: PipelineStep[];
+  createdAt: number;
+  updatedAt: number;
+}
+
+/** 提交任务参数 */
+export interface TaskSubmitOptions {
+  type: TaskType;
+  filePaths: string[];
+  outputDir: string;
+  label: string;
+  options?: Record<string, unknown>;
+  pipelineSteps?: PipelineStep[];
+}
+
+/** 任务项信息 */
+export interface TaskItemInfo {
+  id: string;
+  type: TaskType;
+  label: string;
+  filePath: string;
+  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
+  progress: number;
+  message: string;
+  error?: string;
+  startTime?: number;
+  endTime?: number;
+}
+
+/** 队列状态 */
+export interface TaskQueueStatus {
+  tasks: TaskItemInfo[];
+  running: boolean;
+  activeCount: number;
+  completedCount: number;
+  failedCount: number;
 }

@@ -343,6 +343,52 @@ export const Toolbar: React.FC = () => {
             </svg>
             <span className="toolbar-label">页面</span>
           </button>
+          <button
+            className="toolbar-btn task-center-btn"
+            onClick={() => window.dispatchEvent(new CustomEvent('verity:taskCenter'))}
+            disabled={!isLoaded}
+            title="批量任务中心"
+            aria-label="批量任务中心"
+          >
+            <svg className="toolbar-icon-svg" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+              <rect x="3" y="4" width="18" height="4" rx="1" fill="none" stroke="currentColor" strokeWidth="1.5"/>
+              <rect x="3" y="10" width="18" height="4" rx="1" fill="none" stroke="currentColor" strokeWidth="1.5"/>
+              <rect x="3" y="16" width="18" height="4" rx="1" fill="none" stroke="currentColor" strokeWidth="1.5"/>
+              <circle cx="17" cy="6" r="1" fill="currentColor"/>
+              <circle cx="17" cy="12" r="1" fill="currentColor"/>
+              <circle cx="17" cy="18" r="1" fill="currentColor"/>
+            </svg>
+            <span className="toolbar-label">任务</span>
+          </button>
+          <button
+            className="toolbar-btn pipeline-btn"
+            onClick={() => window.dispatchEvent(new CustomEvent('verity:pipeline'))}
+            disabled={!isLoaded}
+            title="工作流模板"
+            aria-label="工作流模板"
+          >
+            <svg className="toolbar-icon-svg" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+              <rect x="2" y="3" width="6" height="6" rx="1" fill="none" stroke="currentColor" strokeWidth="1.5"/>
+              <rect x="9" y="9" width="6" height="6" rx="1" fill="none" stroke="currentColor" strokeWidth="1.5"/>
+              <rect x="16" y="15" width="6" height="6" rx="1" fill="none" stroke="currentColor" strokeWidth="1.5"/>
+              <path d="M8 6h2M14 12h2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+            </svg>
+            <span className="toolbar-label">工作流</span>
+          </button>
+          <button
+            className="toolbar-btn compress-btn"
+            onClick={() => window.dispatchEvent(new CustomEvent('verity:smartCompress'))}
+            disabled={!isLoaded}
+            title="智能压缩 (Ghostscript)"
+            aria-label="智能压缩"
+          >
+            <svg className="toolbar-icon-svg" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+              <rect x="4" y="4" width="16" height="16" rx="2" fill="none" stroke="currentColor" strokeWidth="1.5"/>
+              <path d="M8 12h8M12 8v8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+              <path d="M7 17l2-2M17 7l-2 2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+            </svg>
+            <span className="toolbar-label">压缩</span>
+          </button>
         </div>
       </div>
     </div>

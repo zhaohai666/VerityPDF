@@ -3,6 +3,7 @@ import { usePdfStore } from '@/stores/pdfStore';
 import { useAnnotationStore } from '@/stores/annotationStore';
 import { useToolStore } from '@/stores/toolStore';
 import { useUIStore } from '@/stores/uiStore';
+import { useTaskStore } from '@/stores/taskStore';
 import { PDFService } from '@/services/pdf/PDFService';
 import { PageRenderer } from './PageRenderer';
 
@@ -18,6 +19,9 @@ const BatchPageDialog = React.lazy(() => import('@/components/batch/BatchPageDia
 const WatermarkDialog = React.lazy(() => import('@/components/batch/WatermarkDialog').then(m => ({ default: m.WatermarkDialog })));
 const SearchablePdfDialog = React.lazy(() => import('@/components/ocr/SearchablePdfDialog').then(m => ({ default: m.SearchablePdfDialog })));
 const PageOpsDialog = React.lazy(() => import('@/components/pageops/PageOpsDialog').then(m => ({ default: m.PageOpsDialog })));
+const TaskCenterDialog = React.lazy(() => import('@/components/batch/TaskCenterDialog').then(m => ({ default: m.TaskCenterDialog })));
+const PipelineEditorDialog = React.lazy(() => import('@/components/batch/PipelineEditorDialog').then(m => ({ default: m.PipelineEditorDialog })));
+const SmartCompressDialog = React.lazy(() => import('@/components/compress/SmartCompressDialog').then(m => ({ default: m.SmartCompressDialog })));
 
 const pdfService = new PDFService();
 
@@ -63,6 +67,9 @@ export const PDFViewer: React.FC = () => {
   const [showWatermarkDialog, setShowWatermarkDialog] = useState(false);
   const [showSearchablePdfDialog, setShowSearchablePdfDialog] = useState(false);
   const [showPageOpsDialog, setShowPageOpsDialog] = useState(false);
+  const [showTaskCenterDialog, setShowTaskCenterDialog] = useState(false);
+  const [showPipelineDialog, setShowPipelineDialog] = useState(false);
+  const [showSmartCompressDialog, setShowSmartCompressDialog] = useState(false);
   const [pendingPasswordPath, setPendingPasswordPath] = useState<string | null>(null);
   const [pendingPasswordData, setPendingPasswordData] = useState<ArrayBuffer | null>(null);
 
@@ -411,6 +418,9 @@ export const PDFViewer: React.FC = () => {
     const handleWatermark = () => setShowWatermarkDialog(true);
     const handleSearchablePdf = () => setShowSearchablePdfDialog(true);
     const handlePageOps = () => setShowPageOpsDialog(true);
+    const handleTaskCenter = () => setShowTaskCenterDialog(true);
+    const handlePipeline = () => setShowPipelineDialog(true);
+    const handleSmartCompress = () => setShowSmartCompressDialog(true);
     const handleReloadPdf = () => {
       // 页面操作后重新加载文档
       const fp = usePdfStore.getState().filePath;
@@ -426,6 +436,9 @@ export const PDFViewer: React.FC = () => {
     window.addEventListener('verity:watermark', handleWatermark);
     window.addEventListener('verity:ocr-searchable', handleSearchablePdf);
     window.addEventListener('verity:pageops', handlePageOps);
+    window.addEventListener('verity:taskCenter', handleTaskCenter);
+    window.addEventListener('verity:pipeline', handlePipeline);
+    window.addEventListener('verity:smartCompress', handleSmartCompress);
     window.addEventListener('verity:reloadPdf', handleReloadPdf);
     return () => {
       unsubMenu();
@@ -440,6 +453,9 @@ export const PDFViewer: React.FC = () => {
       window.removeEventListener('verity:watermark', handleWatermark);
       window.removeEventListener('verity:ocr-searchable', handleSearchablePdf);
       window.removeEventListener('verity:pageops', handlePageOps);
+      window.removeEventListener('verity:taskCenter', handleTaskCenter);
+      window.removeEventListener('verity:pipeline', handlePipeline);
+      window.removeEventListener('verity:smartCompress', handleSmartCompress);
       window.removeEventListener('verity:reloadPdf', handleReloadPdf);
     };
   }, [handleOpenFile, loadFileFromPath, handleExportPDF]);
@@ -456,6 +472,13 @@ export const PDFViewer: React.FC = () => {
     };
     checkTestFile();
   }, [loadFileFromPath]);
+
+  // 初始化任务队列监听
+  useEffect(() => {
+    const cleanup = useTaskStore.getState().initListeners();
+    useTaskStore.getState().loadTemplates();
+    return cleanup;
+  }, []);
 
   // 密码提交处理
   const handlePasswordSubmit = useCallback(async (password: string) => {
@@ -711,6 +734,9 @@ export const PDFViewer: React.FC = () => {
         <WatermarkDialog open={showWatermarkDialog} onClose={() => setShowWatermarkDialog(false)} />
         <SearchablePdfDialog open={showSearchablePdfDialog} onClose={() => setShowSearchablePdfDialog(false)} />
         <PageOpsDialog open={showPageOpsDialog} onClose={() => setShowPageOpsDialog(false)} />
+        {showTaskCenterDialog && <TaskCenterDialog onClose={() => setShowTaskCenterDialog(false)} />}
+        {showPipelineDialog && <PipelineEditorDialog onClose={() => setShowPipelineDialog(false)} />}
+        {showSmartCompressDialog && <SmartCompressDialog open={showSmartCompressDialog} onClose={() => setShowSmartCompressDialog(false)} />}
       </Suspense>
     </>
   );

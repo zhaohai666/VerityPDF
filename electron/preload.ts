@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { VerityAPI, FileDialogOptions } from '../src/types/electron';
+import type { VerityAPI, FileDialogOptions, TaskItemInfo } from '../src/types/electron';
 
 const APP_VERSION = '1.0.0';
 
@@ -78,6 +78,13 @@ const api: VerityAPI = {
   checkQpdf: () =>
     wrapInvoke<{ available: boolean; version?: string }>('encrypt:checkQpdf', {}),
 
+  // 压缩
+  checkGhostscript: () =>
+    wrapInvoke<{ available: boolean; version?: string }>('compress:checkGs', {}),
+
+  smartCompress: (pdfData, options) =>
+    wrapInvoke<ArrayBuffer>('compress:smart', { pdfData, options }),
+
   detectFormFields: (pdfData) =>
     wrapInvoke('form:detect', { pdfData }),
 
@@ -149,6 +156,46 @@ const api: VerityAPI = {
     const handler = (_: Electron.IpcRendererEvent, info: { progress: number; message: string }) => callback(info);
     ipcRenderer.on('batch:progress', handler);
     return () => ipcRenderer.removeListener('batch:progress', handler);
+  },
+
+  // 任务队列
+  submitTask: (options) =>
+    wrapInvoke<string>('task:submit', options),
+
+  cancelTask: (taskId) =>
+    wrapInvoke<void>('task:cancel', { taskId }),
+
+  cancelAllTasks: () =>
+    wrapInvoke<void>('task:cancelAll', {}),
+
+  retryTask: (taskId) =>
+    wrapInvoke<string | null>('task:retry', { taskId }),
+
+  getTaskStatus: () =>
+    wrapInvoke('task:getStatus', {}),
+
+  clearCompletedTasks: () =>
+    wrapInvoke<void>('task:clearCompleted', {}),
+
+  removeTask: (taskId) =>
+    wrapInvoke<void>('task:remove', { taskId }),
+
+  selectOutputDir: () =>
+    wrapInvoke<string | null>('task:selectOutput', {}),
+
+  selectInputFiles: (extensions) =>
+    wrapInvoke<string[]>('task:selectInputs', { extensions }),
+
+  onTaskProgress: (callback) => {
+    const handler = (_: Electron.IpcRendererEvent, task: TaskItemInfo) => callback(task);
+    ipcRenderer.on('task:progress', handler);
+    return () => ipcRenderer.removeListener('task:progress', handler);
+  },
+
+  onTaskCompleted: (callback) => {
+    const handler = (_: Electron.IpcRendererEvent, task: TaskItemInfo) => callback(task);
+    ipcRenderer.on('task:completed', handler);
+    return () => ipcRenderer.removeListener('task:completed', handler);
   },
 };
 

@@ -1,5 +1,6 @@
 import { createWorker, type Worker } from 'tesseract.js';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+import { ImagePreprocessor, type PreprocessOptions } from './ImagePreprocessor';
 
 /** OCR 识别结果 */
 export interface OCRResult {
@@ -23,6 +24,7 @@ export type OCRProgressCallback = (progress: { status: string; progress: number 
 export class OCRService {
   private worker: Worker | null = null;
   private currentLang = 'eng+chi_sim';
+  private preprocessor = new ImagePreprocessor();
 
   /**
    * 初始化 OCR Worker
@@ -52,16 +54,43 @@ export class OCRService {
 
   /**
    * 识别整页文字
+   * @param options.preprocess 预处理选项（传入则启用 OpenCV 预处理）
    */
   async recognizeImage(
     imageSource: HTMLCanvasElement | HTMLImageElement | string,
+    optionsOrProgress?: { preprocess?: PreprocessOptions } | OCRProgressCallback,
     onProgress?: OCRProgressCallback
   ): Promise<OCRResult> {
-    if (!this.worker) {
-      await this.initWorker('eng+chi_sim', onProgress);
+    // 兼容旧签名：recognizeImage(source, onProgress)
+    let progressCb = onProgress;
+    let preprocessOpts: PreprocessOptions | undefined;
+    if (typeof optionsOrProgress === 'function') {
+      progressCb = optionsOrProgress;
+    } else if (optionsOrProgress) {
+      preprocessOpts = optionsOrProgress.preprocess;
     }
 
-    const result = await this.worker!.recognize(imageSource);
+    if (!this.worker) {
+      await this.initWorker('eng+chi_sim', progressCb);
+    }
+
+    // 预处理（OpenCV）
+    let processedSource = imageSource;
+    if (preprocessOpts && imageSource instanceof HTMLCanvasElement && this.preprocessor.isAvailable()) {
+      try {
+        processedSource = this.preprocessor.preprocess(imageSource, preprocessOpts);
+      } catch (err) {
+        console.warn('[OCRService] Preprocessing failed, using original:', err);
+      }
+    }
+
+    // 优化中文识别参数
+    await this.worker!.setParameters({
+      tessedit_pageseg_mode: 6 as any,  // PSM 6: 假设统一文本块
+      preserve_interword_spaces: '1',
+    });
+
+    const result = await this.worker!.recognize(processedSource);
 
     // Tesseract.js 返回 words 在 lines 中
     const allWords: OCRResult['words'] = [];
@@ -119,19 +148,30 @@ export class OCRService {
   /**
    * 从 PDF 页面截图进行 OCR
    * 将 PDF 页面渲染到临时 Canvas，然后进行识别
+   * @param options.preprocess 预处理选项
    */
   async recognizePage(
     pdfService: { renderPage: (page: number, canvas: HTMLCanvasElement, scale: number) => Promise<void> },
     pageNumber: number,
     scale: number = 2.0,
+    optionsOrProgress?: { preprocess?: PreprocessOptions } | OCRProgressCallback,
     onProgress?: OCRProgressCallback
   ): Promise<OCRResult> {
+    // 兼容旧签名
+    let progressCb = onProgress;
+    let preprocessOpts: PreprocessOptions | undefined;
+    if (typeof optionsOrProgress === 'function') {
+      progressCb = optionsOrProgress;
+    } else if (optionsOrProgress) {
+      preprocessOpts = optionsOrProgress.preprocess;
+    }
+
     // 创建临时 Canvas
     const canvas = document.createElement('canvas');
     await pdfService.renderPage(pageNumber, canvas, scale);
 
     try {
-      return await this.recognizeImage(canvas, onProgress);
+      return await this.recognizeImage(canvas, { preprocess: preprocessOpts }, progressCb);
     } finally {
       canvas.remove();
     }
@@ -152,6 +192,7 @@ export class OCRService {
   /**
    * 生成可搜索 PDF
    * 逐页渲染 + OCR + 叠加不可见文字层
+   * @param preprocessOpts 可选预处理选项
    */
   async createSearchablePdf(
     pdfData: ArrayBuffer,
@@ -159,7 +200,8 @@ export class OCRService {
     pageCount: number,
     langs: string,
     onProgress?: OCRProgressCallback,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    preprocessOpts?: PreprocessOptions
   ): Promise<ArrayBuffer> {
     await this.initWorker(langs, onProgress);
 
@@ -179,9 +221,20 @@ export class OCRService {
       const canvas = document.createElement('canvas');
       await pdfService.renderPage(pageNum, canvas, scale);
 
+      // 可选预处理
+      let ocrSource: HTMLCanvasElement = canvas;
+      if (preprocessOpts && this.preprocessor.isAvailable()) {
+        try {
+          ocrSource = this.preprocessor.preprocess(canvas, preprocessOpts);
+        } catch (err) {
+          console.warn(`[OCRService] Preprocess page ${pageNum} failed:`, err);
+        }
+      }
+
       // OCR 识别
-      const result = await this.worker!.recognize(canvas);
+      const result = await this.worker!.recognize(ocrSource);
       canvas.remove();
+      if (ocrSource !== canvas) ocrSource.remove();
 
       if (signal?.aborted) throw new Error('OCR 已取消');
 

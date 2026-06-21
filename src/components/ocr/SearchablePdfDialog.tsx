@@ -2,6 +2,7 @@ import React, { useState, useCallback, useRef } from 'react';
 import { usePdfStore } from '@/stores/pdfStore';
 import { useUIStore } from '@/stores/uiStore';
 import { OCRService } from '@/services/ocr/OCRService';
+import { type PreprocessOptions, DEFAULT_PREPROCESS_OPTIONS } from '@/services/ocr/ImagePreprocessor';
 
 interface SearchablePdfDialogProps {
   open: boolean;
@@ -33,6 +34,7 @@ export const SearchablePdfDialog: React.FC<SearchablePdfDialogProps> = ({ open, 
   const [pageRange, setPageRange] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState({ status: '', value: 0 });
+  const [preprocessOpts, setPreprocessOpts] = useState<PreprocessOptions>({ ...DEFAULT_PREPROCESS_OPTIONS });
   const abortRef = useRef<AbortController | null>(null);
   const ocrServiceRef = useRef<OCRService | null>(null);
 
@@ -91,7 +93,8 @@ export const SearchablePdfDialog: React.FC<SearchablePdfDialogProps> = ({ open, 
         indices.length,
         language,
         (p) => setProgress({ status: p.status, value: p.progress }),
-        controller.signal
+        controller.signal,
+        preprocessOpts
       );
 
       if (controller.signal.aborted) return;
@@ -123,7 +126,7 @@ export const SearchablePdfDialog: React.FC<SearchablePdfDialogProps> = ({ open, 
       abortRef.current = null;
       ocrService.destroy().catch(() => {});
     }
-  }, [isProcessing, filePath, language, pageRange, totalPages, showToast, onClose]);
+  }, [isProcessing, filePath, language, pageRange, totalPages, showToast, onClose, preprocessOpts]);
 
   // 取消处理
   const handleCancel = useCallback(() => {
@@ -174,6 +177,37 @@ export const SearchablePdfDialog: React.FC<SearchablePdfDialogProps> = ({ open, 
               disabled={isProcessing}
             />
             <p className="form-hint">留空表示所有页面（共 {totalPages} 页）</p>
+          </div>
+
+          {/* 图像预处理选项 */}
+          <div className="form-group">
+            <label>图像增强 (OpenCV)</label>
+            <div className="ocr-enhance-options">
+              <label className="ocr-enhance-row">
+                <input type="checkbox" checked={preprocessOpts.denoise}
+                  onChange={(e) => setPreprocessOpts({ ...preprocessOpts, denoise: e.target.checked })}
+                  disabled={isProcessing} />
+                去噪
+              </label>
+              <label className="ocr-enhance-row">
+                <input type="checkbox" checked={preprocessOpts.deskew}
+                  onChange={(e) => setPreprocessOpts({ ...preprocessOpts, deskew: e.target.checked })}
+                  disabled={isProcessing} />
+                倾斜校正
+              </label>
+              <label className="ocr-enhance-row">
+                <input type="checkbox" checked={preprocessOpts.contrastEnhance}
+                  onChange={(e) => setPreprocessOpts({ ...preprocessOpts, contrastEnhance: e.target.checked })}
+                  disabled={isProcessing} />
+                对比度增强
+              </label>
+              <label className="ocr-enhance-row">
+                <input type="checkbox" checked={preprocessOpts.binarize}
+                  onChange={(e) => setPreprocessOpts({ ...preprocessOpts, binarize: e.target.checked })}
+                  disabled={isProcessing} />
+                二值化
+              </label>
+            </div>
           </div>
 
           {isProcessing && (

@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:;" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; worker-src 'self' blob:;" />
     <title>VerityPDF</title>
     <style>
       /* 骨架屏 - React 挂载前显示 */
@@ -41,6 +41,16 @@
         100% { width: 10%; margin-left: 90%; }
       }
     </style>
+    <!-- OpenCV.js 图像预处理引擎 (可选，用于 OCR 增强) -->
+    <script>
+      window.__opencvReady = false;
+      var script = document.createElement('script');
+      script.src = '/opencv/opencv.js';
+      script.async = true;
+      script.onload = function() { window.__opencvReady = true; window.dispatchEvent(new Event('opencv-ready')); };
+      script.onerror = function() { console.warn('[OpenCV] Failed to load opencv.js, OCR preprocessing will be disabled'); };
+      document.head.appendChild(script);
+    </script>
   </head>
   <body>
     <div id="root">

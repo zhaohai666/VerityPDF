@@ -11,6 +11,8 @@ import { LibreOfficeService } from '../convert/LibreOfficeService';
 import { PDFRepairService } from '../repair/PDFRepairService';
 import { BatchPageService } from '../batch/BatchPageService';
 import { WatermarkService } from '../batch/WatermarkService';
+import { TaskQueueService, type PipelineStep } from '../batch/TaskQueueService';
+import { CompressService } from '../batch/CompressService';
 
 const MAX_FILE_SIZE = 500 * 1024 * 1024;
 const ALLOWED_EXTENSIONS = ['.pdf'];
@@ -284,6 +286,34 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   // 检测 QPDF 可用性
   registerIpcHandler<{}, { available: boolean; version?: string }>('encrypt:checkQpdf', async () => {
     return encryptionService.isQpdfAvailable();
+  });
+
+  // 压缩 IPC
+  const compressService = new CompressService();
+  compressService.setMainWindow(mainWindow);
+
+  registerIpcHandler<{}, { available: boolean; version?: string }>('compress:checkGs', async () => {
+    return compressService.isGhostscriptAvailable();
+  });
+
+  registerIpcHandler<{
+    pdfData: string;
+    options: {
+      preset?: 'minimum' | 'balanced' | 'highQuality';
+      imageDpi?: number;
+      imageQuality?: number;
+      grayscale?: boolean;
+      removeMetadata?: boolean;
+      fontSubset?: boolean;
+    };
+  }, ArrayBuffer>('compress:smart', async ({ pdfData, options }) => {
+    if (!pdfData) throw new Error('无效的 PDF 数据');
+    const binary = Buffer.from(pdfData, 'base64');
+    const arrayBuffer = binary.buffer.slice(binary.byteOffset, binary.byteOffset + binary.byteLength) as ArrayBuffer;
+    return compressService.compress(arrayBuffer, {
+      quality: 'medium',  // 默认值，被 preset 覆盖
+      ...options,
+    });
   });
 
   // 表单 IPC
@@ -595,6 +625,96 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   }, string[]>('pdf:selectFiles', async () => {
     const result = await dialog.showOpenDialog(mainWindow, {
       filters: [{ name: 'PDF 文件', extensions: ['pdf'] }],
+      properties: ['openFile', 'multiSelections'],
+    });
+    return result.canceled ? [] : result.filePaths;
+  });
+
+  // ========== 任务队列 ==========
+  const taskQueueService = new TaskQueueService();
+  taskQueueService.setMainWindow(mainWindow);
+
+  registerIpcHandler<{
+    type: string;
+    filePaths: string[];
+    outputDir: string;
+    label: string;
+    options?: Record<string, unknown>;
+    pipelineSteps?: Array<{ type: string; options: Record<string, unknown>; label: string }>;
+  }, string>('task:submit', async (args) => {
+    if (!args.filePaths || args.filePaths.length === 0) throw new Error('未选择文件');
+    if (!args.outputDir) throw new Error('未选择输出目录');
+
+    const steps = args.pipelineSteps as PipelineStep[] | undefined;
+
+    // 为每个文件创建独立任务
+    const firstTaskId = taskQueueService.submitTask({
+      type: args.type as 'convert' | 'watermark' | 'encrypt' | 'compress' | 'pipeline',
+      label: args.label || args.filePaths[0].split(/[\\/]/).pop() || '任务',
+      filePath: args.filePaths[0],
+      outputDir: args.outputDir,
+      options: args.options || {},
+      pipelineSteps: steps,
+    });
+
+    // 批量提交其余文件
+    for (let i = 1; i < args.filePaths.length; i++) {
+      const fileName = args.filePaths[i].split(/[\\/]/).pop() || `文件 ${i + 1}`;
+      taskQueueService.submitTask({
+        type: args.type as 'convert' | 'watermark' | 'encrypt' | 'compress' | 'pipeline',
+        label: fileName,
+        filePath: args.filePaths[i],
+        outputDir: args.outputDir,
+        options: args.options || {},
+        pipelineSteps: steps,
+      });
+    }
+
+    return firstTaskId;
+  });
+
+  registerIpcHandler<{ taskId: string }, void>('task:cancel', async ({ taskId }) => {
+    taskQueueService.cancelTask(taskId);
+  });
+
+  registerIpcHandler<{}, void>('task:cancelAll', async () => {
+    taskQueueService.cancelAll();
+  });
+
+  registerIpcHandler<{ taskId: string }, string | null>('task:retry', async ({ taskId }) => {
+    return taskQueueService.retryTask(taskId);
+  });
+
+  registerIpcHandler<{}, {
+    tasks: unknown[];
+    running: boolean;
+    activeCount: number;
+    completedCount: number;
+    failedCount: number;
+  }>('task:getStatus', async () => {
+    return taskQueueService.getQueueStatus();
+  });
+
+  registerIpcHandler<{}, void>('task:clearCompleted', async () => {
+    taskQueueService.clearCompleted();
+  });
+
+  registerIpcHandler<{ taskId: string }, void>('task:remove', async ({ taskId }) => {
+    taskQueueService.removeTask(taskId);
+  });
+
+  registerIpcHandler<{}, string | null>('task:selectOutput', async () => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      properties: ['openDirectory', 'createDirectory'],
+      title: '选择输出目录',
+    });
+    return result.canceled ? null : result.filePaths[0];
+  });
+
+  registerIpcHandler<{ extensions: string[] }, string[]>('task:selectInputs', async ({ extensions }) => {
+    const exts = extensions && extensions.length > 0 ? extensions : ['pdf'];
+    const result = await dialog.showOpenDialog(mainWindow, {
+      filters: [{ name: '支持的文件', extensions: exts }],
       properties: ['openFile', 'multiSelections'],
     });
     return result.canceled ? [] : result.filePaths;
