@@ -131,6 +131,13 @@ const api: VerityAPI = {
   repairPDF: (filePath) =>
     wrapInvoke<ArrayBuffer>('pdf:repair', { filePath }),
 
+  // PDF 文本编辑
+  editText: (pdfData, options) =>
+    wrapInvoke<ArrayBuffer>('pdf:editText', { pdfData, options }),
+
+  getTextSegments: (pdfData, page) =>
+    wrapInvoke<Array<{ index: number; text: string; fontName: string; fontSize: number; page: number; position: { x: number; y: number } }>>('pdf:getTextSegments', { pdfData, page }),
+
   // 批量页面操作
   batchRotate: (pdfData, options) =>
     wrapInvoke<ArrayBuffer>('batch:pageOperate', { pdfData, options }),
@@ -207,6 +214,65 @@ const api: VerityAPI = {
     ipcRenderer.on('task:completed', handler);
     return () => ipcRenderer.removeListener('task:completed', handler);
   },
+
+  // PDF 叠加
+  overlayPdfs: (basePdfData, overlayPdfData, options) =>
+    wrapInvoke<ArrayBuffer>('pdf:overlay', { basePdfData, overlayPdfData, options }),
+
+  // 图片提取
+  extractImages: (pdfData) =>
+    wrapInvoke('pdf:extractImages', { pdfData }),
+
+  saveExtractedImages: (images, dirPath, baseName) =>
+    wrapInvoke<string[]>('pdf:saveExtractedImages', { images, dirPath, baseName }),
+
+  // 标注移除
+  detectAnnotations: (pdfData) =>
+    wrapInvoke('pdf:detectAnnotations', { pdfData }),
+
+  removeAnnotations: (pdfData, options) =>
+    wrapInvoke('pdf:removeAnnotations', { pdfData, options }),
+
+  // 元数据
+  getPdfMetadata: (pdfData) =>
+    wrapInvoke('pdf:getMetadata', { pdfData }),
+
+  setPdfMetadata: (pdfData, metadata) =>
+    wrapInvoke<ArrayBuffer>('pdf:setMetadata', { pdfData, metadata }),
+
+  // 页面缩放
+  resizePages: (pdfData, options) =>
+    wrapInvoke<ArrayBuffer>('pdf:resizePages', { pdfData, options }),
+
+  // N-up
+  createNUp: (pdfData, options) =>
+    wrapInvoke<ArrayBuffer>('pdf:nup', { pdfData, options }),
+
+  // 签名链验证
+  verifySignatureChain: (pdfData) =>
+    wrapInvoke('signature:verifyChain', { pdfData }),
+
+  // PDF Diff
+  diffPdfs: (pdfDataA, pdfDataB) =>
+    wrapInvoke('pdf:diff', { pdfDataA, pdfDataB }),
+
+  // 敏感信息涂黑
+  detectSensitiveInfo: (pdfData, rules) =>
+    wrapInvoke('pdf:detectSensitive', { pdfData, rules }),
+
+  redactSensitiveInfo: (pdfData, matches) =>
+    wrapInvoke('pdf:redactSensitive', { pdfData, matches }),
+
+  // 小册子
+  createBooklet: (pdfData, options) =>
+    wrapInvoke('pdf:booklet', { pdfData, options }),
+
+  // 颜色替换
+  detectColors: (pdfData) =>
+    wrapInvoke('pdf:detectColors', { pdfData }),
+
+  replaceColors: (pdfData, options) =>
+    wrapInvoke('pdf:replaceColors', { pdfData, options }),
 };
 
 contextBridge.exposeInMainWorld('verityAPI', api);

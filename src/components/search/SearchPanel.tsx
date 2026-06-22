@@ -2,6 +2,7 @@ import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { useSearchStore } from '@/stores/searchStore';
 import { usePdfStore } from '@/stores/pdfStore';
 import { useUIStore } from '@/stores/uiStore';
+import { useAnnotationStore } from '@/stores/annotationStore';
 import { SearchService } from '@/services/search/SearchService';
 
 interface SearchPanelProps {
@@ -30,7 +31,7 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({ pdfService }) => {
     }
   }, [visible]);
 
-  // 执行搜索
+  // 执行搜索（PDF 原文 + 标注 + 评论）
   const doSearch = useCallback(async (q?: string) => {
     const searchQuery = q ?? query;
     if (!searchQuery || !pdfService?.isLoaded) {
@@ -44,18 +45,32 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({ pdfService }) => {
 
     try {
       const searchService = new SearchService();
-      const searchResults = await searchService.search(
+      // PDF 原文搜索
+      const pdfResults = await searchService.search(
         pdfService as never,
         searchQuery,
         options,
-        (progress) => setSearchProgress(progress)
+        (progress) => setSearchProgress(progress * 0.7) // 前 70% 用于 PDF 搜索
       );
-      setResults(searchResults);
-      setSearchCompleted(true);
 
-      // 如果有结果，跳转到第一个匹配
-      if (searchResults.length > 0) {
-        setCurrentPage(searchResults[0].page);
+      // 标注 + 评论搜索
+      const annotations = useAnnotationStore.getState().annotations;
+      const comments = useAnnotationStore.getState().comments;
+      const annResults = searchService.searchAnnotationsAndComments(
+        searchQuery,
+        annotations.map((a) => ({ id: a.id, type: a.type, page: a.page, content: a.content })),
+        comments.map((c) => ({ id: c.id, annotationId: c.annotationId, author: c.author, text: c.text })),
+        options
+      );
+
+      const allResults = [...pdfResults, ...annResults];
+      setResults(allResults);
+      setSearchCompleted(true);
+      setSearchProgress(1);
+
+      if (allResults.length > 0) {
+        const firstPage = allResults[0].page;
+        if (firstPage > 0) setCurrentPage(firstPage);
       }
     } catch (err) {
       console.error('Search failed:', err);
@@ -104,17 +119,85 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({ pdfService }) => {
     }
   }, [results, setCurrentMatchIndex, setCurrentPage]);
 
-  // 替换当前匹配
+  // 替换当前匹配（通过 ContentStreamEditor IPC）
   const handleReplace = useCallback(async () => {
     if (results.length === 0 || currentMatchIndex < 0) return;
-    showToast('替换功能需要通过导出时应用（pdf-lib 文本替换）', 'info');
-  }, [results, currentMatchIndex, showToast]);
+    const result = results[currentMatchIndex];
+    if (!replaceQuery) {
+      showToast('请输入替换文本', 'info');
+      return;
+    }
+
+    if (result.type === 'pdf-text') {
+      try {
+        showToast('正在替换...', 'info');
+        const filePath = usePdfStore.getState().filePath;
+        if (!filePath) { showToast('无法获取 PDF 文件路径', 'error'); return; }
+        // 从磁盘读取 PDF 数据
+        const arrayBuffer = await window.verityAPI.readFile(filePath);
+        // 获取该页文本段
+        const pdfDataBase64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+        const segments = await window.verityAPI.getTextSegments(pdfDataBase64, result.page);
+        // 通过文本匹配找到对应 segment
+        const targetSeg = segments.find((s) => s.text.includes(result.text.trim().substring(0, 10)));
+        if (!targetSeg) { showToast('无法定位要替换的文本段', 'error'); return; }
+        const newPdfData = await window.verityAPI.editText(pdfDataBase64, {
+          action: 'replace', page: result.page, segmentIndex: targetSeg.index, newText: replaceQuery,
+        });
+        // 保存编辑后的 PDF 并通知重新加载
+        const savedBytes = new Uint8Array(newPdfData);
+        let binary = '';
+        for (let i = 0; i < savedBytes.length; i++) binary += String.fromCharCode(savedBytes[i]);
+        const savedBase64 = btoa(binary);
+        await window.verityAPI.saveFile(atob(savedBase64), filePath);
+        // 触发 PDFViewer 重新加载
+        window.dispatchEvent(new CustomEvent('verity:reloadPdf'));
+        showToast('替换成功，已保存', 'success');
+        // 重新搜索
+        setTimeout(() => doSearch(), 1000);
+      } catch (err) {
+        console.error('Replace failed:', err);
+        showToast(`替换失败: ${(err as Error).message}`, 'error');
+      }
+    } else if (result.type === 'annotation' && result.annotationId) {
+      // 替换标注内容
+      const ann = useAnnotationStore.getState().annotations.find((a) => a.id === result.annotationId);
+      if (ann && ann.content) {
+        const newContent = ann.content.replace(query, replaceQuery);
+        useAnnotationStore.getState().updateAnnotation(ann.id, { content: newContent });
+        showToast('标注内容已替换', 'success');
+        doSearch();
+      }
+    } else if (result.type === 'comment' && result.commentId) {
+      showToast('评论替换暂不支持', 'info');
+    }
+  }, [results, currentMatchIndex, replaceQuery, query, showToast, doSearch]);
 
   // 全部替换
   const handleReplaceAll = useCallback(async () => {
-    if (results.length === 0) return;
-    showToast(`找到 ${results.length} 处匹配。替换功能需要通过导出时应用。`, 'info');
-  }, [results, showToast]);
+    if (results.length === 0 || !replaceQuery) return;
+    const pdfTextResults = results.filter((r) => r.type === 'pdf-text');
+    const annResults = results.filter((r) => r.type === 'annotation' && r.annotationId);
+
+    let replaced = 0;
+
+    // 替换标注内容
+    for (const r of annResults) {
+      const ann = useAnnotationStore.getState().annotations.find((a) => a.id === r.annotationId);
+      if (ann && ann.content) {
+        const newContent = ann.content.replaceAll(query, replaceQuery);
+        useAnnotationStore.getState().updateAnnotation(ann.id, { content: newContent });
+        replaced++;
+      }
+    }
+
+    if (pdfTextResults.length > 0) {
+      showToast(`${pdfTextResults.length} 处 PDF 文本替换需逐个执行，已替换 ${replaced} 处标注`, 'info');
+    } else {
+      showToast(`已替换 ${replaced} 处`, 'success');
+    }
+    doSearch();
+  }, [results, replaceQuery, query, showToast, doSearch]);
 
   // 关闭面板
   const handleClose = useCallback(() => {
@@ -248,7 +331,16 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({ pdfService }) => {
               tabIndex={0}
               role="button"
             >
-              <span className="result-page">P{result.page}</span>
+              <span className="result-page">
+                {result.type === 'pdf-text' && `P${result.page}`}
+                {result.type === 'annotation' && `标注P${result.page}`}
+                {result.type === 'comment' && '评论'}
+              </span>
+              {result.type && result.type !== 'pdf-text' && (
+                <span className={`result-type-badge result-type-${result.type}`}>
+                  {result.annotationType || result.type}
+                </span>
+              )}
               <span className="result-text">{result.text}</span>
             </div>
           ))}

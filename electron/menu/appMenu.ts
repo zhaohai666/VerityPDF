@@ -145,6 +145,60 @@ export function createAppMenu(win: BrowserWindow): void {
       ],
     },
 
+    // 工具菜单
+    {
+      label: '工具',
+      submenu: [
+        {
+          label: 'PDF 叠加...',
+          click: () => sendAction('tool:overlay'),
+        },
+        {
+          label: '提取嵌入图片...',
+          click: () => sendAction('tool:extractImages'),
+        },
+        {
+          label: '删除标注...',
+          click: () => sendAction('tool:removeAnnotations'),
+        },
+        {
+          label: '编辑元数据...',
+          click: () => sendAction('tool:metadata'),
+        },
+        { type: 'separator' },
+        {
+          label: '页面尺寸缩放...',
+          click: () => sendAction('tool:resize'),
+        },
+        {
+          label: '多页合一 (N-up)...',
+          click: () => sendAction('tool:nup'),
+        },
+        { type: 'separator' },
+        {
+          label: '验证数字签名...',
+          click: () => sendAction('tool:verifySignature'),
+        },
+        { type: 'separator' },
+        {
+          label: 'PDF 文本对比...',
+          click: () => sendAction('tool:diff'),
+        },
+        {
+          label: '敏感信息涂黑...',
+          click: () => sendAction('tool:sensitiveRedact'),
+        },
+        {
+          label: '小册子页序...',
+          click: () => sendAction('tool:booklet'),
+        },
+        {
+          label: '批量颜色替换...',
+          click: () => sendAction('tool:colorReplace'),
+        },
+      ],
+    },
+
     // 帮助菜单
     {
       label: '帮助',

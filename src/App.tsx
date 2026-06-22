@@ -18,6 +18,19 @@ const CommentPanel = React.lazy(() => import('@/components/comment/CommentPanel'
 const SearchPanel = React.lazy(() => import('@/components/search/SearchPanel').then(m => ({ default: m.SearchPanel })));
 const OCRPanel = React.lazy(() => import('@/components/ocr/OCRPanel').then(m => ({ default: m.OCRPanel })));
 
+// 工具对话框懒加载
+const MetadataEditorDialog = React.lazy(() => import('@/components/metadata/MetadataEditorDialog').then(m => ({ default: m.MetadataEditorDialog })));
+const RemoveAnnotationsDialog = React.lazy(() => import('@/components/annotation/RemoveAnnotationsDialog').then(m => ({ default: m.RemoveAnnotationsDialog })));
+const PageResizeDialog = React.lazy(() => import('@/components/resize/PageResizeDialog').then(m => ({ default: m.PageResizeDialog })));
+const PdfOverlayDialog = React.lazy(() => import('@/components/overlay/PdfOverlayDialog').then(m => ({ default: m.PdfOverlayDialog })));
+const NUpDialog = React.lazy(() => import('@/components/nup/NUpDialog').then(m => ({ default: m.NUpDialog })));
+const ImageExtractDialog = React.lazy(() => import('@/components/extract/ImageExtractDialog').then(m => ({ default: m.ImageExtractDialog })));
+const SignatureVerifyDialog = React.lazy(() => import('@/components/signature/SignatureVerifyDialog').then(m => ({ default: m.SignatureVerifyDialog })));
+const PdfDiffDialog = React.lazy(() => import('@/components/diff/PdfDiffDialog').then(m => ({ default: m.PdfDiffDialog })));
+const SensitiveRedactDialog = React.lazy(() => import('@/components/redact/SensitiveRedactDialog').then(m => ({ default: m.SensitiveRedactDialog })));
+const BookletDialog = React.lazy(() => import('@/components/booklet/BookletDialog').then(m => ({ default: m.BookletDialog })));
+const ColorReplaceDialog = React.lazy(() => import('@/components/color/ColorReplaceDialog').then(m => ({ default: m.ColorReplaceDialog })));
+
 const App: React.FC = () => {
   // 初始化全局快捷键
   useKeyboardShortcuts();
@@ -31,6 +44,10 @@ const App: React.FC = () => {
   const selectedIds = useAnnotationStore((s) => s.selectedIds);
   const [showComments, setShowComments] = useState(false);
   const activeCommentId = showComments && selectedIds.length === 1 ? selectedIds[0] : null;
+
+  // 工具对话框状态
+  const [activeToolDialog, setActiveToolDialog] = useState<string | null>(null);
+  const [dialogPdfData, setDialogPdfData] = useState<string>('');
 
   // 监听工具栏评论按钮事件
   useEffect(() => {
@@ -96,6 +113,30 @@ const App: React.FC = () => {
         case 'view:toggleSidebar':
           ui.toggleSidebar();
           break;
+
+        // 工具对话框
+        case 'tool:overlay':
+        case 'tool:extractImages':
+        case 'tool:removeAnnotations':
+        case 'tool:metadata':
+        case 'tool:resize':
+        case 'tool:nup':
+        case 'tool:verifySignature':
+        case 'tool:diff':
+        case 'tool:sensitiveRedact':
+        case 'tool:booklet':
+        case 'tool:colorReplace':
+          if (pdf.isLoaded) {
+            const fp = pdf.filePath;
+            if (fp) {
+              window.verityAPI.readFile(fp).then(buf => {
+                const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+                setDialogPdfData(b64);
+                setActiveToolDialog(action.replace('tool:', ''));
+              }).catch(() => {});
+            }
+          }
+          break;
       }
     });
     return unsub;
@@ -146,6 +187,83 @@ const App: React.FC = () => {
         </div>
         <StatusBar />
         <Toast />
+
+        {/* 工具对话框 */}
+        {activeToolDialog && (
+          <Suspense fallback={null}>
+            {activeToolDialog === 'metadata' && (
+              <MetadataEditorDialog
+                pdfData={dialogPdfData}
+                onApply={() => setActiveToolDialog(null)}
+                onClose={() => setActiveToolDialog(null)}
+              />
+            )}
+            {activeToolDialog === 'removeAnnotations' && (
+              <RemoveAnnotationsDialog
+                pdfData={dialogPdfData}
+                onApply={() => setActiveToolDialog(null)}
+                onClose={() => setActiveToolDialog(null)}
+              />
+            )}
+            {activeToolDialog === 'resize' && (
+              <PageResizeDialog
+                pdfData={dialogPdfData}
+                onApply={() => setActiveToolDialog(null)}
+                onClose={() => setActiveToolDialog(null)}
+              />
+            )}
+            {activeToolDialog === 'overlay' && (
+              <PdfOverlayDialog
+                pdfData={dialogPdfData}
+                onApply={() => setActiveToolDialog(null)}
+                onClose={() => setActiveToolDialog(null)}
+              />
+            )}
+            {activeToolDialog === 'nup' && (
+              <NUpDialog
+                pdfData={dialogPdfData}
+                onApply={() => setActiveToolDialog(null)}
+                onClose={() => setActiveToolDialog(null)}
+              />
+            )}
+            {activeToolDialog === 'extractImages' && (
+              <ImageExtractDialog
+                pdfData={dialogPdfData}
+                onClose={() => setActiveToolDialog(null)}
+              />
+            )}
+            {activeToolDialog === 'verifySignature' && (
+              <SignatureVerifyDialog
+                pdfData={dialogPdfData}
+                onClose={() => setActiveToolDialog(null)}
+              />
+            )}
+            {activeToolDialog === 'diff' && (
+              <PdfDiffDialog
+                pdfData={dialogPdfData}
+                onClose={() => setActiveToolDialog(null)}
+              />
+            )}
+            {activeToolDialog === 'sensitiveRedact' && (
+              <SensitiveRedactDialog
+                pdfData={dialogPdfData}
+                onClose={() => setActiveToolDialog(null)}
+              />
+            )}
+            {activeToolDialog === 'booklet' && (
+              <BookletDialog
+                pdfData={dialogPdfData}
+                onClose={() => setActiveToolDialog(null)}
+              />
+            )}
+            {activeToolDialog === 'colorReplace' && (
+              <ColorReplaceDialog
+                pdfData={dialogPdfData}
+                onClose={() => setActiveToolDialog(null)}
+              />
+            )}
+          </Suspense>
+        )}
       </div>
     </ErrorBoundary>
   );

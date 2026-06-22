@@ -23,6 +23,7 @@ const TaskCenterDialog = React.lazy(() => import('@/components/batch/TaskCenterD
 const PipelineEditorDialog = React.lazy(() => import('@/components/batch/PipelineEditorDialog').then(m => ({ default: m.PipelineEditorDialog })));
 const SmartCompressDialog = React.lazy(() => import('@/components/compress/SmartCompressDialog').then(m => ({ default: m.SmartCompressDialog })));
 const RedactionDialog = React.lazy(() => import('@/components/redaction/RedactionDialog').then(m => ({ default: m.RedactionDialog })));
+const EditTextDialog = React.lazy(() => import('@/components/edit/EditTextDialog').then(m => ({ default: m.EditTextDialog })));
 
 const pdfService = new PDFService();
 
@@ -72,6 +73,7 @@ export const PDFViewer: React.FC = () => {
   const [showPipelineDialog, setShowPipelineDialog] = useState(false);
   const [showSmartCompressDialog, setShowSmartCompressDialog] = useState(false);
   const [showRedactionDialog, setShowRedactionDialog] = useState(false);
+  const [showEditTextDialog, setShowEditTextDialog] = useState(false);
   const [pendingPasswordPath, setPendingPasswordPath] = useState<string | null>(null);
   const [pendingPasswordData, setPendingPasswordData] = useState<ArrayBuffer | null>(null);
 
@@ -424,6 +426,7 @@ export const PDFViewer: React.FC = () => {
     const handlePipeline = () => setShowPipelineDialog(true);
     const handleSmartCompress = () => setShowSmartCompressDialog(true);
     const handleRedaction = () => setShowRedactionDialog(true);
+    const handleEditText = () => setShowEditTextDialog(true);
     const handleReloadPdf = () => {
       // 页面操作后重新加载文档
       const fp = usePdfStore.getState().filePath;
@@ -443,6 +446,7 @@ export const PDFViewer: React.FC = () => {
     window.addEventListener('verity:pipeline', handlePipeline);
     window.addEventListener('verity:smartCompress', handleSmartCompress);
     window.addEventListener('verity:redaction', handleRedaction);
+    window.addEventListener('verity:editText', handleEditText);
     window.addEventListener('verity:reloadPdf', handleReloadPdf);
     return () => {
       unsubMenu();
@@ -461,6 +465,7 @@ export const PDFViewer: React.FC = () => {
       window.removeEventListener('verity:pipeline', handlePipeline);
       window.removeEventListener('verity:smartCompress', handleSmartCompress);
       window.removeEventListener('verity:redaction', handleRedaction);
+      window.removeEventListener('verity:editText', handleEditText);
       window.removeEventListener('verity:reloadPdf', handleReloadPdf);
     };
   }, [handleOpenFile, loadFileFromPath, handleExportPDF]);
@@ -743,6 +748,7 @@ export const PDFViewer: React.FC = () => {
         {showPipelineDialog && <PipelineEditorDialog onClose={() => setShowPipelineDialog(false)} />}
         {showSmartCompressDialog && <SmartCompressDialog open={showSmartCompressDialog} onClose={() => setShowSmartCompressDialog(false)} />}
         {showRedactionDialog && <RedactionDialog open={showRedactionDialog} onClose={() => setShowRedactionDialog(false)} />}
+        {showEditTextDialog && <EditTextDialog onClose={() => setShowEditTextDialog(false)} />}
       </Suspense>
     </>
   );

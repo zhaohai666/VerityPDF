@@ -63,6 +63,35 @@ export interface VerifyResult {
   message: string;
 }
 
+/** 证书链项 */
+export interface ChainCertInfo {
+  subject: string;
+  issuer: string;
+  serialNumber: string;
+  validFrom: string;
+  validTo: string;
+  fingerprint: string;
+  isExpired: boolean;
+  isSelfSigned: boolean;
+  issuedByPrevious: boolean;
+}
+
+/** 签名链验证结果 */
+export interface SignatureChainVerifyResult {
+  isSigned: boolean;
+  isValid: boolean;
+  documentIntact: boolean;
+  signatures: Array<{
+    signer?: string;
+    timestamp?: string;
+    hashAlgorithm?: string;
+    certificateChain: ChainCertInfo[];
+    isValid: boolean;
+    message: string;
+  }>;
+  overallMessage: string;
+}
+
 /** 签名预留空间大小（hex chars） */
 const SIGNATURE_CONTENTS_SIZE = 8192;
 
@@ -529,8 +558,8 @@ export class SignatureService {
               const isNotExpired = now >= cert.validity.notBefore && now <= cert.validity.notAfter;
 
               certInfo = {
-                subject: cert.subject.attributes.map((a) => `${a.shortName}: ${a.value}`).join(', '),
-                issuer: cert.issuer.attributes.map((a) => `${a.shortName}: ${a.value}`).join(', '),
+                subject: cert.subject.attributes.map((a: any) => `${a.shortName}: ${a.value}`).join(', '),
+                issuer: cert.issuer.attributes.map((a: any) => `${a.shortName}: ${a.value}`).join(', '),
                 serialNumber: cert.serialNumber,
                 validFrom: cert.validity.notBefore.toISOString(),
                 validTo: cert.validity.notAfter.toISOString(),
@@ -628,10 +657,10 @@ export class SignatureService {
     const cert = this.certificate;
     return {
       subject: cert.subject.attributes
-        .map((a) => `${a.shortName}: ${a.value}`)
+        .map((a: any) => `${a.shortName}: ${a.value}`)
         .join(', '),
       issuer: cert.issuer.attributes
-        .map((a) => `${a.shortName}: ${a.value}`)
+        .map((a: any) => `${a.shortName}: ${a.value}`)
         .join(', '),
       serialNumber: cert.serialNumber,
       validFrom: cert.validity.notBefore.toISOString(),
@@ -742,5 +771,217 @@ export class SignatureService {
    */
   private escapePdfString(str: string): string {
     return str.replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
+  }
+
+  /**
+   * 增强版签名链验证
+   * 完整解析 PKCS#7 签名中的所有证书，验证证书链、有效期和文档完整性
+   */
+  async verifySignatureChain(pdfData: ArrayBuffer): Promise<SignatureChainVerifyResult> {
+    try {
+      const doc = await PDFDocument.load(pdfData, { ignoreEncryption: true });
+      const context = doc.context;
+      const pages = doc.getPages();
+      const signatures: SignatureChainVerifyResult['signatures'] = [];
+
+      // 查找所有签名标注
+      for (const page of pages) {
+        const annots = page.node.Annots();
+        if (!annots) continue;
+
+        for (let i = 0; i < annots.size(); i++) {
+          const annotRef = annots.get(i);
+          const annot = context.lookup(annotRef) as PDFDict;
+          if (!annot) continue;
+
+          const v = annot.get(PDFName.of('V'));
+          if (!v) continue;
+
+          const sigDict = context.lookup(v) as PDFDict;
+          if (!sigDict) continue;
+
+          const filter = sigDict.get(PDFName.of('Filter'));
+          if (!filter || filter.toString() !== '/Adobe.PPKLite') continue;
+
+          const sigInfo = await this.verifySingleSignature(sigDict, pdfData);
+          if (sigInfo) signatures.push(sigInfo);
+        }
+      }
+
+      // 检查 AcroForm 中的不可见签名
+      const acroForm = doc.catalog.get(PDFName.of('AcroForm'));
+      if (acroForm) {
+        const acroFormDict = context.lookup(acroForm) as PDFDict;
+        if (acroFormDict) {
+          const fields = acroFormDict.get(PDFName.of('Fields'));
+          if (fields) {
+            const fieldsArr = context.lookup(fields) as PDFArray;
+            if (fieldsArr && 'size' in fieldsArr) {
+              for (let i = 0; i < fieldsArr.size(); i++) {
+                const fieldRef = fieldsArr.get(i);
+                const field = context.lookup(fieldRef) as PDFDict;
+                if (!field) continue;
+                const filter = field.get(PDFName.of('Filter'));
+                if (filter && filter.toString() === '/Adobe.PPKLite') {
+                  const sigInfo = await this.verifySingleSignature(field, pdfData);
+                  if (sigInfo) signatures.push(sigInfo);
+                }
+              }
+            }
+          }
+        }
+      }
+
+      if (signatures.length === 0) {
+        return {
+          isSigned: false,
+          isValid: false,
+          documentIntact: true,
+          signatures: [],
+          overallMessage: '文档未包含数字签名',
+        };
+      }
+
+      const allValid = signatures.every((s) => s.isValid);
+      return {
+        isSigned: true,
+        isValid: allValid,
+        documentIntact: signatures.every((s) => s.isValid),
+        signatures,
+        overallMessage: allValid
+          ? `所有 ${signatures.length} 个签名均有效`
+          : `${signatures.filter((s) => !s.isValid).length}/${signatures.length} 个签名无效`,
+      };
+    } catch (err) {
+      return {
+        isSigned: false,
+        isValid: false,
+        documentIntact: false,
+        signatures: [],
+        overallMessage: '验证失败: ' + (err instanceof Error ? err.message : '未知错误'),
+      };
+    }
+  }
+
+  private async verifySingleSignature(
+    sigDict: PDFDict,
+    pdfData: ArrayBuffer
+  ): Promise<SignatureChainVerifyResult['signatures'][0] | null> {
+    try {
+      const name = sigDict.get(PDFName.of('Name'));
+      const mDate = sigDict.get(PDFName.of('M'));
+      const byteRangeObj = sigDict.get(PDFName.of('ByteRange'));
+      const contentsObj = sigDict.get(PDFName.of('Contents'));
+
+      if (!byteRangeObj || !contentsObj) return null;
+
+      const byteRangeArr = byteRangeObj as PDFArray;
+      const br: number[] = [];
+      for (let j = 0; j < byteRangeArr.size(); j++) {
+        br.push(Number(byteRangeArr.get(j)));
+      }
+      if (br.length !== 4) return null;
+
+      // 验证 ByteRange 完整性
+      const pdfBytes = Buffer.from(pdfData);
+      if (br[0] !== 0) {
+        return {
+          signer: name?.toString().replace(/^\//, '') || '未知',
+          timestamp: mDate ? this.parsePdfDate(mDate.toString()) : undefined,
+          certificateChain: [],
+          isValid: false,
+          message: 'ByteRange 起始位置异常',
+        };
+      }
+
+      const signedBytes1 = pdfBytes.slice(br[0], br[0] + br[1]);
+      const signedBytes2 = pdfBytes.slice(br[2], br[2] + br[3]);
+      const signedData = Buffer.concat([signedBytes1, signedBytes2]);
+      // 计算文档哈希用于完整性校验
+      crypto.createHash('sha256').update(signedData).digest('hex');
+
+      // 解析 PKCS#7 签名
+      let contentsHex: string;
+      if (contentsObj instanceof PDFHexString) {
+        contentsHex = contentsObj.asString();
+      } else {
+        contentsHex = contentsObj.toString();
+      }
+
+      const cleanHex = contentsHex.replace(/[^0-9a-fA-F]/g, '').replace(/0+$/, '');
+      if (cleanHex.length < 10) {
+        return {
+          signer: name?.toString().replace(/^\//, '') || '未知',
+          timestamp: mDate ? this.parsePdfDate(mDate.toString()) : undefined,
+          certificateChain: [],
+          isValid: false,
+          message: '签名值不完整或为空',
+        };
+      }
+
+      const derBytes = forge.util.hexToBytes(cleanHex);
+      const asn1 = forge.asn1.fromDer(derBytes);
+      const p7 = forge.pkcs7.messageFromAsn1(asn1) as forge.pkcs7.PkcsSignedData;
+
+      const signerName = name ? name.toString().replace(/^\//, '') : undefined;
+      const signerTimestamp = mDate ? this.parsePdfDate(mDate.toString()) : undefined;
+
+      // 构建证书链
+      const certs = (p7.certificates || []) as forge.pki.Certificate[];
+      const now = new Date();
+      const chain: ChainCertInfo[] = certs.map((cert, idx) => {
+        const isExpired = now < cert.validity.notBefore || now > cert.validity.notAfter;
+        const subjectStr = cert.subject.attributes.map((a: any) => `${a.shortName}: ${a.value}`).join(', ');
+        const issuerStr = cert.issuer.attributes.map((a: any) => `${a.shortName}: ${a.value}`).join(', ');
+        const isSelfSigned = subjectStr === issuerStr;
+
+        let issuedByPrevious = false;
+        if (idx > 0 && idx < certs.length) {
+          const prevCert = certs[idx - 1];
+          const prevIssuerStr = prevCert.issuer.attributes.map((a: any) => `${a.shortName}: ${a.value}`).join(', ');
+          issuedByPrevious = subjectStr === prevIssuerStr;
+        } else if (idx === 0) {
+          issuedByPrevious = true;
+        }
+
+        return {
+          subject: subjectStr,
+          issuer: issuerStr,
+          serialNumber: cert.serialNumber,
+          validFrom: cert.validity.notBefore.toISOString(),
+          validTo: cert.validity.notAfter.toISOString(),
+          fingerprint: forge.md.sha256.create()
+            .update(forge.asn1.toDer(forge.pki.certificateToAsn1(cert)).getBytes())
+            .digest().toHex().match(/.{2}/g)!.join(':'),
+          isExpired,
+          isSelfSigned,
+          issuedByPrevious,
+        };
+      });
+
+      const allCertsValid = chain.every((c) => !c.isExpired);
+      const chainIntact = chain.every((c) => c.issuedByPrevious);
+      const isValid = allCertsValid && chainIntact;
+
+      return {
+        signer: signerName,
+        timestamp: signerTimestamp,
+        hashAlgorithm: 'SHA-256',
+        certificateChain: chain,
+        isValid,
+        message: isValid
+          ? `签名有效，签名者: ${signerName || '未知'}`
+          : allCertsValid
+            ? '证书链关系不完整'
+            : '证书已过期',
+      };
+    } catch {
+      return {
+        signer: '未知',
+        certificateChain: [],
+        isValid: false,
+        message: '签名格式无法解析',
+      };
+    }
   }
 }

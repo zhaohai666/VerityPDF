@@ -2,6 +2,7 @@ import React, { useState, useRef, useCallback } from 'react';
 import { useToolStore } from '@/stores/toolStore';
 import { usePdfStore } from '@/stores/pdfStore';
 import { useOCRStore } from '@/stores/ocrStore';
+import { useSearchStore } from '@/stores/searchStore';
 import { TOOL_LIST } from '@/types';
 import type { ToolType } from '@/types';
 
@@ -195,6 +196,32 @@ export const Toolbar: React.FC = () => {
         <div className="toolbar-divider" />
 
         <div className="toolbar-group toolbar-actions">
+          <button
+            className="toolbar-btn search-btn"
+            onClick={() => useSearchStore.getState().toggleVisible()}
+            disabled={!isLoaded}
+            title="搜索 (Ctrl+F)"
+            aria-label="全文搜索"
+          >
+            <svg className="toolbar-icon-svg" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+              <circle cx="10" cy="10" r="6" fill="none" stroke="currentColor" strokeWidth="1.5"/>
+              <line x1="14" y1="14" x2="20" y2="20" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+            </svg>
+            <span className="toolbar-label">搜索</span>
+          </button>
+          <button
+            className="toolbar-btn edit-text-btn"
+            onClick={() => window.dispatchEvent(new CustomEvent('verity:editText'))}
+            disabled={!isLoaded}
+            title="编辑 PDF 文本"
+            aria-label="编辑 PDF 文本"
+          >
+            <svg className="toolbar-icon-svg" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+              <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" fill="none" stroke="currentColor" strokeWidth="1.5"/>
+              <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" fill="none" stroke="currentColor" strokeWidth="1.5"/>
+            </svg>
+            <span className="toolbar-label">编辑</span>
+          </button>
           <button
             className="toolbar-btn comment-toggle-btn"
             onClick={() => window.dispatchEvent(new CustomEvent('verity:toggleComments'))}

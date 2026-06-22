@@ -322,11 +322,25 @@ export const useAnnotationStore = create<AnnotationState>((set, get) => ({
   },
 
   removeComment: (commentId) => {
-    set((state) => ({
-      comments: state.comments.filter((c) => c.id !== commentId && c.parentId !== commentId),
-      isDirty: true,
-      saveStatus: 'unsaved',
-    }));
+    set((state) => {
+      // 递归收集所有后代 ID（级联删除）
+      const idsToRemove = new Set<string>([commentId]);
+      let changed = true;
+      while (changed) {
+        changed = false;
+        for (const c of state.comments) {
+          if (c.parentId && idsToRemove.has(c.parentId) && !idsToRemove.has(c.id)) {
+            idsToRemove.add(c.id);
+            changed = true;
+          }
+        }
+      }
+      return {
+        comments: state.comments.filter((c) => !idsToRemove.has(c.id)),
+        isDirty: true,
+        saveStatus: 'unsaved',
+      };
+    });
   },
 
   getCommentsByAnnotation: (annotationId) => {

@@ -23,6 +23,13 @@ export interface SearchResultItem {
   endOffset: number;
   /** 匹配文字在页面上的位置（归一化坐标） */
   rects: Array<{ x: number; y: number; width: number; height: number }>;
+  /** 结果类型 */
+  type?: 'pdf-text' | 'annotation' | 'comment';
+  /** 标注/评论 ID */
+  annotationId?: string;
+  commentId?: string;
+  /** 标注类型标签 */
+  annotationType?: string;
 }
 
 /** 搜索选项 */
@@ -46,16 +53,100 @@ export class SearchService {
   ): Promise<SearchResultItem[]> {
     if (!query || !pdfService.isLoaded) return [];
 
-    // 尝试使用 Worker 进行搜索（大文档性能更优）
+    // 搜索 PDF 原文
+    let pdfResults: SearchResultItem[] = [];
     try {
       const bridge = getWorkerBridge();
-      return await bridge.search(pdfService, query, options, onProgress);
+      pdfResults = await bridge.search(pdfService, query, options, onProgress);
     } catch (err) {
       logger.warn('Worker search failed, falling back to main thread:', err);
+      pdfResults = await this.searchMainThread(pdfService, query, options, onProgress);
     }
 
-    // 回退到主线程搜索
-    return this.searchMainThread(pdfService, query, options, onProgress);
+    // 标记类型为 PDF 原文
+    for (const r of pdfResults) {
+      r.type = 'pdf-text';
+    }
+
+    return pdfResults;
+  }
+
+  /**
+   * 搜索标注内容和评论
+   */
+  searchAnnotationsAndComments(
+    query: string,
+    annotations: Array<{ id: string; type: string; page: number; content?: string }> ,
+    comments: Array<{ id: string; annotationId: string; author: string; text: string }>,
+    options: SearchOptions = { caseSensitive: false, wholeWord: false }
+  ): SearchResultItem[] {
+    if (!query) return [];
+    const results: SearchResultItem[] = [];
+    let globalMatchIndex = 100000; // 从大数开始，避免与 PDF 结果冲突
+    const searchStr = options.caseSensitive ? query : query.toLowerCase();
+
+    // 搜索标注
+    for (const ann of annotations) {
+      const content = ann.content || '';
+      if (!content) continue;
+      const textToSearch = options.caseSensitive ? content : content.toLowerCase();
+      const idx = this.findMatch(textToSearch, searchStr, options);
+      if (idx >= 0) {
+        const contextStart = Math.max(0, idx - 20);
+        const contextEnd = Math.min(content.length, idx + query.length + 20);
+        results.push({
+          page: ann.page,
+          matchIndex: globalMatchIndex++,
+          text: content.slice(contextStart, contextEnd),
+          startOffset: idx,
+          endOffset: idx + query.length,
+          rects: [],
+          type: 'annotation',
+          annotationId: ann.id,
+          annotationType: ann.type,
+        });
+      }
+    }
+
+    // 搜索评论
+    for (const comment of comments) {
+      const commentText = options.caseSensitive ? comment.text : comment.text.toLowerCase();
+      const idx = this.findMatch(commentText, searchStr, options);
+      if (idx >= 0) {
+        const contextStart = Math.max(0, idx - 20);
+        const contextEnd = Math.min(comment.text.length, idx + query.length + 20);
+        results.push({
+          page: 0, // 评论不直接关联页面
+          matchIndex: globalMatchIndex++,
+          text: `${comment.author}: ${comment.text.slice(contextStart, contextEnd)}`,
+          startOffset: idx,
+          endOffset: idx + query.length,
+          rects: [],
+          type: 'comment',
+          annotationId: comment.annotationId,
+          commentId: comment.id,
+        });
+      }
+    }
+
+    return results;
+  }
+
+  /** 查找匹配位置 */
+  private findMatch(text: string, searchStr: string, options: SearchOptions): number {
+    if (options.wholeWord) {
+      let pos = 0;
+      while (pos < text.length) {
+        const found = text.indexOf(searchStr, pos);
+        if (found === -1) return -1;
+        const before = found > 0 ? text[found - 1] : ' ';
+        const after = found + searchStr.length < text.length ? text[found + searchStr.length] : ' ';
+        if (/\W/.test(before) && /\W/.test(after)) return found;
+        pos = found + 1;
+      }
+      return -1;
+    }
+    return text.indexOf(searchStr);
   }
 
   /**

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useAnnotationStore } from '@/stores/annotationStore';
 import type { Comment } from '@/types/common';
 
@@ -9,41 +9,98 @@ interface CommentPanelProps {
   onClose?: () => void;
 }
 
-/** 单条评论项 */
-const CommentItem: React.FC<{
+/** 最大嵌套显示层级 */
+const MAX_NEST_LEVEL = 5;
+
+/** 评论节点（包含子评论） */
+interface CommentNode {
   comment: Comment;
-  replies: Comment[];
+  children: CommentNode[];
+}
+
+/** 构建评论树 */
+function buildCommentTree(comments: Comment[]): CommentNode[] {
+  const nodeMap = new Map<string, CommentNode>();
+  const roots: CommentNode[] = [];
+
+  // 创建所有节点
+  for (const c of comments) {
+    nodeMap.set(c.id, { comment: c, children: [] });
+  }
+
+  // 建立父子关系
+  for (const c of comments) {
+    const node = nodeMap.get(c.id)!;
+    if (c.parentId && nodeMap.has(c.parentId)) {
+      nodeMap.get(c.parentId)!.children.push(node);
+    } else {
+      roots.push(node);
+    }
+  }
+
+  // 按时间排序
+  const sortNodes = (nodes: CommentNode[]) => {
+    nodes.sort((a, b) => new Date(a.comment.createdAt).getTime() - new Date(b.comment.createdAt).getTime());
+    for (const n of nodes) sortNodes(n.children);
+  };
+  sortNodes(roots);
+
+  return roots;
+}
+
+/** 递归评论项组件 */
+const CommentItem: React.FC<{
+  node: CommentNode;
+  depth: number;
+  allComments: Comment[];
   onReply: (parentId: string) => void;
   onDelete: (commentId: string) => void;
-}> = ({ comment, replies, onReply, onDelete }) => (
-  <div className="comment-item" role="article" aria-label={`${comment.author} 的评论`}>
-    <div className="comment-header">
-      <span className="comment-author">{comment.author}</span>
-      <span className="comment-time">{new Date(comment.createdAt).toLocaleString('zh-CN')}</span>
-    </div>
-    <p className="comment-text">{comment.text}</p>
-    <div className="comment-actions">
-      <button className="comment-action-btn" onClick={() => onReply(comment.id)} aria-label="回复">回复</button>
-      <button className="comment-action-btn comment-delete-btn" onClick={() => onDelete(comment.id)} aria-label="删除">删除</button>
-    </div>
-    {replies.length > 0 && (
-      <div className="comment-replies" role="group" aria-label="回复">
-        {replies.map((r) => (
-          <div key={r.id} className="comment-item comment-reply">
-            <div className="comment-header">
-              <span className="comment-author">{r.author}</span>
-              <span className="comment-time">{new Date(r.createdAt).toLocaleString('zh-CN')}</span>
-            </div>
-            <p className="comment-text">{r.text}</p>
-            <div className="comment-actions">
-              <button className="comment-action-btn comment-delete-btn" onClick={() => onDelete(r.id)} aria-label="删除">删除</button>
-            </div>
-          </div>
-        ))}
+}> = ({ node, depth, allComments, onReply, onDelete }) => {
+  const { comment, children } = node;
+  const effectiveDepth = Math.min(depth, MAX_NEST_LEVEL);
+  const parentComment = comment.parentId ? allComments.find((c) => c.id === comment.parentId) : null;
+
+  return (
+    <div
+      className={`comment-item ${depth > 0 ? 'comment-reply' : ''}`}
+      style={{ marginLeft: depth > 0 ? Math.min(effectiveDepth * 16, MAX_NEST_LEVEL * 16) : 0 }}
+      role="article"
+      aria-label={`${comment.author} 的评论`}
+    >
+      {parentComment && depth > 0 && (
+        <div className="comment-reply-context">
+          <span className="reply-context-author">@{parentComment.author}</span>
+          <span className="reply-context-text">
+            {parentComment.text.length > 30 ? parentComment.text.substring(0, 30) + '...' : parentComment.text}
+          </span>
+        </div>
+      )}
+      <div className="comment-header">
+        <span className="comment-author">{comment.author}</span>
+        <span className="comment-time">{new Date(comment.createdAt).toLocaleString('zh-CN')}</span>
       </div>
-    )}
-  </div>
-);
+      <p className="comment-text">{comment.text}</p>
+      <div className="comment-actions">
+        <button className="comment-action-btn" onClick={() => onReply(comment.id)} aria-label="回复">回复</button>
+        <button className="comment-action-btn comment-delete-btn" onClick={() => onDelete(comment.id)} aria-label="删除">删除</button>
+      </div>
+      {children.length > 0 && (
+        <div className="comment-replies" role="group" aria-label="回复">
+          {children.map((child) => (
+            <CommentItem
+              key={child.comment.id}
+              node={child}
+              depth={depth + 1}
+              allComments={allComments}
+              onReply={onReply}
+              onDelete={onDelete}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
 
 export const CommentPanel: React.FC<CommentPanelProps> = ({ annotationId, onClose }) => {
   const comments = useAnnotationStore((s) => s.comments);
@@ -54,20 +111,24 @@ export const CommentPanel: React.FC<CommentPanelProps> = ({ annotationId, onClos
   const [author, setAuthor] = useState('用户');
   const [text, setText] = useState('');
   const [replyTo, setReplyTo] = useState<string | undefined>(undefined);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
 
   const annComments = useMemo(() => {
     if (!annotationId) return [];
     return comments.filter((c) => c.annotationId === annotationId);
   }, [comments, annotationId]);
 
-  // 构建线程树：顶层评论 + 各自回复
-  const threads = useMemo(() => {
-    const topLevel = annComments.filter((c) => !c.parentId);
-    return topLevel.map((c) => ({
-      comment: c,
-      replies: annComments.filter((r) => r.parentId === c.id),
-    }));
+  // 构建评论树（支持多级嵌套）
+  const commentTree = useMemo(() => {
+    return buildCommentTree(annComments);
   }, [annComments]);
+
+  // 回复目标评论信息
+  const replyTarget = useMemo(() => {
+    if (!replyTo) return null;
+    return annComments.find((c) => c.id === replyTo);
+  }, [annComments, replyTo]);
 
   const ann = annotations.find((a) => a.id === annotationId);
 
@@ -76,10 +137,18 @@ export const CommentPanel: React.FC<CommentPanelProps> = ({ annotationId, onClos
     addComment(annotationId, author || '匿名', text.trim(), replyTo);
     setText('');
     setReplyTo(undefined);
+    // 发送后滚动到底部
+    setTimeout(() => {
+      if (listRef.current) {
+        listRef.current.scrollTop = listRef.current.scrollHeight;
+      }
+    }, 100);
   };
 
   const handleReply = (parentId: string) => {
     setReplyTo(parentId);
+    // 自动聚焦输入框
+    setTimeout(() => textareaRef.current?.focus(), 50);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -88,6 +157,13 @@ export const CommentPanel: React.FC<CommentPanelProps> = ({ annotationId, onClos
       handleSubmit();
     }
   };
+
+  // 面板打开时自动聚焦
+  useEffect(() => {
+    if (annotationId) {
+      setTimeout(() => textareaRef.current?.focus(), 100);
+    }
+  }, [annotationId]);
 
   if (!annotationId || !ann) return null;
 
@@ -111,15 +187,16 @@ export const CommentPanel: React.FC<CommentPanelProps> = ({ annotationId, onClos
         )}
       </div>
 
-      <div className="comment-list" role="feed" aria-label="评论列表">
-        {threads.length === 0 && (
+      <div className="comment-list" role="feed" aria-label="评论列表" ref={listRef}>
+        {commentTree.length === 0 && (
           <p className="comment-empty">暂无评论，在下方输入第一条评论</p>
         )}
-        {threads.map(({ comment, replies }) => (
+        {commentTree.map((node) => (
           <CommentItem
-            key={comment.id}
-            comment={comment}
-            replies={replies}
+            key={node.comment.id}
+            node={node}
+            depth={0}
+            allComments={annComments}
             onReply={handleReply}
             onDelete={removeComment}
           />
@@ -127,10 +204,10 @@ export const CommentPanel: React.FC<CommentPanelProps> = ({ annotationId, onClos
       </div>
 
       <div className="comment-input-area">
-        {replyTo && (
+        {replyTarget && (
           <div className="comment-reply-hint">
-            回复评论...
-            <button className="comment-cancel-reply" onClick={() => setReplyTo(undefined)}>×</button>
+            回复 <strong>@{replyTarget.author}</strong>: {replyTarget.text.length > 20 ? replyTarget.text.substring(0, 20) + '...' : replyTarget.text}
+            <button className="comment-cancel-reply" onClick={() => setReplyTo(undefined)} aria-label="取消回复">×</button>
           </div>
         )}
         <div className="comment-input-row">
@@ -143,11 +220,12 @@ export const CommentPanel: React.FC<CommentPanelProps> = ({ annotationId, onClos
             aria-label="作者名"
           />
           <textarea
+            ref={textareaRef}
             className="comment-text-input"
             value={text}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="输入评论... (Enter 发送)"
+            placeholder="输入评论... (Enter 发送, Shift+Enter 换行)"
             aria-label="评论内容"
             rows={2}
           />

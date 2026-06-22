@@ -14,6 +14,16 @@ import { WatermarkService } from '../batch/WatermarkService';
 import { TaskQueueService, type PipelineStep } from '../batch/TaskQueueService';
 import { CompressService } from '../batch/CompressService';
 import { RedactionService } from '../redaction/RedactionService';
+import { ContentStreamEditor } from '../pdf/ContentStreamEditor';
+import { AnnotationRemoverService } from '../annotation/AnnotationRemoverService';
+import { PageResizeService } from '../resize/PageResizeService';
+import { PdfOverlayService } from '../overlay/PdfOverlayService';
+import { NUpService } from '../nup/NUpService';
+import { ImageExtractorService } from '../extract/ImageExtractorService';
+import { BookletService } from '../booklet/BookletService';
+import { ColorReplaceService } from '../color/ColorReplaceService';
+import { SensitiveInfoRedactor } from '../redact/SensitiveInfoRedactor';
+import { PdfDiffService } from '../diff/PdfDiffService';
 
 const MAX_FILE_SIZE = 500 * 1024 * 1024;
 const ALLOWED_EXTENSIONS = ['.pdf'];
@@ -521,6 +531,53 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     return pdfRepairService.repair(filePath);
   });
 
+  // PDF 文本编辑
+  const contentStreamEditor = new ContentStreamEditor();
+
+  registerIpcHandler<{
+    pdfData: string;
+    page: number;
+  }, Array<{ index: number; text: string; fontName: string; fontSize: number; page: number; position: { x: number; y: number } }>>('pdf:getTextSegments', async ({ pdfData, page }) => {
+    if (!pdfData) throw new Error('无效的 PDF 数据');
+    const binary = Buffer.from(pdfData, 'base64');
+    const arrayBuffer = binary.buffer.slice(binary.byteOffset, binary.byteOffset + binary.byteLength) as ArrayBuffer;
+    return contentStreamEditor.getTextSegments(arrayBuffer, page);
+  });
+
+  registerIpcHandler<{
+    pdfData: string;
+    options: {
+      action: string;
+      page: number;
+      segmentIndex?: number;
+      segmentIndices?: number[];
+      newText?: string;
+      fontSize?: number;
+      color?: string;
+    };
+  }, ArrayBuffer>('pdf:editText', async ({ pdfData, options }) => {
+    if (!pdfData) throw new Error('无效的 PDF 数据');
+    const binary = Buffer.from(pdfData, 'base64');
+    const arrayBuffer = binary.buffer.slice(binary.byteOffset, binary.byteOffset + binary.byteLength) as ArrayBuffer;
+
+    switch (options.action) {
+      case 'replace':
+        if (options.segmentIndex === undefined || !options.newText) throw new Error('缺少替换参数');
+        return contentStreamEditor.replaceText(arrayBuffer, options.page, options.segmentIndex, options.newText);
+      case 'delete':
+        if (!options.segmentIndices || options.segmentIndices.length === 0) throw new Error('缺少删除目标');
+        return contentStreamEditor.deleteText(arrayBuffer, options.page, options.segmentIndices);
+      case 'style':
+        if (options.segmentIndex === undefined) throw new Error('缺少样式目标');
+        return contentStreamEditor.modifyStyle(arrayBuffer, options.page, options.segmentIndex, {
+          fontSize: options.fontSize,
+          color: options.color,
+        });
+      default:
+        throw new Error(`未知的编辑操作: ${options.action}`);
+    }
+  });
+
   // 批量页面操作
   const batchPageService = new BatchPageService();
   batchPageService.setMainWindow(mainWindow);
@@ -669,6 +726,239 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       properties: ['openFile', 'multiSelections'],
     });
     return result.canceled ? [] : result.filePaths;
+  });
+
+  // ========== 新功能 ==========
+
+  // PDF 叠加
+  const overlayService = new PdfOverlayService();
+  registerIpcHandler<{
+    basePdfData: string;
+    overlayPdfData: string;
+    options: { mode: 'background' | 'foreground'; opacity: number; scale: 'fit' | 'stretch' | 'original'; pageIndices?: number[] };
+  }, ArrayBuffer>('pdf:overlay', async ({ basePdfData, overlayPdfData, options }) => {
+    if (!basePdfData) throw new Error('无效的基底 PDF 数据');
+    if (!overlayPdfData) throw new Error('无效的叠加 PDF 数据');
+    const baseBinary = Buffer.from(basePdfData, 'base64');
+    const overlayBinary = Buffer.from(overlayPdfData, 'base64');
+    const baseAB = baseBinary.buffer.slice(baseBinary.byteOffset, baseBinary.byteOffset + baseBinary.byteLength) as ArrayBuffer;
+    const overlayAB = overlayBinary.buffer.slice(overlayBinary.byteOffset, overlayBinary.byteOffset + overlayBinary.byteLength) as ArrayBuffer;
+    return overlayService.overlayPdfs(baseAB, overlayAB, options);
+  });
+
+  // 图片提取
+  const imageExtractor = new ImageExtractorService();
+  registerIpcHandler<{ pdfData: string }, Array<{
+    pageIndex: number; imageIndex: number; width: number; height: number;
+    bitsPerComponent: number; colorSpace: string; filter: string; format: 'jpeg' | 'png' | 'raw'; data: string;
+  }>>('pdf:extractImages', async ({ pdfData }) => {
+    if (!pdfData) throw new Error('无效的 PDF 数据');
+    const binary = Buffer.from(pdfData, 'base64');
+    const ab = binary.buffer.slice(binary.byteOffset, binary.byteOffset + binary.byteLength) as ArrayBuffer;
+    const images = await imageExtractor.extractImages(ab);
+    // 将 Uint8Array 转为 base64
+    return images.map(img => ({
+      pageIndex: img.pageIndex,
+      imageIndex: img.imageIndex,
+      width: img.width,
+      height: img.height,
+      bitsPerComponent: img.bitsPerComponent,
+      colorSpace: img.colorSpace,
+      filter: img.filter,
+      format: img.format,
+      data: Buffer.from(img.data).toString('base64'),
+    }));
+  });
+
+  registerIpcHandler<{
+    images: Array<{ pageIndex: number; imageIndex: number; format: string; data: string }>;
+    dirPath: string;
+    baseName: string;
+  }, string[]>('pdf:saveExtractedImages', async ({ images, dirPath, baseName }) => {
+    if (!images || images.length === 0) throw new Error('没有可保存的图片');
+    const safeDir = path.resolve(dirPath);
+    if (!fs.existsSync(safeDir)) fs.mkdirSync(safeDir, { recursive: true });
+    const savedPaths: string[] = [];
+    for (const img of images) {
+      const ext = img.format === 'jpeg' ? '.jpg' : '.png';
+      const fileName = `${baseName}_p${img.pageIndex + 1}_${img.imageIndex + 1}${ext}`;
+      const filePath = path.join(safeDir, fileName);
+      fs.writeFileSync(filePath, Buffer.from(img.data, 'base64'));
+      savedPaths.push(filePath);
+    }
+    return savedPaths;
+  });
+
+  // 标注移除
+  const annotationRemover = new AnnotationRemoverService();
+  registerIpcHandler<{ pdfData: string }, { total: number; byType: Record<string, number>; byPage: Record<number, number> }>('pdf:detectAnnotations', async ({ pdfData }) => {
+    if (!pdfData) throw new Error('无效的 PDF 数据');
+    const binary = Buffer.from(pdfData, 'base64');
+    const ab = binary.buffer.slice(binary.byteOffset, binary.byteOffset + binary.byteLength) as ArrayBuffer;
+    return annotationRemover.detectAnnotations(ab);
+  });
+
+  registerIpcHandler<{
+    pdfData: string;
+    options: { removeAll: boolean; types?: string[]; pageIndices?: number[]; preserveSignatures?: boolean };
+  }, { removedCount: number; remainingCount: number; pdfData: ArrayBuffer }>('pdf:removeAnnotations', async ({ pdfData, options }) => {
+    if (!pdfData) throw new Error('无效的 PDF 数据');
+    const binary = Buffer.from(pdfData, 'base64');
+    const ab = binary.buffer.slice(binary.byteOffset, binary.byteOffset + binary.byteLength) as ArrayBuffer;
+    return annotationRemover.removeAnnotations(ab, options);
+  });
+
+  // 元数据
+  registerIpcHandler<{ pdfData: string }, {
+    title?: string; author?: string; subject?: string;
+    keywords?: string[]; creator?: string; producer?: string;
+    creationDate?: string; modificationDate?: string;
+  }>('pdf:getMetadata', async ({ pdfData }) => {
+    if (!pdfData) throw new Error('无效的 PDF 数据');
+    const binary = Buffer.from(pdfData, 'base64');
+    const doc = await PDFDocument.load(binary, { ignoreEncryption: true });
+    return {
+      title: doc.getTitle() || undefined,
+      author: doc.getAuthor() || undefined,
+      subject: doc.getSubject() || undefined,
+      keywords: doc.getKeywords()?.split(',').map(k => k.trim()).filter(Boolean) || [],
+      creator: doc.getCreator() || undefined,
+      producer: doc.getProducer() || undefined,
+      creationDate: doc.getCreationDate()?.toISOString() || undefined,
+      modificationDate: doc.getModificationDate()?.toISOString() || undefined,
+    };
+  });
+
+  registerIpcHandler<{
+    pdfData: string;
+    metadata: {
+      title?: string; author?: string; subject?: string;
+      keywords?: string[]; creator?: string; producer?: string;
+      creationDate?: string;
+    };
+  }, ArrayBuffer>('pdf:setMetadata', async ({ pdfData, metadata }) => {
+    if (!pdfData) throw new Error('无效的 PDF 数据');
+    const binary = Buffer.from(pdfData, 'base64');
+    const doc = await PDFDocument.load(binary, { ignoreEncryption: true });
+    if (metadata.title !== undefined) doc.setTitle(metadata.title);
+    if (metadata.author !== undefined) doc.setAuthor(metadata.author);
+    if (metadata.subject !== undefined) doc.setSubject(metadata.subject);
+    if (metadata.keywords) doc.setKeywords(metadata.keywords);
+    if (metadata.creator !== undefined) doc.setCreator(metadata.creator);
+    if (metadata.producer !== undefined) doc.setProducer(metadata.producer);
+    if (metadata.creationDate) doc.setCreationDate(new Date(metadata.creationDate));
+    const bytes = await doc.save();
+    return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+  });
+
+  // 页面缩放
+  const resizeService = new PageResizeService();
+  registerIpcHandler<{
+    pdfData: string;
+    options: { targetSize: string | { width: number; height: number }; scaleMode: 'fit' | 'stretch' | 'crop'; pageIndices?: number[] };
+  }, ArrayBuffer>('pdf:resizePages', async ({ pdfData, options }) => {
+    if (!pdfData) throw new Error('无效的 PDF 数据');
+    const binary = Buffer.from(pdfData, 'base64');
+    const ab = binary.buffer.slice(binary.byteOffset, binary.byteOffset + binary.byteLength) as ArrayBuffer;
+    return resizeService.resizePages(ab, options);
+  });
+
+  // N-up
+  const nupService = new NUpService();
+  registerIpcHandler<{
+    pdfData: string;
+    options: { layout: '2x1' | '1x2' | '2x2' | '3x3' | '4x4'; pageSize?: string | { width: number; height: number }; margin?: number; border?: boolean; order?: 'row' | 'column' };
+  }, ArrayBuffer>('pdf:nup', async ({ pdfData, options }) => {
+    if (!pdfData) throw new Error('无效的 PDF 数据');
+    const binary = Buffer.from(pdfData, 'base64');
+    const ab = binary.buffer.slice(binary.byteOffset, binary.byteOffset + binary.byteLength) as ArrayBuffer;
+    return nupService.createNUp(ab, options);
+  });
+
+  // 签名链验证
+  registerIpcHandler<{ pdfData: string }, unknown>('signature:verifyChain', async ({ pdfData }) => {
+    if (!pdfData) throw new Error('无效的 PDF 数据');
+    const binary = Buffer.from(pdfData, 'base64');
+    const ab = binary.buffer.slice(binary.byteOffset, binary.byteOffset + binary.byteLength) as ArrayBuffer;
+    return signatureService.verifySignatureChain(ab);
+  });
+
+  // ========== 第二批新功能 ==========
+
+  // PDF Diff
+  const diffService = new PdfDiffService();
+  registerIpcHandler<{
+    pdfDataA: string;
+    pdfDataB: string;
+  }, unknown>('pdf:diff', async ({ pdfDataA, pdfDataB }) => {
+    if (!pdfDataA) throw new Error('无效的基底 PDF 数据');
+    if (!pdfDataB) throw new Error('无效的对比 PDF 数据');
+    const binA = Buffer.from(pdfDataA, 'base64');
+    const binB = Buffer.from(pdfDataB, 'base64');
+    const abA = binA.buffer.slice(binA.byteOffset, binA.byteOffset + binA.byteLength) as ArrayBuffer;
+    const abB = binB.buffer.slice(binB.byteOffset, binB.byteOffset + binB.byteLength) as ArrayBuffer;
+    return diffService.diffPdfs(abA, abB);
+  });
+
+  // 敏感信息检测
+  const sensitiveRedactor = new SensitiveInfoRedactor();
+  registerIpcHandler<{
+    pdfData: string;
+    rules: Array<{ name: string; pattern: string; enabled: boolean; description?: string }>;
+  }, unknown>('pdf:detectSensitive', async ({ pdfData, rules }) => {
+    if (!pdfData) throw new Error('无效的 PDF 数据');
+    const binary = Buffer.from(pdfData, 'base64');
+    const ab = binary.buffer.slice(binary.byteOffset, binary.byteOffset + binary.byteLength) as ArrayBuffer;
+    return sensitiveRedactor.detectSensitiveInfo(ab, rules);
+  });
+
+  // 敏感信息涂黑
+  registerIpcHandler<{
+    pdfData: string;
+    matches: Array<{ id: string; page: number; text: string; ruleName: string; rect: { x: number; y: number; width: number; height: number } }>;
+  }, unknown>('pdf:redactSensitive', async ({ pdfData, matches }) => {
+    if (!pdfData) throw new Error('无效的 PDF 数据');
+    if (!matches || matches.length === 0) throw new Error('没有要涂黑的匹配项');
+    const binary = Buffer.from(pdfData, 'base64');
+    const ab = binary.buffer.slice(binary.byteOffset, binary.byteOffset + binary.byteLength) as ArrayBuffer;
+    return sensitiveRedactor.redactSensitiveInfo(ab, matches);
+  });
+
+  // 小册子
+  const bookletService = new BookletService();
+  registerIpcHandler<{
+    pdfData: string;
+    options: { binding: 'left' | 'right'; pagesPerSheet: 2 | 4; addBlankPages: boolean };
+  }, unknown>('pdf:booklet', async ({ pdfData, options }) => {
+    if (!pdfData) throw new Error('无效的 PDF 数据');
+    const binary = Buffer.from(pdfData, 'base64');
+    const ab = binary.buffer.slice(binary.byteOffset, binary.byteOffset + binary.byteLength) as ArrayBuffer;
+    return bookletService.createBooklet(ab, options);
+  });
+
+  // 颜色检测
+  const colorService = new ColorReplaceService();
+  registerIpcHandler<{ pdfData: string }, unknown>('pdf:detectColors', async ({ pdfData }) => {
+    if (!pdfData) throw new Error('无效的 PDF 数据');
+    const binary = Buffer.from(pdfData, 'base64');
+    const ab = binary.buffer.slice(binary.byteOffset, binary.byteOffset + binary.byteLength) as ArrayBuffer;
+    return colorService.detectColors(ab);
+  });
+
+  // 颜色替换
+  registerIpcHandler<{
+    pdfData: string;
+    options: {
+      rules: Array<{ oldColor: string; newColor: string; colorSpace: string; tolerance: number }>;
+      tolerance: number;
+      pageIndices?: number[];
+    };
+  }, unknown>('pdf:replaceColors', async ({ pdfData, options }) => {
+    if (!pdfData) throw new Error('无效的 PDF 数据');
+    if (!options.rules || options.rules.length === 0) throw new Error('没有颜色替换规则');
+    const binary = Buffer.from(pdfData, 'base64');
+    const ab = binary.buffer.slice(binary.byteOffset, binary.byteOffset + binary.byteLength) as ArrayBuffer;
+    return colorService.replaceColors(ab, options as any);
   });
 
   // ========== 任务队列 ==========

@@ -12,6 +12,10 @@ export const IPC_CHANNELS = {
   PDF_GET_INFO: 'pdf:getInfo',
   PDF_REPAIR: 'pdf:repair',
 
+  // PDF 文本编辑
+  PDF_EDIT_TEXT: 'pdf:editText',
+  PDF_GET_TEXT_SEGMENTS: 'pdf:getTextSegments',
+
   // 标注操作
   ANNOTATION_SAVE: 'annotation:save',
   ANNOTATION_LOAD: 'annotation:load',
@@ -69,6 +73,44 @@ export const IPC_CHANNELS = {
   PDF_MULTI_MERGE: 'pdf:multiMerge',
   PDF_SPLIT: 'pdf:split',
   PDF_SELECT_FILES: 'pdf:selectFiles',
+
+  // PDF 叠加
+  PDF_OVERLAY: 'pdf:overlay',
+
+  // 图片提取
+  PDF_EXTRACT_IMAGES: 'pdf:extractImages',
+  PDF_SAVE_EXTRACTED_IMAGES: 'pdf:saveExtractedImages',
+
+  // 标注移除
+  PDF_REMOVE_ANNOTATIONS: 'pdf:removeAnnotations',
+  PDF_DETECT_ANNOTATIONS: 'pdf:detectAnnotations',
+
+  // 元数据
+  PDF_GET_METADATA: 'pdf:getMetadata',
+  PDF_SET_METADATA: 'pdf:setMetadata',
+
+  // 页面缩放
+  PDF_RESIZE_PAGES: 'pdf:resizePages',
+
+  // N-up
+  PDF_NUP: 'pdf:nup',
+
+  // 签名链验证
+  SIGNATURE_VERIFY_CHAIN: 'signature:verifyChain',
+
+  // PDF Diff
+  PDF_DIFF: 'pdf:diff',
+
+  // 敏感信息涂黑
+  PDF_DETECT_SENSITIVE: 'pdf:detectSensitive',
+  PDF_REDACT_SENSITIVE: 'pdf:redactSensitive',
+
+  // 小册子
+  PDF_BOOKLET: 'pdf:booklet',
+
+  // 颜色替换
+  PDF_DETECT_COLORS: 'pdf:detectColors',
+  PDF_REPLACE_COLORS: 'pdf:replaceColors',
 
   // 任务队列
   TASK_SUBMIT: 'task:submit',
@@ -197,6 +239,10 @@ export interface VerityAPI {
   // PDF 修复
   repairPDF(filePath: string): Promise<ArrayBuffer>;
 
+  // PDF 文本编辑
+  editText(pdfData: string, options: EditTextOptions): Promise<ArrayBuffer>;
+  getTextSegments(pdfData: string, page: number): Promise<PDFTextSegmentInfo[]>;
+
   // 批量页面操作
   batchRotate(pdfData: string, options: BatchRotateOptions): Promise<ArrayBuffer>;
   detectBlankPages(filePath: string, threshold: number): Promise<{ blankIndices: number[]; totalChecked: number }>;
@@ -227,6 +273,44 @@ export interface VerityAPI {
   selectInputFiles(extensions: string[]): Promise<string[]>;
   onTaskProgress(callback: (task: TaskItemInfo) => void): () => void;
   onTaskCompleted(callback: (task: TaskItemInfo) => void): () => void;
+
+  // PDF 叠加
+  overlayPdfs(basePdfData: string, overlayPdfData: string, options: OverlayOptions): Promise<ArrayBuffer>;
+
+  // 图片提取
+  extractImages(pdfData: string): Promise<ExtractedImageInfo[]>;
+  saveExtractedImages(images: ExtractedImageInfo[], dirPath: string, baseName: string): Promise<string[]>;
+
+  // 标注移除
+  detectAnnotations(pdfData: string): Promise<AnnotationStatsInfo>;
+  removeAnnotations(pdfData: string, options: RemoveAnnotationsOptions): Promise<RemoveAnnotationsResult>;
+
+  // 元数据
+  getPdfMetadata(pdfData: string): Promise<PdfMetadata>;
+  setPdfMetadata(pdfData: string, metadata: PdfMetadata): Promise<ArrayBuffer>;
+
+  // 页面缩放
+  resizePages(pdfData: string, options: ResizePagesOptions): Promise<ArrayBuffer>;
+
+  // N-up
+  createNUp(pdfData: string, options: NUpOptions): Promise<ArrayBuffer>;
+
+  // 签名链验证
+  verifySignatureChain(pdfData: string): Promise<SignatureChainVerifyResult>;
+
+  // PDF Diff
+  diffPdfs(pdfDataA: string, pdfDataB: string): Promise<PdfDiffResult>;
+
+  // 敏感信息涂黑
+  detectSensitiveInfo(pdfData: string, rules: SensitiveRule[]): Promise<SensitiveDetectResult>;
+  redactSensitiveInfo(pdfData: string, matches: SensitiveMatch[]): Promise<SensitiveRedactResult>;
+
+  // 小册子
+  createBooklet(pdfData: string, options: BookletOptions): Promise<BookletResult>;
+
+  // 颜色替换
+  detectColors(pdfData: string): Promise<ColorUsage[]>;
+  replaceColors(pdfData: string, options: ColorReplaceOptions): Promise<ColorReplaceResult>;
 }
 
 /** 页面操作类型 */
@@ -412,6 +496,22 @@ export interface HeaderFooterOptions {
 
 // ========== 任务队列类型 ==========
 
+/** PDF 文本编辑选项 */
+export type EditTextOptions =
+  | { action: 'replace'; page: number; segmentIndex: number; newText: string }
+  | { action: 'delete'; page: number; segmentIndices: number[] }
+  | { action: 'style'; page: number; segmentIndex: number; fontSize?: number; color?: string };
+
+/** PDF 文本段信息（前端显示用） */
+export interface PDFTextSegmentInfo {
+  index: number;
+  text: string;
+  fontName: string;
+  fontSize: number;
+  page: number;
+  position: { x: number; y: number };
+}
+
 /** 任务类型 */
 export type TaskType = 'convert' | 'watermark' | 'encrypt' | 'compress' | 'pipeline';
 
@@ -462,4 +562,216 @@ export interface TaskQueueStatus {
   activeCount: number;
   completedCount: number;
   failedCount: number;
+}
+
+// ========== 新功能类型定义 ==========
+
+/** PDF 叠加选项 */
+export interface OverlayOptions {
+  mode: 'background' | 'foreground';
+  opacity: number;
+  scale: 'fit' | 'stretch' | 'original';
+  pageIndices?: number[];
+}
+
+/** 提取的图片信息 */
+export interface ExtractedImageInfo {
+  pageIndex: number;
+  imageIndex: number;
+  width: number;
+  height: number;
+  bitsPerComponent: number;
+  colorSpace: string;
+  filter: string;
+  format: 'jpeg' | 'png' | 'raw';
+  /** base64 编码的图片数据 */
+  data: string;
+}
+
+/** 标注统计信息 */
+export interface AnnotationStatsInfo {
+  total: number;
+  byType: Record<string, number>;
+  byPage: Record<number, number>;
+}
+
+/** 删除标注选项 */
+export interface RemoveAnnotationsOptions {
+  removeAll: boolean;
+  types?: string[];
+  pageIndices?: number[];
+  preserveSignatures?: boolean;
+}
+
+/** 删除标注结果 */
+export interface RemoveAnnotationsResult {
+  removedCount: number;
+  remainingCount: number;
+  pdfData: ArrayBuffer;
+}
+
+/** PDF 元数据 */
+export interface PdfMetadata {
+  title?: string;
+  author?: string;
+  subject?: string;
+  keywords?: string[];
+  creator?: string;
+  producer?: string;
+  creationDate?: string;
+  modificationDate?: string;
+}
+
+/** 页面缩放选项 */
+export interface ResizePagesOptions {
+  targetSize: string | { width: number; height: number };
+  scaleMode: 'fit' | 'stretch' | 'crop';
+  pageIndices?: number[];
+}
+
+/** N-up 选项 */
+export interface NUpOptions {
+  layout: '2x1' | '1x2' | '2x2' | '3x3' | '4x4';
+  pageSize?: string | { width: number; height: number };
+  margin?: number;
+  border?: boolean;
+  order?: 'row' | 'column';
+}
+
+/** 证书链项 */
+export interface ChainCertInfo {
+  subject: string;
+  issuer: string;
+  serialNumber: string;
+  validFrom: string;
+  validTo: string;
+  fingerprint: string;
+  isExpired: boolean;
+  isSelfSigned: boolean;
+  issuedByPrevious: boolean;
+}
+
+/** 签名链验证结果 */
+export interface SignatureChainVerifyResult {
+  isSigned: boolean;
+  isValid: boolean;
+  documentIntact: boolean;
+  signatures: Array<{
+    signer?: string;
+    timestamp?: string;
+    hashAlgorithm?: string;
+    certificateChain: ChainCertInfo[];
+    isValid: boolean;
+    message: string;
+  }>;
+  overallMessage: string;
+}
+
+// ========== 新功能类型定义（第二批） ==========
+
+/** Diff 行类型 */
+export type DiffLineType = 'equal' | 'added' | 'removed';
+
+/** Diff 行结果 */
+export interface DiffLine {
+  type: DiffLineType;
+  lineA: number;
+  lineB: number;
+  text: string;
+}
+
+/** Diff 统计 */
+export interface DiffStats {
+  totalLinesA: number;
+  totalLinesB: number;
+  addedCount: number;
+  removedCount: number;
+  equalCount: number;
+  changeRatio: number;
+}
+
+/** PDF Diff 结果 */
+export interface PdfDiffResult {
+  diffs: DiffLine[];
+  stats: DiffStats;
+  pagesA: number;
+  pagesB: number;
+}
+
+/** 敏感信息规则 */
+export interface SensitiveRule {
+  name: string;
+  pattern: string;
+  enabled: boolean;
+  description?: string;
+}
+
+/** 敏感信息匹配 */
+export interface SensitiveMatch {
+  id: string;
+  page: number;
+  text: string;
+  ruleName: string;
+  rect: { x: number; y: number; width: number; height: number };
+}
+
+/** 敏感信息检测结果 */
+export interface SensitiveDetectResult {
+  matches: SensitiveMatch[];
+  rulesUsed: string[];
+  pagesScanned: number;
+}
+
+/** 敏感信息涂黑结果 */
+export interface SensitiveRedactResult {
+  pdfData: ArrayBuffer;
+  redactedCount: number;
+}
+
+/** 小册子选项 */
+export interface BookletOptions {
+  binding: 'left' | 'right';
+  pagesPerSheet: 2 | 4;
+  addBlankPages: boolean;
+}
+
+/** 小册子结果 */
+export interface BookletResult {
+  pdfData: ArrayBuffer;
+  totalPages: number;
+  totalSheets: number;
+  addedBlankPages: number;
+  pageOrder: number[];
+}
+
+/** 颜色使用情况 */
+export interface ColorUsage {
+  colorSpace: 'rgb' | 'cmyk' | 'gray';
+  values: number[];
+  count: number;
+  pages: number[];
+  usage: 'f' | 's' | 'b';
+  hex: string;
+}
+
+/** 颜色替换规则 */
+export interface ColorReplaceRule {
+  oldColor: string;
+  newColor: string;
+  colorSpace: 'rgb' | 'cmyk' | 'gray';
+  tolerance: number;
+}
+
+/** 颜色替换选项 */
+export interface ColorReplaceOptions {
+  rules: ColorReplaceRule[];
+  tolerance: number;
+  pageIndices?: number[];
+}
+
+/** 颜色替换结果 */
+export interface ColorReplaceResult {
+  pdfData: ArrayBuffer;
+  replacedCount: number;
+  pagesProcessed: number;
 }
