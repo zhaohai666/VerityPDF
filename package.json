@@ -25,6 +25,7 @@
   },
   "dependencies": {
     "antd": "^5.20.0",
+    "canvas": "^3.2.3",
     "electron-store": "^8.2.0",
     "i18next": "^23.12.0",
     "konva": "^9.3.0",
@@ -74,7 +75,9 @@
       {
         "from": "vendor",
         "to": "vendor",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       }
     ],
     "mac": {

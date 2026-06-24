@@ -149,9 +149,6 @@ export class BookletService {
       const sheet = newDoc.addPage([sheetWidth, sheetHeight]);
       const context = newDoc.context;
 
-      // 缩放因子
-      const scale = Math.min(srcH / srcW, 1);
-
       // 复制并放置左页
       if (leftIdx >= 0) {
         const [copiedLeft] = await newDoc.copyPages(srcDoc, [leftIdx]);

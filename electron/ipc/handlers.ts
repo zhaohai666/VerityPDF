@@ -24,6 +24,11 @@ import { BookletService } from '../booklet/BookletService';
 import { ColorReplaceService } from '../color/ColorReplaceService';
 import { SensitiveInfoRedactor } from '../redact/SensitiveInfoRedactor';
 import { PdfDiffService } from '../diff/PdfDiffService';
+import { BlankPageDetectionService } from '../services/enhanced/blank-page-detection/BlankPageDetectionService';
+import { InfoPanelService } from '../services/enhanced/info-panel/InfoPanelService';
+import { SmartRenameService } from '../services/enhanced/smart-rename/SmartRenameService';
+import { StampLibraryService, StampConfig } from '../services/enhanced/stamp-library/StampLibraryService';
+import { TextExportService } from '../services/enhanced/text-export/TextExportService';
 
 const MAX_FILE_SIZE = 500 * 1024 * 1024;
 const ALLOWED_EXTENSIONS = ['.pdf'];
@@ -965,6 +970,27 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   const taskQueueService = new TaskQueueService();
   taskQueueService.setMainWindow(mainWindow);
 
+  // ========== 新增服务 ==========
+  // 空白页检测服务
+  const blankPageDetectionService = new BlankPageDetectionService();
+  blankPageDetectionService.setMainWindow(mainWindow);
+
+  // 信息面板服务
+  const infoPanelService = new InfoPanelService();
+  infoPanelService.setMainWindow(mainWindow);
+
+  // 预设印章库服务
+  const stampLibraryService = new StampLibraryService();
+  stampLibraryService.setMainWindow(mainWindow);
+
+  // 文本导出服务
+  const textExportService = new TextExportService();
+  textExportService.setMainWindow(mainWindow);
+
+  // 智能重命名服务
+  const smartRenameService = new SmartRenameService();
+  smartRenameService.setMainWindow(mainWindow);
+
   registerIpcHandler<{
     type: string;
     filePaths: string[];
@@ -1049,5 +1075,64 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       properties: ['openFile', 'multiSelections'],
     });
     return result.canceled ? [] : result.filePaths;
+  });
+
+  // ========== 新增 IPC ==========
+  // 空白页检测 IPC
+  registerIpcHandler<{
+    filePath: string;
+    options?: {
+      pixelThreshold?: number;
+      nonWhiteRatioThreshold?: number;
+    };
+  }, { blankPages: number[]; totalChecked: number }>('blank-page-detection:analyze', async ({ filePath, options }) => {
+    if (!filePath) throw new Error('无效的文件路径');
+    return blankPageDetectionService.detectBlankPages(filePath, options);
+  });
+
+  // PDF 信息面板 IPC
+  registerIpcHandler<{ filePath: string }, unknown>('info-panel:get-info', async ({ filePath }) => {
+    if (!filePath) throw new Error('无效的文件路径');
+    return infoPanelService.getInfo(filePath);
+  });
+
+  // 预设印章库 IPC
+  registerIpcHandler<{}, StampConfig[]>('stamp-library:get-all', async () => {
+    return stampLibraryService.getAllStamps();
+  });
+
+  registerIpcHandler<{ id: string }, StampConfig | null>('stamp-library:get-by-id', async ({ id }) => {
+    if (!id) throw new Error('印章ID不能为空');
+    return stampLibraryService.getStampById(id);
+  });
+
+  registerIpcHandler<{}, string>('stamp-library:get-date-text', async () => {
+    return stampLibraryService.getDateStampText();
+  });
+
+  // 文本导出 IPC
+  registerIpcHandler<{
+    filePath: string;
+    outputPath: string;
+    options?: {
+      includeFormatting?: boolean;
+      onProgress?: (progress: number, message: string) => void;
+    };
+  }, string>('text-export:export', async ({ filePath, outputPath, options }) => {
+    if (!filePath) throw new Error('无效的文件路径');
+    if (!outputPath) throw new Error('无效的输出路径');
+    return textExportService.exportText(filePath, outputPath, options);
+  });
+
+  // 智能重命名 IPC
+  registerIpcHandler<{
+    filePath: string;
+    options?: {
+      template?: string;
+      priority?: 'metadata' | 'content' | 'hybrid';
+    };
+  }, string>('smart-rename:suggest', async ({ filePath, options }) => {
+    if (!filePath) throw new Error('无效的文件路径');
+    return smartRenameService.generateRenameSuggestions(filePath, options);
   });
 }
