@@ -1,0 +1,55 @@
+{
+  "app": {
+    "name": "VerityPDF",
+    "description": "Outil professionnel d'annotation PDF"
+  },
+  "menu": {
+    "file": "Fichier",
+    "edit": "Édition",
+    "view": "Affichage",
+    "help": "Aide",
+    "open": "Ouvrir PDF...",
+    "save": "Enregistrer",
+    "saveAs": "Enregistrer sous...",
+    "export": "Exporter PDF...",
+    "print": "Imprimer...",
+    "undo": "Annuler",
+    "redo": "Rétablir",
+    "copy": "Copier",
+    "paste": "Coller",
+    "delete": "Supprimer",
+    "selectAll": "Tout sélectionner"
+  },
+  "toolbar": {
+    "select": "Sélection",
+    "pan": "Déplacer",
+    "rect": "Rectangle",
+    "ellipse": "Ellipse",
+    "arrow": "Flèche",
+    "line": "Ligne",
+    "freehand": "Stylo",
+    "text": "Texte",
+    "highlight": "Surligneur",
+    "stickyNote": "Post-it",
+    "stamp": "Tampon",
+    "signature": "Signature",
+    "eraser": "Gomme"
+  },
+  "sidebar": {
+    "thumbnails": "Miniatures",
+    "outline": "Plan",
+    "annotations": "Annotations",
+    "empty": "Aucune donnée"
+  },
+  "viewer": {
+    "openFile": "Ouvrir un fichier PDF",
+    "dropHint": "ou glissez-déposez un fichier PDF ici",
+    "noDocument": "Veuillez ouvrir un fichier PDF"
+  },
+  "status": {
+    "saved": "Enregistré",
+    "saving": "Enregistrement...",
+    "unsaved": "Non enregistré",
+    "error": "Échec de l'enregistrement"
+  }
+}

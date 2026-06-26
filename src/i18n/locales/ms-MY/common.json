@@ -1,0 +1,55 @@
+{
+  "app": {
+    "name": "VerityPDF",
+    "description": "Alat anotasi PDF profesional"
+  },
+  "menu": {
+    "file": "Fail",
+    "edit": "Sunting",
+    "view": "Paparan",
+    "help": "Bantuan",
+    "open": "Buka PDF...",
+    "save": "Simpan",
+    "saveAs": "Simpan sebagai...",
+    "export": "Eksport PDF...",
+    "print": "Cetak...",
+    "undo": "Buat asal",
+    "redo": "Buat semula",
+    "copy": "Salin",
+    "paste": "Tampal",
+    "delete": "Padam",
+    "selectAll": "Pilih semua"
+  },
+  "toolbar": {
+    "select": "Pilih",
+    "pan": "Alih",
+    "rect": "Segi empat",
+    "ellipse": "Elips",
+    "arrow": "Panah",
+    "line": "Garisan",
+    "freehand": "Pen",
+    "text": "Teks",
+    "highlight": "Penyerlah",
+    "stickyNote": "Pelekat",
+    "stamp": "Setem",
+    "signature": "Tandatangan",
+    "eraser": "Pemadam"
+  },
+  "sidebar": {
+    "thumbnails": "Imej kecil",
+    "outline": "Rangka",
+    "annotations": "Anotasi",
+    "empty": "Tiada data"
+  },
+  "viewer": {
+    "openFile": "Buka fail PDF",
+    "dropHint": "atau seret dan lepaskan fail PDF di sini",
+    "noDocument": "Sila buka fail PDF"
+  },
+  "status": {
+    "saved": "Disimpan",
+    "saving": "Menyimpan...",
+    "unsaved": "Belum disimpan",
+    "error": "Gagal menyimpan"
+  }
+}

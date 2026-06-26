@@ -1,0 +1,55 @@
+{
+  "app": {
+    "name": "VerityPDF",
+    "description": "Professionelles PDF-Anmerkungsprogramm"
+  },
+  "menu": {
+    "file": "Datei",
+    "edit": "Bearbeiten",
+    "view": "Ansicht",
+    "help": "Hilfe",
+    "open": "PDF öffnen...",
+    "save": "Speichern",
+    "saveAs": "Speichern unter...",
+    "export": "PDF exportieren...",
+    "print": "Drucken...",
+    "undo": "Rückgängig",
+    "redo": "Wiederherstellen",
+    "copy": "Kopieren",
+    "paste": "Einfügen",
+    "delete": "Löschen",
+    "selectAll": "Alles auswählen"
+  },
+  "toolbar": {
+    "select": "Auswählen",
+    "pan": "Verschieben",
+    "rect": "Rechteck",
+    "ellipse": "Ellipse",
+    "arrow": "Pfeil",
+    "line": "Linie",
+    "freehand": "Stift",
+    "text": "Text",
+    "highlight": "Textmarker",
+    "stickyNote": "Haftnotiz",
+    "stamp": "Stempel",
+    "signature": "Unterschrift",
+    "eraser": "Radierer"
+  },
+  "sidebar": {
+    "thumbnails": "Miniaturbilder",
+    "outline": "Gliederung",
+    "annotations": "Anmerkungen",
+    "empty": "Keine Daten"
+  },
+  "viewer": {
+    "openFile": "PDF-Datei öffnen",
+    "dropHint": "oder PDF-Datei hierher ziehen",
+    "noDocument": "Bitte öffnen Sie eine PDF-Datei"
+  },
+  "status": {
+    "saved": "Gespeichert",
+    "saving": "Speichern...",
+    "unsaved": "Nicht gespeichert",
+    "error": "Speichern fehlgeschlagen"
+  }
+}

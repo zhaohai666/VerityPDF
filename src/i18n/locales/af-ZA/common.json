@@ -1,0 +1,55 @@
+{
+  "app": {
+    "name": "VerityPDF",
+    "description": "Professionele PDF-annotasie-instrument"
+  },
+  "menu": {
+    "file": "Lêer",
+    "edit": "Redigeer",
+    "view": "Aansig",
+    "help": "Hulp",
+    "open": "Maak PDF oop...",
+    "save": "Stoor",
+    "saveAs": "Stoor as...",
+    "export": "Voer PDF uit...",
+    "print": "Druk...",
+    "undo": "Ontdoen",
+    "redo": "Herhaal",
+    "copy": "Kopieer",
+    "paste": "Plak",
+    "delete": "Vee uit",
+    "selectAll": "Kies alles"
+  },
+  "toolbar": {
+    "select": "Kies",
+    "pan": "Skuif",
+    "rect": "Reghoek",
+    "ellipse": "Ovaal",
+    "arrow": "Pyl",
+    "line": "Lyn",
+    "freehand": "Pen",
+    "text": "Teks",
+    "highlight": "Beklemmer",
+    "stickyNote": "Kleefnota",
+    "stamp": "Stempel",
+    "signature": "Handtekening",
+    "eraser": "Uitveër"
+  },
+  "sidebar": {
+    "thumbnails": "Duimnaels",
+    "outline": "Oorsig",
+    "annotations": "Annotasies",
+    "empty": "Geen data"
+  },
+  "viewer": {
+    "openFile": "Maak PDF-lêer oop",
+    "dropHint": "of sleep 'n PDF-lêer hierna toe",
+    "noDocument": "Maak asseblief 'n PDF-lêer oop"
+  },
+  "status": {
+    "saved": "Gestoor",
+    "saving": "Stoor tans...",
+    "unsaved": "Nie gestoor",
+    "error": "Stoor het misluk"
+  }
+}

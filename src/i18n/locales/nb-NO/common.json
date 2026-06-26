@@ -1,0 +1,55 @@
+{
+  "app": {
+    "name": "VerityPDF",
+    "description": "Profesjonelt PDF-merknadsverktøy"
+  },
+  "menu": {
+    "file": "Fil",
+    "edit": "Rediger",
+    "view": "Vis",
+    "help": "Hjelp",
+    "open": "Åpne PDF...",
+    "save": "Lagre",
+    "saveAs": "Lagre som...",
+    "export": "Eksporter PDF...",
+    "print": "Skriv ut...",
+    "undo": "Angre",
+    "redo": "Gjør om",
+    "copy": "Kopier",
+    "paste": "Lim inn",
+    "delete": "Slett",
+    "selectAll": "Merk alt"
+  },
+  "toolbar": {
+    "select": "Merk",
+    "pan": "Flytt",
+    "rect": "Rektangel",
+    "ellipse": "Ellipse",
+    "arrow": "Pil",
+    "line": "Linje",
+    "freehand": "Penn",
+    "text": "Tekst",
+    "highlight": "Markør",
+    "stickyNote": "Notat",
+    "stamp": "Stempel",
+    "signature": "Signatur",
+    "eraser": "Viskelær"
+  },
+  "sidebar": {
+    "thumbnails": "Miniatyrbilder",
+    "outline": "Oversikt",
+    "annotations": "Merknader",
+    "empty": "Ingen data"
+  },
+  "viewer": {
+    "openFile": "Åpne PDF-fil",
+    "dropHint": "eller dra og slipp en PDF-fil her",
+    "noDocument": "Vennligst åpne en PDF-fil"
+  },
+  "status": {
+    "saved": "Lagret",
+    "saving": "Lagrer...",
+    "unsaved": "Ulagret",
+    "error": "Lagringsfeil"
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "app": {
+    "name": "VerityPDF",
+    "description": "Professionellt PDF-anteckningsverktyg"
+  },
+  "menu": {
+    "file": "Arkiv",
+    "edit": "Redigera",
+    "view": "Visa",
+    "help": "Hjälp",
+    "open": "Öppna PDF...",
+    "save": "Spara",
+    "saveAs": "Spara som...",
+    "export": "Exportera PDF...",
+    "print": "Skriv ut...",
+    "undo": "Ångra",
+    "redo": "Gör om",
+    "copy": "Kopiera",
+    "paste": "Klistra in",
+    "delete": "Ta bort",
+    "selectAll": "Markera allt"
+  },
+  "toolbar": {
+    "select": "Markera",
+    "pan": "Flytta",
+    "rect": "Rektangel",
+    "ellipse": "Ellips",
+    "arrow": "Pil",
+    "line": "Linje",
+    "freehand": "Penna",
+    "text": "Text",
+    "highlight": "Markör",
+    "stickyNote": "Anteckning",
+    "stamp": "Stämpel",
+    "signature": "Signatur",
+    "eraser": "Radergummi"
+  },
+  "sidebar": {
+    "thumbnails": "Miniatyrbilder",
+    "outline": "Översikt",
+    "annotations": "Anteckningar",
+    "empty": "Inga data"
+  },
+  "viewer": {
+    "openFile": "Öppna PDF-fil",
+    "dropHint": "eller dra och släppa en PDF-fil här",
+    "noDocument": "Vänligen öppna en PDF-fil"
+  },
+  "status": {
+    "saved": "Sparat",
+    "saving": "Sparar...",
+    "unsaved": "Osparat",
+    "error": "Sparfel"
+  }
+}

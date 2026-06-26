@@ -1,0 +1,55 @@
+{
+  "app": {
+    "name": "VerityPDF",
+    "description": "כלי מקצועי להערות PDF"
+  },
+  "menu": {
+    "file": "קובץ",
+    "edit": "עריכה",
+    "view": "תצוגה",
+    "help": "עזרה",
+    "open": "פתח PDF...",
+    "save": "שמור",
+    "saveAs": "שמור בשם...",
+    "export": "ייצא PDF...",
+    "print": "הדפס...",
+    "undo": "בטל",
+    "redo": "בצע שוב",
+    "copy": "העתק",
+    "paste": "הדבק",
+    "delete": "מחק",
+    "selectAll": "בחר הכל"
+  },
+  "toolbar": {
+    "select": "בחר",
+    "pan": "הזז",
+    "rect": "מלבן",
+    "ellipse": "אליפסה",
+    "arrow": "חץ",
+    "line": "קו",
+    "freehand": "עט",
+    "text": "טקסט",
+    "highlight": "מדגיש",
+    "stickyNote": "פתק דביק",
+    "stamp": "חותמת",
+    "signature": "חתימה",
+    "eraser": "מחק"
+  },
+  "sidebar": {
+    "thumbnails": "תמונות ממוזערות",
+    "outline": "מבנה",
+    "annotations": "הערות",
+    "empty": "אין נתונים"
+  },
+  "viewer": {
+    "openFile": "פתח קובץ PDF",
+    "dropHint": "או גרור ושחרר קובץ PDF לכאן",
+    "noDocument": "אנא פתח קובץ PDF"
+  },
+  "status": {
+    "saved": "נשמר",
+    "saving": "שומר...",
+    "unsaved": "לא נשמר",
+    "error": "שגיאה בשמירה"
+  }
+}

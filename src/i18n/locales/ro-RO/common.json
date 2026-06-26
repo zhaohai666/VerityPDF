@@ -1,0 +1,55 @@
+{
+  "app": {
+    "name": "VerityPDF",
+    "description": "Instrument profesional pentru adnotări PDF"
+  },
+  "menu": {
+    "file": "Fișier",
+    "edit": "Editare",
+    "view": "Vizualizare",
+    "help": "Ajutor",
+    "open": "Deschide PDF...",
+    "save": "Salvare",
+    "saveAs": "Salvare ca...",
+    "export": "Exportă PDF...",
+    "print": "Tipărire...",
+    "undo": "Anulare",
+    "redo": "Refacere",
+    "copy": "Copiere",
+    "paste": "Lipire",
+    "delete": "Ștergere",
+    "selectAll": "Selectare totală"
+  },
+  "toolbar": {
+    "select": "Selectare",
+    "pan": "Deplasare",
+    "rect": "Dreptunghi",
+    "ellipse": "Elipsă",
+    "arrow": "Săgeată",
+    "line": "Linie",
+    "freehand": "Stilou",
+    "text": "Text",
+    "highlight": "Evidențiator",
+    "stickyNote": "Notă adezivă",
+    "stamp": "Ștampilă",
+    "signature": "Semnătură",
+    "eraser": "Radieră"
+  },
+  "sidebar": {
+    "thumbnails": "Miniaturi",
+    "outline": "Structură",
+    "annotations": "Adnotări",
+    "empty": "Fără date"
+  },
+  "viewer": {
+    "openFile": "Deschide fișier PDF",
+    "dropHint": "sau trage un fișier PDF aici",
+    "noDocument": "Vă rugăm deschideți un fișier PDF"
+  },
+  "status": {
+    "saved": "Salvat",
+    "saving": "Se salvează...",
+    "unsaved": "Nesalvat",
+    "error": "Eroare la salvare"
+  }
+}

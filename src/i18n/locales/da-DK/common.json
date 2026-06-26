@@ -1,0 +1,55 @@
+{
+  "app": {
+    "name": "VerityPDF",
+    "description": "Professionelt PDF-kommentarværktøj"
+  },
+  "menu": {
+    "file": "Fil",
+    "edit": "Rediger",
+    "view": "Vis",
+    "help": "Hjælp",
+    "open": "Åbn PDF...",
+    "save": "Gem",
+    "saveAs": "Gem som...",
+    "export": "Eksporter PDF...",
+    "print": "Udskriv...",
+    "undo": "Fortryd",
+    "redo": "Annuller fortryd",
+    "copy": "Kopier",
+    "paste": "Indsæt",
+    "delete": "Slet",
+    "selectAll": "Vælg alt"
+  },
+  "toolbar": {
+    "select": "Vælg",
+    "pan": "Flyt",
+    "rect": "Rektangel",
+    "ellipse": "Ellipse",
+    "arrow": "Pil",
+    "line": "Linje",
+    "freehand": "Pen",
+    "text": "Tekst",
+    "highlight": "Fremhæver",
+    "stickyNote": "Note",
+    "stamp": "Stempel",
+    "signature": "Underskrift",
+    "eraser": "Viskelæder"
+  },
+  "sidebar": {
+    "thumbnails": "Miniaturebilleder",
+    "outline": "Oversigt",
+    "annotations": "Kommentarer",
+    "empty": "Ingen data"
+  },
+  "viewer": {
+    "openFile": "Åbn PDF-fil",
+    "dropHint": "eller træk og slip en PDF-fil her",
+    "noDocument": "Åbn venligst en PDF-fil"
+  },
+  "status": {
+    "saved": "Gemt",
+    "saving": "Gemmer...",
+    "unsaved": "Ikke gemt",
+    "error": "Gemmefejl"
+  }
+}

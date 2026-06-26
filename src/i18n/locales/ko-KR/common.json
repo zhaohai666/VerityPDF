@@ -1,0 +1,55 @@
+{
+  "app": {
+    "name": "VerityPDF",
+    "description": "전문 PDF 주석 도구"
+  },
+  "menu": {
+    "file": "파일",
+    "edit": "편집",
+    "view": "보기",
+    "help": "도움말",
+    "open": "PDF 열기...",
+    "save": "저장",
+    "saveAs": "다른 이름으로 저장...",
+    "export": "PDF 내보내기...",
+    "print": "인쇄...",
+    "undo": "실행 취소",
+    "redo": "다시 실행",
+    "copy": "복사",
+    "paste": "붙여넣기",
+    "delete": "삭제",
+    "selectAll": "모두 선택"
+  },
+  "toolbar": {
+    "select": "선택",
+    "pan": "이동",
+    "rect": "사각형",
+    "ellipse": "타원",
+    "arrow": "화살표",
+    "line": "선",
+    "freehand": "펜",
+    "text": "텍스트",
+    "highlight": "형광펜",
+    "stickyNote": "메모",
+    "stamp": "도장",
+    "signature": "서명",
+    "eraser": "지우개"
+  },
+  "sidebar": {
+    "thumbnails": "썸네일",
+    "outline": "개요",
+    "annotations": "주석",
+    "empty": "데이터 없음"
+  },
+  "viewer": {
+    "openFile": "PDF 파일 열기",
+    "dropHint": "또는 PDF 파일을 여기로 드래그 앤 드롭",
+    "noDocument": "PDF 파일을 열어주세요"
+  },
+  "status": {
+    "saved": "저장됨",
+    "saving": "저장 중...",
+    "unsaved": "저장되지 않음",
+    "error": "저장 실패"
+  }
+}

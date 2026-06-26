@@ -1,0 +1,55 @@
+{
+  "app": {
+    "name": "VerityPDF",
+    "description": "เครื่องมือระบุหมายเหตุ PDF ระดับมืออาชีพ"
+  },
+  "menu": {
+    "file": "ไฟล์",
+    "edit": "แก้ไข",
+    "view": "มุมมอง",
+    "help": "ช่วยเหลือ",
+    "open": "เปิด PDF...",
+    "save": "บันทึก",
+    "saveAs": "บันทึกเป็น...",
+    "export": "ส่งออก PDF...",
+    "print": "พิมพ์...",
+    "undo": "เลิกทำ",
+    "redo": "ทำซ้ำ",
+    "copy": "คัดลอก",
+    "paste": "วาง",
+    "delete": "ลบ",
+    "selectAll": "เลือกทั้งหมด"
+  },
+  "toolbar": {
+    "select": "เลือก",
+    "pan": "เลื่อน",
+    "rect": "สี่เหลี่ยม",
+    "ellipse": "วงรี",
+    "arrow": "ลูกศร",
+    "line": "เส้น",
+    "freehand": "ปากกา",
+    "text": "ข้อความ",
+    "highlight": "ไฮไลท์",
+    "stickyNote": "โน้ต",
+    "stamp": "ตรา",
+    "signature": "ลายเซ็น",
+    "eraser": "ยางลบ"
+  },
+  "sidebar": {
+    "thumbnails": "ภาพขนาดย่อ",
+    "outline": "โครงร่าง",
+    "annotations": "หมายเหตุ",
+    "empty": "ไม่มีข้อมูล"
+  },
+  "viewer": {
+    "openFile": "เปิดไฟล์ PDF",
+    "dropHint": "หรือลากและวางไฟล์ PDF ที่นี่",
+    "noDocument": "กรุณาเปิดไฟล์ PDF"
+  },
+  "status": {
+    "saved": "บันทึกแล้ว",
+    "saving": "กำลังบันทึก...",
+    "unsaved": "ยังไม่ได้บันทึก",
+    "error": "บันทึกไม่สำเร็จ"
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "app": {
+    "name": "VerityPDF",
+    "description": "Strumento professionale per annotazioni PDF"
+  },
+  "menu": {
+    "file": "File",
+    "edit": "Modifica",
+    "view": "Visualizza",
+    "help": "Aiuto",
+    "open": "Apri PDF...",
+    "save": "Salva",
+    "saveAs": "Salva con nome...",
+    "export": "Esporta PDF...",
+    "print": "Stampa...",
+    "undo": "Annulla",
+    "redo": "Ripeti",
+    "copy": "Copia",
+    "paste": "Incolla",
+    "delete": "Elimina",
+    "selectAll": "Seleziona tutto"
+  },
+  "toolbar": {
+    "select": "Seleziona",
+    "pan": "Sposta",
+    "rect": "Rettangolo",
+    "ellipse": "Ellisse",
+    "arrow": "Freccia",
+    "line": "Linea",
+    "freehand": "Penna",
+    "text": "Testo",
+    "highlight": "Evidenziatore",
+    "stickyNote": "Nota adesiva",
+    "stamp": "Timbro",
+    "signature": "Firma",
+    "eraser": "Gomma"
+  },
+  "sidebar": {
+    "thumbnails": "Miniature",
+    "outline": "Struttura",
+    "annotations": "Annotazioni",
+    "empty": "Nessun dato"
+  },
+  "viewer": {
+    "openFile": "Apri file PDF",
+    "dropHint": "o trascina un file PDF qui",
+    "noDocument": "Si prega di aprire un file PDF"
+  },
+  "status": {
+    "saved": "Salvato",
+    "saving": "Salvataggio...",
+    "unsaved": "Non salvato",
+    "error": "Salvataggio fallito"
+  }
+}

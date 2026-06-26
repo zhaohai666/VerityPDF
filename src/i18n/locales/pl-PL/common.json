@@ -1,0 +1,55 @@
+{
+  "app": {
+    "name": "VerityPDF",
+    "description": "Profesjonalne narzędzie do adnotacji PDF"
+  },
+  "menu": {
+    "file": "Plik",
+    "edit": "Edycja",
+    "view": "Widok",
+    "help": "Pomoc",
+    "open": "Otwórz PDF...",
+    "save": "Zapisz",
+    "saveAs": "Zapisz jako...",
+    "export": "Eksportuj PDF...",
+    "print": "Drukuj...",
+    "undo": "Cofnij",
+    "redo": "Ponów",
+    "copy": "Kopiuj",
+    "paste": "Wklej",
+    "delete": "Usuń",
+    "selectAll": "Zaznacz wszystko"
+  },
+  "toolbar": {
+    "select": "Zaznacz",
+    "pan": "Przesuń",
+    "rect": "Prostokąt",
+    "ellipse": "Eliipsa",
+    "arrow": "Strzałka",
+    "line": "Linia",
+    "freehand": "Pióro",
+    "text": "Tekst",
+    "highlight": "Zakreślacz",
+    "stickyNote": "Notatka",
+    "stamp": "Stempel",
+    "signature": "Podpis",
+    "eraser": "Gumka"
+  },
+  "sidebar": {
+    "thumbnails": "Miniatury",
+    "outline": "Konspekt",
+    "annotations": "Adnotacje",
+    "empty": "Brak danych"
+  },
+  "viewer": {
+    "openFile": "Otwórz plik PDF",
+    "dropHint": "lub przeciągnij plik PDF tutaj",
+    "noDocument": "Proszę otworzyć plik PDF"
+  },
+  "status": {
+    "saved": "Zapisano",
+    "saving": "Zapisywanie...",
+    "unsaved": "Niezapisano",
+    "error": "Błąd zapisu"
+  }
+}

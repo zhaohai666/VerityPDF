@@ -1,0 +1,55 @@
+{
+  "app": {
+    "name": "VerityPDF",
+    "description": "Професионални алат за PDF белешке"
+  },
+  "menu": {
+    "file": "Датотека",
+    "edit": "Уређивање",
+    "view": "Приказ",
+    "help": "Помоћ",
+    "open": "Отвори PDF...",
+    "save": "Сачувај",
+    "saveAs": "Сачувај као...",
+    "export": "Извези PDF...",
+    "print": "Штампај...",
+    "undo": "Поништи",
+    "redo": "Понови",
+    "copy": "Копирај",
+    "paste": "Налепи",
+    "delete": "Обриши",
+    "selectAll": "Изабери све"
+  },
+  "toolbar": {
+    "select": "Изабери",
+    "pan": "Помери",
+    "rect": "Правоугаоник",
+    "ellipse": "Елипса",
+    "arrow": "Стрелица",
+    "line": "Линија",
+    "freehand": "Оловка",
+    "text": "Текст",
+    "highlight": "Маркер",
+    "stickyNote": "Белешка",
+    "stamp": "Печат",
+    "signature": "Потпис",
+    "eraser": "Гумица"
+  },
+  "sidebar": {
+    "thumbnails": "Сличице",
+    "outline": "Структура",
+    "annotations": "Белешке",
+    "empty": "Нема података"
+  },
+  "viewer": {
+    "openFile": "Отвори PDF датотеку",
+    "dropHint": "или превуците PDF датотеку овде",
+    "noDocument": "Молимо отворите PDF датотеку"
+  },
+  "status": {
+    "saved": "Сачувано",
+    "saving": "Чување...",
+    "unsaved": "Несачувано",
+    "error": "Грешка при чувању"
+  }
+}

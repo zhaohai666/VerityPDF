@@ -1,0 +1,55 @@
+{
+  "app": {
+    "name": "VerityPDF",
+    "description": "أداة احترافية لتعليقات PDF"
+  },
+  "menu": {
+    "file": "ملف",
+    "edit": "تحرير",
+    "view": "عرض",
+    "help": "مساعدة",
+    "open": "فتح PDF...",
+    "save": "حفظ",
+    "saveAs": "حفظ باسم...",
+    "export": "تصدير PDF...",
+    "print": "طباعة...",
+    "undo": "تراجع",
+    "redo": "إعادة",
+    "copy": "نسخ",
+    "paste": "لصق",
+    "delete": "حذف",
+    "selectAll": "تحديد الكل"
+  },
+  "toolbar": {
+    "select": "تحديد",
+    "pan": "تحريك",
+    "rect": "مستطيل",
+    "ellipse": "شكل بيضاوي",
+    "arrow": "سهم",
+    "line": "خط",
+    "freehand": "قلم",
+    "text": "نص",
+    "highlight": "قلم تمييز",
+    "stickyNote": "ملاحظة لاصقة",
+    "stamp": "ختم",
+    "signature": "توقيع",
+    "eraser": "ممحاة"
+  },
+  "sidebar": {
+    "thumbnails": "صور مصغرة",
+    "outline": "مخطط",
+    "annotations": "تعليقات",
+    "empty": "لا توجد بيانات"
+  },
+  "viewer": {
+    "openFile": "فتح ملف PDF",
+    "dropHint": "أو اسحب وأفلت ملف PDF هنا",
+    "noDocument": "يرجى فتح ملف PDF"
+  },
+  "status": {
+    "saved": "تم الحفظ",
+    "saving": "جاري الحفظ...",
+    "unsaved": "غير محفوظ",
+    "error": "فشل الحفظ"
+  }
+}

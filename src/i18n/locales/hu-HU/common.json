@@ -1,0 +1,55 @@
+{
+  "app": {
+    "name": "VerityPDF",
+    "description": "Professzionális PDF megjegyzéselő eszköz"
+  },
+  "menu": {
+    "file": "Fájl",
+    "edit": "Szerkesztés",
+    "view": "Nézet",
+    "help": "Súgó",
+    "open": "PDF megnyitása...",
+    "save": "Mentés",
+    "saveAs": "Mentés másként...",
+    "export": "PDF exportálása...",
+    "print": "Nyomtatás...",
+    "undo": "Visszavonás",
+    "redo": "Újra",
+    "copy": "Másolás",
+    "paste": "Beillesztés",
+    "delete": "Törlés",
+    "selectAll": "Összes kijelölése"
+  },
+  "toolbar": {
+    "select": "Kijelölés",
+    "pan": "Mozgatás",
+    "rect": "Téglalap",
+    "ellipse": "Ellipszis",
+    "arrow": "Nyíl",
+    "line": "Vonal",
+    "freehand": "Toll",
+    "text": "Szöveg",
+    "highlight": "Kiemelő",
+    "stickyNote": "Jegyzet",
+    "stamp": "Bélyegző",
+    "signature": "Aláírás",
+    "eraser": "Radír"
+  },
+  "sidebar": {
+    "thumbnails": "Bélyegképek",
+    "outline": "Vázlat",
+    "annotations": "Megjegyzések",
+    "empty": "Nincs adat"
+  },
+  "viewer": {
+    "openFile": "PDF fájl megnyitása",
+    "dropHint": "vagy húzzon ide egy PDF fájlt",
+    "noDocument": "Kérjük, nyisson meg egy PDF fájlt"
+  },
+  "status": {
+    "saved": "Mentve",
+    "saving": "Mentés...",
+    "unsaved": "Nem mentett",
+    "error": "Mentési hiba"
+  }
+}

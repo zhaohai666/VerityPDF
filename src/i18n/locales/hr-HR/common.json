@@ -1,0 +1,55 @@
+{
+  "app": {
+    "name": "VerityPDF",
+    "description": "Profesionalni alat za PDF bilješke"
+  },
+  "menu": {
+    "file": "Datoteka",
+    "edit": "Uređivanje",
+    "view": "Prikaz",
+    "help": "Pomoć",
+    "open": "Otvori PDF...",
+    "save": "Spremi",
+    "saveAs": "Spremi kao...",
+    "export": "Izvezi PDF...",
+    "print": "Ispiši...",
+    "undo": "Poništi",
+    "redo": "Ponovi",
+    "copy": "Kopiraj",
+    "paste": "Zalijepi",
+    "delete": "Obriši",
+    "selectAll": "Odaberi sve"
+  },
+  "toolbar": {
+    "select": "Odaberi",
+    "pan": "Pomakni",
+    "rect": "Pravokutnik",
+    "ellipse": "Elipsa",
+    "arrow": "Strelica",
+    "line": "Linija",
+    "freehand": "Olovka",
+    "text": "Tekst",
+    "highlight": "Marker",
+    "stickyNote": "Ljepljiva bilješka",
+    "stamp": "Pečat",
+    "signature": "Potpis",
+    "eraser": "Gumica"
+  },
+  "sidebar": {
+    "thumbnails": "Sličice",
+    "outline": "Struktura",
+    "annotations": "Bilješke",
+    "empty": "Nema podataka"
+  },
+  "viewer": {
+    "openFile": "Otvori PDF datoteku",
+    "dropHint": "ili povucite PDF datoteku ovdje",
+    "noDocument": "Molimo otvorite PDF datoteku"
+  },
+  "status": {
+    "saved": "Spremljeno",
+    "saving": "Spremanje...",
+    "unsaved": "Nespremljeno",
+    "error": "Greška pri spremanju"
+  }
+}

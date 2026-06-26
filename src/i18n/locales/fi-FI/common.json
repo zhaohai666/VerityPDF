@@ -1,0 +1,55 @@
+{
+  "app": {
+    "name": "VerityPDF",
+    "description": "Ammattimainen PDF-merkintätyökalu"
+  },
+  "menu": {
+    "file": "Tiedosto",
+    "edit": "Muokkaa",
+    "view": "Näytä",
+    "help": "Ohje",
+    "open": "Avaa PDF...",
+    "save": "Tallenna",
+    "saveAs": "Tallenna nimellä...",
+    "export": "Vie PDF...",
+    "print": "Tulosta...",
+    "undo": "Kumoa",
+    "redo": "Tee uudelleen",
+    "copy": "Kopioi",
+    "paste": "Liitä",
+    "delete": "Poista",
+    "selectAll": "Valitse kaikki"
+  },
+  "toolbar": {
+    "select": "Valitse",
+    "pan": "Siirrä",
+    "rect": "Suorakulmio",
+    "ellipse": "Ellipsi",
+    "arrow": "Nuoli",
+    "line": "Viiva",
+    "freehand": "Kynä",
+    "text": "Teksti",
+    "highlight": "Korostus",
+    "stickyNote": "Muistilappu",
+    "stamp": "Leima",
+    "signature": "Allekirjoitus",
+    "eraser": "Pyyhekumi"
+  },
+  "sidebar": {
+    "thumbnails": "Pienoiskuvat",
+    "outline": "Jäsennys",
+    "annotations": "Merkinnät",
+    "empty": "Ei tietoja"
+  },
+  "viewer": {
+    "openFile": "Avaa PDF-tiedosto",
+    "dropHint": "tai vedä ja pudota PDF-tiedosto tähän",
+    "noDocument": "Avaa PDF-tiedosto"
+  },
+  "status": {
+    "saved": "Tallennettu",
+    "saving": "Tallennetaan...",
+    "unsaved": "Tallentamaton",
+    "error": "Tallennusvirhe"
+  }
+}

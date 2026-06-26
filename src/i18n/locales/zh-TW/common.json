@@ -1,0 +1,55 @@
+{
+  "app": {
+    "name": "VerityPDF",
+    "description": "專業 PDF 註解工具"
+  },
+  "menu": {
+    "file": "檔案",
+    "edit": "編輯",
+    "view": "檢視",
+    "help": "說明",
+    "open": "開啟 PDF...",
+    "save": "儲存",
+    "saveAs": "另存新檔...",
+    "export": "匯出 PDF...",
+    "print": "列印...",
+    "undo": "復原",
+    "redo": "重做",
+    "copy": "複製",
+    "paste": "貼上",
+    "delete": "刪除",
+    "selectAll": "全選"
+  },
+  "toolbar": {
+    "select": "選取",
+    "pan": "平移",
+    "rect": "矩形",
+    "ellipse": "橢圓",
+    "arrow": "箭頭",
+    "line": "線條",
+    "freehand": "畫筆",
+    "text": "文字",
+    "highlight": "螢光筆",
+    "stickyNote": "便利貼",
+    "stamp": "印章",
+    "signature": "簽名",
+    "eraser": "橡皮擦"
+  },
+  "sidebar": {
+    "thumbnails": "縮圖",
+    "outline": "大綱",
+    "annotations": "註解",
+    "empty": "無資料"
+  },
+  "viewer": {
+    "openFile": "開啟 PDF 檔案",
+    "dropHint": "或拖曳 PDF 檔案到此處",
+    "noDocument": "請開啟 PDF 檔案"
+  },
+  "status": {
+    "saved": "已儲存",
+    "saving": "儲存中...",
+    "unsaved": "未儲存",
+    "error": "儲存失敗"
+  }
+}

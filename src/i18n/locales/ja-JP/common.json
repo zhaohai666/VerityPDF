@@ -1,0 +1,55 @@
+{
+  "app": {
+    "name": "VerityPDF",
+    "description": "プロフェッショナル PDF 注釈ツール"
+  },
+  "menu": {
+    "file": "ファイル",
+    "edit": "編集",
+    "view": "表示",
+    "help": "ヘルプ",
+    "open": "PDFを開く...",
+    "save": "保存",
+    "saveAs": "名前を付けて保存...",
+    "export": "PDFをエクスポート...",
+    "print": "印刷...",
+    "undo": "元に戻す",
+    "redo": "やり直し",
+    "copy": "コピー",
+    "paste": "貼り付け",
+    "delete": "削除",
+    "selectAll": "すべて選択"
+  },
+  "toolbar": {
+    "select": "選択",
+    "pan": "パン",
+    "rect": "矩形",
+    "ellipse": "楕円",
+    "arrow": "矢印",
+    "line": "線",
+    "freehand": "ペン",
+    "text": "テキスト",
+    "highlight": "ハイライト",
+    "stickyNote": "付箋",
+    "stamp": "スタンプ",
+    "signature": "署名",
+    "eraser": "消しゴム"
+  },
+  "sidebar": {
+    "thumbnails": "サムネイル",
+    "outline": "アウトライン",
+    "annotations": "注釈",
+    "empty": "データなし"
+  },
+  "viewer": {
+    "openFile": "PDFファイルを開く",
+    "dropHint": "またはPDFファイルをここにドラッグ＆ドロップ",
+    "noDocument": "PDFファイルを開いてください"
+  },
+  "status": {
+    "saved": "保存済み",
+    "saving": "保存中...",
+    "unsaved": "未保存",
+    "error": "保存に失敗"
+  }
+}

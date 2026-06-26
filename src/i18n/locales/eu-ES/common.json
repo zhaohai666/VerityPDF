@@ -1,0 +1,55 @@
+{
+  "app": {
+    "name": "VerityPDF",
+    "description": "PDF oharrak tresna profesionala"
+  },
+  "menu": {
+    "file": "Fitxategia",
+    "edit": "Editatu",
+    "view": "Ikusi",
+    "help": "Laguntza",
+    "open": "Ireki PDF...",
+    "save": "Gorde",
+    "saveAs": "Gorde honela...",
+    "export": "Esportatu PDF...",
+    "print": "Inprimatu...",
+    "undo": "Desegin",
+    "redo": "Berregin",
+    "copy": "Kopiatu",
+    "paste": "Itsatsi",
+    "delete": "Ezabatu",
+    "selectAll": "Hautatu dena"
+  },
+  "toolbar": {
+    "select": "Hautatu",
+    "pan": "Mugitu",
+    "rect": "Laukizuzena",
+    "ellipse": "Elipsea",
+    "arrow": "Gezia",
+    "line": "Lerroa",
+    "freehand": "Arkatza",
+    "text": "Testua",
+    "highlight": "Nabarmendzailea",
+    "stickyNote": "Ohitsua",
+    "stamp": "Zigilua",
+    "signature": "Sinadura",
+    "eraser": "Borragoma"
+  },
+  "sidebar": {
+    "thumbnails": "Iruditxoak",
+    "outline": "Eskema",
+    "annotations": "Oharrak",
+    "empty": "Daturik ez"
+  },
+  "viewer": {
+    "openFile": "Ireki PDF fitxategia",
+    "dropHint": "edo arrastatu PDF fitxategia hona",
+    "noDocument": "Mesedez, ireki PDF fitxategi bat"
+  },
+  "status": {
+    "saved": "Gordeta",
+    "saving": "Gordetzen...",
+    "unsaved": "Gorde gabe",
+    "error": "Gordetzean errorea"
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "app": {
+    "name": "VerityPDF",
+    "description": "Eina professional d'anotació PDF"
+  },
+  "menu": {
+    "file": "Fitxer",
+    "edit": "Edita",
+    "view": "Visualitza",
+    "help": "Ajuda",
+    "open": "Obre PDF...",
+    "save": "Desa",
+    "saveAs": "Anomena i desa...",
+    "export": "Exporta PDF...",
+    "print": "Imprimeix...",
+    "undo": "Desfés",
+    "redo": "Refés",
+    "copy": "Copia",
+    "paste": "Enganxa",
+    "delete": "Elimina",
+    "selectAll": "Selecciona-ho tot"
+  },
+  "toolbar": {
+    "select": "Selecciona",
+    "pan": "Mou",
+    "rect": "Rectangle",
+    "ellipse": "El·lipse",
+    "arrow": "Fletxa",
+    "line": "Línia",
+    "freehand": "Llapis",
+    "text": "Text",
+    "highlight": "Ressaltador",
+    "stickyNote": "Nota adhesiva",
+    "stamp": "Segell",
+    "signature": "Signatura",
+    "eraser": "Goma"
+  },
+  "sidebar": {
+    "thumbnails": "Miniatures",
+    "outline": "Esquema",
+    "annotations": "Anotacions",
+    "empty": "Sense dades"
+  },
+  "viewer": {
+    "openFile": "Obre un fitxer PDF",
+    "dropHint": "o arrossega un fitxer PDF aquí",
+    "noDocument": "Si us plau, obriu un fitxer PDF"
+  },
+  "status": {
+    "saved": "Desat",
+    "saving": "Desant...",
+    "unsaved": "No desat",
+    "error": "Error en desar"
+  }
+}

@@ -229,6 +229,19 @@ export function createAppMenu(win: BrowserWindow): void {
           label: '扫描件效果...',
           click: () => sendAction('tool:scannerEffect'),
         },
+        { type: 'separator' },
+        {
+          label: '图片转 PDF...',
+          click: () => sendAction('tool:imageToPdf'),
+        },
+        {
+          label: '导出 CSV...',
+          click: () => sendAction('tool:csvExport'),
+        },
+        {
+          label: '查看 JavaScript...',
+          click: () => sendAction('tool:showJs'),
+        },
       ],
     },
 
@@ -236,6 +249,11 @@ export function createAppMenu(win: BrowserWindow): void {
     {
       label: '帮助',
       submenu: [
+        {
+          label: '语言 / Language...',
+          click: () => sendAction('help:language'),
+        },
+        { type: 'separator' },
         {
           label: '关于 VerityPDF',
           click: () => sendAction('help:about'),

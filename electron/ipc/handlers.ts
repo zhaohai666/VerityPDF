@@ -37,6 +37,9 @@ import { RemoveImagesService } from '../remove-images/RemoveImagesService';
 import { AttachmentService } from '../attachments/AttachmentService';
 import { InfoJsonService } from '../info-json/InfoJsonService';
 import { ScannerEffectService } from '../scanner-effect/ScannerEffectService';
+import { ImageToPdfService } from '../image-to-pdf/ImageToPdfService';
+import { CsvExportService } from '../csv-export/CsvExportService';
+import { ShowJsService } from '../show-js/ShowJsService';
 
 const MAX_FILE_SIZE = 500 * 1024 * 1024;
 const ALLOWED_EXTENSIONS = ['.pdf'];
@@ -1262,5 +1265,49 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     const binary = Buffer.from(pdfData, 'base64');
     const ab = binary.buffer.slice(binary.byteOffset, binary.byteOffset + binary.byteLength) as ArrayBuffer;
     return scannerEffectService.applyEffect(ab, options);
+  });
+
+  // 图片转PDF
+  const imageToPdfService = new ImageToPdfService();
+  registerIpcHandler<{
+    options: {
+      images: Array<{ data: string; format: 'png' | 'jpeg'; name: string }>;
+      pageSize: 'original' | 'a4' | 'letter' | 'fit';
+      dpi: number;
+      margin: number;
+      fitMode: 'stretch' | 'contain' | 'cover';
+    };
+  }, unknown>('image:toPdf', async ({ options }) => {
+    if (!options.images || options.images.length === 0) throw new Error('没有图片数据');
+    return imageToPdfService.convertToPdf(options);
+  });
+
+  // CSV 导出
+  const csvExportService = new CsvExportService();
+  registerIpcHandler<{
+    pdfData: string;
+    options: {
+      pageIndices?: number[];
+      delimiter: string;
+      detectHeaders: boolean;
+      rowDetectionTolerance: number;
+      columnDetectionMode: 'auto' | 'tab' | 'fixed';
+      includePageNumber: boolean;
+      includeCoordinates: boolean;
+    };
+  }, unknown>('pdf:csvExport', async ({ pdfData, options }) => {
+    if (!pdfData) throw new Error('无效的 PDF 数据');
+    const binary = Buffer.from(pdfData, 'base64');
+    const ab = binary.buffer.slice(binary.byteOffset, binary.byteOffset + binary.byteLength) as ArrayBuffer;
+    return csvExportService.exportToCsv(ab, options);
+  });
+
+  // 查看 JavaScript
+  const showJsService = new ShowJsService();
+  registerIpcHandler<{ pdfData: string }, unknown>('pdf:showJs', async ({ pdfData }) => {
+    if (!pdfData) throw new Error('无效的 PDF 数据');
+    const binary = Buffer.from(pdfData, 'base64');
+    const ab = binary.buffer.slice(binary.byteOffset, binary.byteOffset + binary.byteLength) as ArrayBuffer;
+    return showJsService.extractJavaScript(ab);
   });
 }

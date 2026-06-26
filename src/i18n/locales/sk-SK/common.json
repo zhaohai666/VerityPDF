@@ -1,0 +1,55 @@
+{
+  "app": {
+    "name": "VerityPDF",
+    "description": "Profesionálny nástroj na anotácie PDF"
+  },
+  "menu": {
+    "file": "Súbor",
+    "edit": "Úpravy",
+    "view": "Zobrazenie",
+    "help": "Pomocník",
+    "open": "Otvoriť PDF...",
+    "save": "Uložiť",
+    "saveAs": "Uložiť ako...",
+    "export": "Exportovať PDF...",
+    "print": "Tlačiť...",
+    "undo": "Späť",
+    "redo": "Znova",
+    "copy": "Kopírovať",
+    "paste": "Prilepiť",
+    "delete": "Odstrániť",
+    "selectAll": "Vybrať všetko"
+  },
+  "toolbar": {
+    "select": "Vybrať",
+    "pan": "Posunúť",
+    "rect": "Obdĺžnik",
+    "ellipse": "Elipsa",
+    "arrow": "Šípka",
+    "line": "Čiara",
+    "freehand": "Ceruzka",
+    "text": "Text",
+    "highlight": "Zvýrazňovač",
+    "stickyNote": "Poznámka",
+    "stamp": "Pečiatka",
+    "signature": "Podpis",
+    "eraser": "Guma"
+  },
+  "sidebar": {
+    "thumbnails": "Náhľady",
+    "outline": "Osnova",
+    "annotations": "Anotácie",
+    "empty": "Žiadne údaje"
+  },
+  "viewer": {
+    "openFile": "Otvoriť súbor PDF",
+    "dropHint": "alebo presuňte súbor PDF sem",
+    "noDocument": "Prosím otvorte súbor PDF"
+  },
+  "status": {
+    "saved": "Uložené",
+    "saving": "Ukladanie...",
+    "unsaved": "Neuložené",
+    "error": "Chyba ukládania"
+  }
+}

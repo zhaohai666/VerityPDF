@@ -1,0 +1,55 @@
+{
+  "app": {
+    "name": "VerityPDF",
+    "description": "Ferramenta profesional de anotación PDF"
+  },
+  "menu": {
+    "file": "Ficheiro",
+    "edit": "Editar",
+    "view": "Ver",
+    "help": "Axuda",
+    "open": "Abrir PDF...",
+    "save": "Gardar",
+    "saveAs": "Gardar como...",
+    "export": "Exportar PDF...",
+    "print": "Imprimir...",
+    "undo": "Desfacer",
+    "redo": "Refacer",
+    "copy": "Copiar",
+    "paste": "Pegar",
+    "delete": "Eliminar",
+    "selectAll": "Seleccionar todo"
+  },
+  "toolbar": {
+    "select": "Seleccionar",
+    "pan": "Mover",
+    "rect": "Rectángulo",
+    "ellipse": "Elipse",
+    "arrow": "Frecha",
+    "line": "Liña",
+    "freehand": "Lapis",
+    "text": "Texto",
+    "highlight": "Subliñador",
+    "stickyNote": "Nota adhesiva",
+    "stamp": "Selo",
+    "signature": "Sinatura",
+    "eraser": "Borrador"
+  },
+  "sidebar": {
+    "thumbnails": "Miniaturas",
+    "outline": "Esquema",
+    "annotations": "Anotacións",
+    "empty": "Sen datos"
+  },
+  "viewer": {
+    "openFile": "Abrir ficheiro PDF",
+    "dropHint": "ou arrastre un ficheiro PDF aquí",
+    "noDocument": "Por favor, abra un ficheiro PDF"
+  },
+  "status": {
+    "saved": "Gardado",
+    "saving": "Gardando...",
+    "unsaved": "Non gardado",
+    "error": "Erro ao gardar"
+  }
+}

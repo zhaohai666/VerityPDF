@@ -1,0 +1,55 @@
+{
+  "app": {
+    "name": "VerityPDF",
+    "description": "Professionele PDF-annotatietool"
+  },
+  "menu": {
+    "file": "Bestand",
+    "edit": "Bewerken",
+    "view": "Beeld",
+    "help": "Help",
+    "open": "PDF openen...",
+    "save": "Opslaan",
+    "saveAs": "Opslaan als...",
+    "export": "PDF exporteren...",
+    "print": "Afdrukken...",
+    "undo": "Ongedaan maken",
+    "redo": "Opnieuw",
+    "copy": "Kopiëren",
+    "paste": "Plakken",
+    "delete": "Verwijderen",
+    "selectAll": "Alles selecteren"
+  },
+  "toolbar": {
+    "select": "Selecteren",
+    "pan": "Verplaatsen",
+    "rect": "Rechthoek",
+    "ellipse": "Ovaal",
+    "arrow": "Pijl",
+    "line": "Lijn",
+    "freehand": "Pen",
+    "text": "Tekst",
+    "highlight": "Marker",
+    "stickyNote": "Notitie",
+    "stamp": "Stempel",
+    "signature": "Handtekening",
+    "eraser": "Gum"
+  },
+  "sidebar": {
+    "thumbnails": "Miniaturen",
+    "outline": "Overzicht",
+    "annotations": "Aantekeningen",
+    "empty": "Geen gegevens"
+  },
+  "viewer": {
+    "openFile": "PDF-bestand openen",
+    "dropHint": "of sleep een PDF-bestand hierheen",
+    "noDocument": "Open een PDF-bestand"
+  },
+  "status": {
+    "saved": "Opgeslagen",
+    "saving": "Opslaan...",
+    "unsaved": "Niet opgeslagen",
+    "error": "Opslaan mislukt"
+  }
+}

@@ -138,6 +138,15 @@ export const IPC_CHANNELS = {
   // 扫描件效果
   PDF_SCANNER_EFFECT: 'pdf:scannerEffect',
 
+  // 图片转PDF
+  IMAGE_TO_PDF: 'image:toPdf',
+
+  // CSV 导出
+  PDF_CSV_EXPORT: 'pdf:csvExport',
+
+  // 查看 JavaScript
+  PDF_SHOW_JS: 'pdf:showJs',
+
   // 任务队列
   TASK_SUBMIT: 'task:submit',
   TASK_CANCEL: 'task:cancel',
@@ -363,6 +372,23 @@ export interface VerityAPI {
 
   // 扫描件效果
   applyScannerEffect(pdfData: string, options: ScannerEffectOptions): Promise<ScannerEffectResult>;
+
+  // 图片转PDF
+  convertImageToPdf(options: ImageToPdfOptions): Promise<ImageToPdfResult>;
+
+  // CSV 导出
+    exportPdfToCsv(pdfData: string, options: {
+        delimiter: string;
+        detectHeaders: boolean;
+        rowDetectionTolerance: number;
+        columnDetectionMode: string;
+        includePageNumber: boolean;
+        includeCoordinates: boolean;
+        pages: undefined | string
+    }): Promise<CsvExportResult>;
+
+  // 查看 JavaScript
+  showPdfJavaScript(pdfData: string): Promise<ShowJsResult>;
 }
 
 /** 页面操作类型 */
@@ -948,4 +974,63 @@ export interface ScannerEffectOptions {
 export interface ScannerEffectResult {
   pdfData: ArrayBuffer;
   processedPages: number;
+}
+
+// ========== 新功能类型定义（第四批） ==========
+
+/** 图片数据 */
+export interface ImageData {
+  data: string; // base64
+  format: 'png' | 'jpeg';
+  name: string;
+}
+
+/** 图片转PDF选项 */
+export interface ImageToPdfOptions {
+  images: ImageData[];
+  pageSize: 'original' | 'a4' | 'letter' | 'fit';
+  dpi: number;
+  margin: number;
+  fitMode: 'stretch' | 'contain' | 'cover';
+}
+
+/** 图片转PDF结果 */
+export interface ImageToPdfResult {
+  pdfData: ArrayBuffer;
+  pageCount: number;
+  totalImages: number;
+}
+
+/** CSV导出选项 */
+export interface CsvExportOptions {
+  pageIndices?: number[];
+  delimiter: string;
+  detectHeaders: boolean;
+  rowDetectionTolerance: number;
+  columnDetectionMode: 'auto' | 'tab' | 'fixed';
+  includePageNumber: boolean;
+  includeCoordinates: boolean;
+}
+
+/** CSV导出结果 */
+export interface CsvExportResult {
+  csv: string;
+  rowCount: number;
+  columnCount: number;
+  pagesProcessed: number;
+  tablesDetected: number;
+}
+
+/** JavaScript条目 */
+export interface JsEntry {
+  location: string;
+  code: string;
+  type: 'document' | 'page' | 'field' | 'named' | 'annotation';
+}
+
+/** ShowJavaScript结果 */
+export interface ShowJsResult {
+  scripts: JsEntry[];
+  totalCount: number;
+  pagesScanned: number;
 }

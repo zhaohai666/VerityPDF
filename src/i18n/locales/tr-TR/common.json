@@ -1,0 +1,55 @@
+{
+  "app": {
+    "name": "VerityPDF",
+    "description": "Profesyonel PDF açıklama aracı"
+  },
+  "menu": {
+    "file": "Dosya",
+    "edit": "Düzenle",
+    "view": "Görünüm",
+    "help": "Yardım",
+    "open": "PDF Aç...",
+    "save": "Kaydet",
+    "saveAs": "Farklı Kaydet...",
+    "export": "PDF Dışa Aktar...",
+    "print": "Yazdır...",
+    "undo": "Geri Al",
+    "redo": "Yinele",
+    "copy": "Kopyala",
+    "paste": "Yapıştır",
+    "delete": "Sil",
+    "selectAll": "Tümünü Seç"
+  },
+  "toolbar": {
+    "select": "Seç",
+    "pan": "Kaydır",
+    "rect": "Dikdörtgen",
+    "ellipse": "Elips",
+    "arrow": "Ok",
+    "line": "Çizgi",
+    "freehand": "Kalem",
+    "text": "Metin",
+    "highlight": "Vurgulayıcı",
+    "stickyNote": "Yapışkan not",
+    "stamp": "Damga",
+    "signature": "İmza",
+    "eraser": "Silgi"
+  },
+  "sidebar": {
+    "thumbnails": "Küçük resimler",
+    "outline": "Anahat",
+    "annotations": "Açıklamalar",
+    "empty": "Veri yok"
+  },
+  "viewer": {
+    "openFile": "PDF dosyası aç",
+    "dropHint": "veya bir PDF dosyasını buraya sürükleyin",
+    "noDocument": "Lütfen bir PDF dosyası açın"
+  },
+  "status": {
+    "saved": "Kaydedildi",
+    "saving": "Kaydediliyor...",
+    "unsaved": "Kaydedilmedi",
+    "error": "Kaydetme hatası"
+  }
+}

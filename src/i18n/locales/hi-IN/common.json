@@ -1,0 +1,55 @@
+{
+  "app": {
+    "name": "VerityPDF",
+    "description": "पेशेवर PDF एनोटेशन टूल"
+  },
+  "menu": {
+    "file": "फ़ाइल",
+    "edit": "संपादित करें",
+    "view": "दृश्य",
+    "help": "सहायता",
+    "open": "PDF खोलें...",
+    "save": "सहेजें",
+    "saveAs": "इस रूप में सहेजें...",
+    "export": "PDF निर्यात करें...",
+    "print": "प्रिंट करें...",
+    "undo": "पूर्ववत करें",
+    "redo": "फिर से करें",
+    "copy": "कॉपी करें",
+    "paste": "चिपकाएं",
+    "delete": "हटाएं",
+    "selectAll": "सभी चुनें"
+  },
+  "toolbar": {
+    "select": "चुनें",
+    "pan": "स्थानांतरित करें",
+    "rect": "आयत",
+    "ellipse": "अंडाकार",
+    "arrow": "तीर",
+    "line": "रेखा",
+    "freehand": "कलम",
+    "text": "पाठ",
+    "highlight": "हाइलाइटर",
+    "stickyNote": "स्टिकी नोट",
+    "stamp": "मोहर",
+    "signature": "हस्ताक्षर",
+    "eraser": "इरेज़र"
+  },
+  "sidebar": {
+    "thumbnails": "थंबनेल",
+    "outline": "रूपरेखा",
+    "annotations": "एनोटेशन",
+    "empty": "कोई डेटा नहीं"
+  },
+  "viewer": {
+    "openFile": "PDF फ़ाइल खोलें",
+    "dropHint": "या PDF फ़ाइल को यहां खींचें और छोड़ें",
+    "noDocument": "कृपया PDF फ़ाइल खोलें"
+  },
+  "status": {
+    "saved": "सहेजा गया",
+    "saving": "सहेजा जा रहा है...",
+    "unsaved": "नहीं सहेजा गया",
+    "error": "सहेजने में विफल"
+  }
+}

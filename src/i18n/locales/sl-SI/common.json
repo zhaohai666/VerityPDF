@@ -1,0 +1,55 @@
+{
+  "app": {
+    "name": "VerityPDF",
+    "description": "Profesionalno orodje za PDF pripombe"
+  },
+  "menu": {
+    "file": "Datoteka",
+    "edit": "Urejanje",
+    "view": "Pogled",
+    "help": "Pomoč",
+    "open": "Odpri PDF...",
+    "save": "Shrani",
+    "saveAs": "Shrani kot...",
+    "export": "Izvozi PDF...",
+    "print": "Natisni...",
+    "undo": "Razveljavi",
+    "redo": "Uveljavi",
+    "copy": "Kopiraj",
+    "paste": "Prilepi",
+    "delete": "Izbriši",
+    "selectAll": "Izberi vse"
+  },
+  "toolbar": {
+    "select": "Izberi",
+    "pan": "Premakni",
+    "rect": "Pravokotnik",
+    "ellipse": "Elipsa",
+    "arrow": "Puščica",
+    "line": "Črta",
+    "freehand": "Svinčnik",
+    "text": "Besedilo",
+    "highlight": "Označevalnik",
+    "stickyNote": "Beležka",
+    "stamp": "Žig",
+    "signature": "Podpis",
+    "eraser": "Radirka"
+  },
+  "sidebar": {
+    "thumbnails": "Sličice",
+    "outline": "Struktura",
+    "annotations": "Pripombe",
+    "empty": "Ni podatkov"
+  },
+  "viewer": {
+    "openFile": "Odpri datoteko PDF",
+    "dropHint": "ali povlecite datoteko PDF sem",
+    "noDocument": "Prosimo, odprite datoteko PDF"
+  },
+  "status": {
+    "saved": "Shranjeno",
+    "saving": "Shranjevanje...",
+    "unsaved": "Neshranjeno",
+    "error": "Napaka pri shranjevanju"
+  }
+}

@@ -38,6 +38,10 @@ const RemoveImagesDialog = React.lazy(() => import('@/components/remove-images/R
 const AttachmentDialog = React.lazy(() => import('@/components/attachments/AttachmentDialog').then(m => ({ default: m.AttachmentDialog })));
 const InfoJsonDialog = React.lazy(() => import('@/components/info-json/InfoJsonDialog').then(m => ({ default: m.InfoJsonDialog })));
 const ScannerEffectDialog = React.lazy(() => import('@/components/scanner-effect/ScannerEffectDialog').then(m => ({ default: m.ScannerEffectDialog })));
+const ImageToPdfDialog = React.lazy(() => import('@/components/image-to-pdf/ImageToPdfDialog').then(m => ({ default: m.ImageToPdfDialog })));
+const CsvExportDialog = React.lazy(() => import('@/components/csv-export/CsvExportDialog').then(m => ({ default: m.CsvExportDialog })));
+const ShowJsDialog = React.lazy(() => import('@/components/show-js/ShowJsDialog').then(m => ({ default: m.ShowJsDialog })));
+const LanguageSelector = React.lazy(() => import('@/components/language-selector/LanguageSelector').then(m => ({ default: m.LanguageSelector })));
 
 const App: React.FC = () => {
   // 初始化全局快捷键
@@ -56,6 +60,7 @@ const App: React.FC = () => {
   // 工具对话框状态
   const [activeToolDialog, setActiveToolDialog] = useState<string | null>(null);
   const [dialogPdfData, setDialogPdfData] = useState<string>('');
+  const [showLangSelector, setShowLangSelector] = useState(false);
 
   // 监听工具栏评论按钮事件
   useEffect(() => {
@@ -80,6 +85,11 @@ const App: React.FC = () => {
       const ui = useUIStore.getState();
 
       switch (action) {
+        // 语言选择
+        case 'help:language':
+          setShowLangSelector(true);
+          break;
+
         // 文件操作
         case 'file:save':
           // 由 useAutoSave 处理
@@ -142,6 +152,8 @@ const App: React.FC = () => {
         case 'tool:attachments':
         case 'tool:infoJson':
         case 'tool:scannerEffect':
+        case 'tool:csvExport':
+        case 'tool:showJs':
           if (pdf.isLoaded) {
             const fp = pdf.filePath;
             if (fp) {
@@ -152,6 +164,11 @@ const App: React.FC = () => {
               }).catch(() => {});
             }
           }
+          break;
+
+        // 图片转PDF不需要已加载的PDF
+        case 'tool:imageToPdf':
+          setActiveToolDialog('imageToPdf');
           break;
       }
     });
@@ -326,6 +343,31 @@ const App: React.FC = () => {
                 onClose={() => setActiveToolDialog(null)}
               />
             )}
+            {activeToolDialog === 'imageToPdf' && (
+              <ImageToPdfDialog
+                pdfData=""
+                onClose={() => setActiveToolDialog(null)}
+              />
+            )}
+            {activeToolDialog === 'csvExport' && (
+              <CsvExportDialog
+                pdfData={dialogPdfData}
+                onClose={() => setActiveToolDialog(null)}
+              />
+            )}
+            {activeToolDialog === 'showJs' && (
+              <ShowJsDialog
+                pdfData={dialogPdfData}
+                onClose={() => setActiveToolDialog(null)}
+              />
+            )}
+          </Suspense>
+        )}
+
+        {/* 语言选择器 */}
+        {showLangSelector && (
+          <Suspense fallback={null}>
+            <LanguageSelector onClose={() => setShowLangSelector(false)} />
           </Suspense>
         )}
       </div>

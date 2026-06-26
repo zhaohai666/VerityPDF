@@ -1,0 +1,55 @@
+{
+  "app": {
+    "name": "VerityPDF",
+    "description": "Công cụ chú thích PDF chuyên nghiệp"
+  },
+  "menu": {
+    "file": "Tệp",
+    "edit": "Chỉnh sửa",
+    "view": "Xem",
+    "help": "Trợ giúp",
+    "open": "Mở PDF...",
+    "save": "Lưu",
+    "saveAs": "Lưu thành...",
+    "export": "Xuất PDF...",
+    "print": "In...",
+    "undo": "Hoàn tác",
+    "redo": "Làm lại",
+    "copy": "Sao chép",
+    "paste": "Dán",
+    "delete": "Xóa",
+    "selectAll": "Chọn tất cả"
+  },
+  "toolbar": {
+    "select": "Chọn",
+    "pan": "Di chuyển",
+    "rect": "Hình chữ nhật",
+    "ellipse": "Hình elip",
+    "arrow": "Mũi tên",
+    "line": "Đường thẳng",
+    "freehand": "Bút",
+    "text": "Văn bản",
+    "highlight": "Bút dạ quang",
+    "stickyNote": "Giấy ghi chú",
+    "stamp": "Tem",
+    "signature": "Chữ ký",
+    "eraser": "Tẩy"
+  },
+  "sidebar": {
+    "thumbnails": "Hình thu nhỏ",
+    "outline": "Dàn ý",
+    "annotations": "Chú thích",
+    "empty": "Không có dữ liệu"
+  },
+  "viewer": {
+    "openFile": "Mở tệp PDF",
+    "dropHint": "hoặc kéo và thả tệp PDF vào đây",
+    "noDocument": "Vui lòng mở tệp PDF"
+  },
+  "status": {
+    "saved": "Đã lưu",
+    "saving": "Đang lưu...",
+    "unsaved": "Chưa lưu",
+    "error": "Lưu thất bại"
+  }
+}

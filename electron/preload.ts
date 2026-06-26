@@ -311,6 +311,18 @@ const api: VerityAPI = {
   // 扫描件效果
   applyScannerEffect: (pdfData, options) =>
     wrapInvoke('pdf:scannerEffect', { pdfData, options }),
+
+  // 图片转PDF
+  convertImageToPdf: (options) =>
+    wrapInvoke('image:toPdf', { options }),
+
+  // CSV 导出
+  exportPdfToCsv: (pdfData, options) =>
+    wrapInvoke('pdf:csvExport', { pdfData, options }),
+
+  // 查看 JavaScript
+  showPdfJavaScript: (pdfData) =>
+    wrapInvoke('pdf:showJs', { pdfData }),
 };
 
 contextBridge.exposeInMainWorld('verityAPI', api);
