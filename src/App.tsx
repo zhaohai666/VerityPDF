@@ -30,6 +30,14 @@ const PdfDiffDialog = React.lazy(() => import('@/components/diff/PdfDiffDialog')
 const SensitiveRedactDialog = React.lazy(() => import('@/components/redact/SensitiveRedactDialog').then(m => ({ default: m.SensitiveRedactDialog })));
 const BookletDialog = React.lazy(() => import('@/components/booklet/BookletDialog').then(m => ({ default: m.BookletDialog })));
 const ColorReplaceDialog = React.lazy(() => import('@/components/color/ColorReplaceDialog').then(m => ({ default: m.ColorReplaceDialog })));
+const SanitizeDialog = React.lazy(() => import('@/components/sanitize/SanitizeDialog').then(m => ({ default: m.SanitizeDialog })));
+const PdfAConvertDialog = React.lazy(() => import('@/components/pdfa/PdfAConvertDialog').then(m => ({ default: m.PdfAConvertDialog })));
+const SplitByBookmarksDialog = React.lazy(() => import('@/components/split-bookmarks/SplitByBookmarksDialog').then(m => ({ default: m.SplitByBookmarksDialog })));
+const InvertColorsDialog = React.lazy(() => import('@/components/invert-colors/InvertColorsDialog').then(m => ({ default: m.InvertColorsDialog })));
+const RemoveImagesDialog = React.lazy(() => import('@/components/remove-images/RemoveImagesDialog').then(m => ({ default: m.RemoveImagesDialog })));
+const AttachmentDialog = React.lazy(() => import('@/components/attachments/AttachmentDialog').then(m => ({ default: m.AttachmentDialog })));
+const InfoJsonDialog = React.lazy(() => import('@/components/info-json/InfoJsonDialog').then(m => ({ default: m.InfoJsonDialog })));
+const ScannerEffectDialog = React.lazy(() => import('@/components/scanner-effect/ScannerEffectDialog').then(m => ({ default: m.ScannerEffectDialog })));
 
 const App: React.FC = () => {
   // 初始化全局快捷键
@@ -126,6 +134,14 @@ const App: React.FC = () => {
         case 'tool:sensitiveRedact':
         case 'tool:booklet':
         case 'tool:colorReplace':
+        case 'tool:sanitize':
+        case 'tool:pdfaConvert':
+        case 'tool:splitByBookmarks':
+        case 'tool:invertColors':
+        case 'tool:removeImages':
+        case 'tool:attachments':
+        case 'tool:infoJson':
+        case 'tool:scannerEffect':
           if (pdf.isLoaded) {
             const fp = pdf.filePath;
             if (fp) {
@@ -258,6 +274,54 @@ const App: React.FC = () => {
             )}
             {activeToolDialog === 'colorReplace' && (
               <ColorReplaceDialog
+                pdfData={dialogPdfData}
+                onClose={() => setActiveToolDialog(null)}
+              />
+            )}
+            {activeToolDialog === 'sanitize' && (
+              <SanitizeDialog
+                pdfData={dialogPdfData}
+                onClose={() => setActiveToolDialog(null)}
+              />
+            )}
+            {activeToolDialog === 'pdfaConvert' && (
+              <PdfAConvertDialog
+                pdfData={dialogPdfData}
+                onClose={() => setActiveToolDialog(null)}
+              />
+            )}
+            {activeToolDialog === 'splitByBookmarks' && (
+              <SplitByBookmarksDialog
+                pdfData={dialogPdfData}
+                onClose={() => setActiveToolDialog(null)}
+              />
+            )}
+            {activeToolDialog === 'invertColors' && (
+              <InvertColorsDialog
+                pdfData={dialogPdfData}
+                onClose={() => setActiveToolDialog(null)}
+              />
+            )}
+            {activeToolDialog === 'removeImages' && (
+              <RemoveImagesDialog
+                pdfData={dialogPdfData}
+                onClose={() => setActiveToolDialog(null)}
+              />
+            )}
+            {activeToolDialog === 'attachments' && (
+              <AttachmentDialog
+                pdfData={dialogPdfData}
+                onClose={() => setActiveToolDialog(null)}
+              />
+            )}
+            {activeToolDialog === 'infoJson' && (
+              <InfoJsonDialog
+                pdfData={dialogPdfData}
+                onClose={() => setActiveToolDialog(null)}
+              />
+            )}
+            {activeToolDialog === 'scannerEffect' && (
+              <ScannerEffectDialog
                 pdfData={dialogPdfData}
                 onClose={() => setActiveToolDialog(null)}
               />

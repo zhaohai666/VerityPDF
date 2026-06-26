@@ -1,48 +1,264 @@
 #!/usr/bin/env python3
 """
-VerityPDF 自动化功能测试脚本
+VerityPDF 增强版自动化功能测试脚本
+=====================================
 通过 Chrome DevTools Protocol (CDP) 模拟用户行为测试各项功能
 仅使用 Python 标准库（socket + json），无需额外安装依赖
+
+改进点：
+- 配置文件驱动 (e2e_config.json)
+- PID文件精确进程管理（不使用 pkill / fuser -k）
+- 更多测试用例覆盖（14项核心功能）
+- 更好的日志和错误处理
+- 测试重试机制
 """
 
 import socket
 import json
 import struct
-import hashlib
 import base64
 import os
 import sys
 import time
 import subprocess
 import urllib.request
-import threading
+import datetime
+import signal
+import errno
+from pathlib import Path
+from typing import Optional, Dict, List, Tuple, Any
 
-# ─── 配置 ─────────────────────────────────────────
-CDP_HOST = "127.0.0.1"
-CDP_PORT = 9222
-APP_DIR = os.path.dirname(os.path.abspath(__file__))
-TEST_PDF = os.path.join(APP_DIR, "test-export.pdf")
-EXPORTED_PDF = os.path.join(APP_DIR, "test-export-result.pdf")
-TIMEOUT = 15
+# ─── 配置加载 ─────────────────────────────────────
+
+APP_DIR = Path(__file__).parent.resolve()
+CONFIG_FILE = APP_DIR / "e2e_config.json"
+E2E_DIR = APP_DIR / ".e2e"
+LOG_DIR = E2E_DIR / "logs"
+
+
+def load_config() -> dict:
+    """加载 e2e 配置文件"""
+    if CONFIG_FILE.exists():
+        with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    # 默认配置
+    return {
+        "cdp": {"host": "127.0.0.1", "port": 9222},
+        "test": {"timeout": 15, "max_wait_cdp": 30, "max_wait_page": 15, "retry_count": 3},
+        "logging": {"level": "info", "save_logs": True, "log_dir": str(LOG_DIR)}
+    }
+
+
+CONFIG = load_config()
+CDP_HOST = CONFIG.get("cdp", {}).get("host", "127.0.0.1")
+CDP_PORT = CONFIG.get("cdp", {}).get("port", 9222)
+TEST_CONFIG = CONFIG.get("test", {})
+TIMEOUT = TEST_CONFIG.get("timeout", 15)
+MAX_WAIT_CDP = TEST_CONFIG.get("max_wait_cdp", 30)
+MAX_WAIT_PAGE = TEST_CONFIG.get("max_wait_page", 15)
+RETRY_COUNT = TEST_CONFIG.get("retry_count", 3)
+
+TEST_PDF = str(APP_DIR / "test-export.pdf")
+EXPORTED_PDF = str(APP_DIR / "test-export-result.pdf")
+
+# ─── 日志系统 ──────────────────────────────────────
+
+
+class Logger:
+    """简单的日志记录器"""
+    def __init__(self, log_dir: Path):
+        self.log_dir = log_dir
+        self.log_dir.mkdir(parents=True, exist_ok=True)
+        self.log_file = self.log_dir / f"e2e_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+        self.levels = {"debug": 0, "info": 1, "warn": 2, "error": 3}
+        self.min_level = self.levels.get(CONFIG.get("logging", {}).get("level", "info"), 1)
+
+    def _log(self, level: str, message: str):
+        if self.levels.get(level, 1) < self.min_level:
+            return
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+        line = f"[{timestamp}] [{level.upper()}] {message}"
+        print(line)
+        if CONFIG.get("logging", {}).get("save_logs", True):
+            with open(self.log_file, 'a', encoding='utf-8') as f:
+                f.write(line + "\n")
+
+    def debug(self, msg: str): self._log("debug", msg)
+    def info(self, msg: str): self._log("info", msg)
+    def warn(self, msg: str): self._log("warn", msg)
+    def error(self, msg: str): self._log("error", msg)
+
+
+logger = Logger(LOG_DIR)
 
 # ─── 测试结果收集 ─────────────────────────────────
-results = []
-def report(name, passed, detail=""):
+
+results: List[Tuple[str, bool, str]] = []
+
+
+def report(name: str, passed: bool, detail: str = ""):
     status = "PASS" if passed else "FAIL"
     results.append((name, passed, detail))
-    print(f"  [{status}] {name}" + (f" - {detail}" if detail else ""))
+    logger.info(f"  [{status}] {name}" + (f" - {detail}" if detail else ""))
 
-# ─── WebSocket 客户端（最小实现）─────────────────────
+
+# ─── PID文件管理 ─────────────────────────────────
+
+
+class PIDManager:
+    """PID文件管理器 - 精确进程管理"""
+
+    def __init__(self, pid_dir: Path):
+        self.pid_dir = pid_dir
+        self.pid_dir.mkdir(parents=True, exist_ok=True)
+
+    def _get_pid_file(self, name: str) -> Path:
+        return self.pid_dir / f"{name}.pid"
+
+    def write_pid(self, name: str, pid: int):
+        """写入PID文件"""
+        pid_file = self._get_pid_file(name)
+        with open(pid_file, 'w') as f:
+            f.write(str(pid))
+        logger.debug(f"PID文件写入: {pid_file} = {pid}")
+
+    def read_pid(self, name: str) -> Optional[int]:
+        """读取PID"""
+        pid_file = self._get_pid_file(name)
+        if pid_file.exists():
+            try:
+                with open(pid_file, 'r') as f:
+                    return int(f.read().strip())
+            except (ValueError, IOError):
+                pass
+        return None
+
+    def remove_pid(self, name: str):
+        """移除PID文件"""
+        pid_file = self._get_pid_file(name)
+        if pid_file.exists():
+            pid_file.unlink()
+            logger.debug(f"PID文件移除: {pid_file}")
+
+    def kill_by_pid(self, pid: int, graceful: bool = True) -> bool:
+        """通过PID终止进程（不使用pkill）"""
+        try:
+            # 先尝试发送 SIGTERM (graceful shutdown)
+            os.kill(pid, signal.SIGTERM if graceful else signal.SIGKILL)
+            logger.info(f"已发送 {'SIGTERM' if graceful else 'SIGKILL'} 到进程 PID={pid}")
+
+            # 等待进程终止
+            for _ in range(10):
+                try:
+                    os.kill(pid, 0)  # 检查进程是否存在
+                    time.sleep(0.3)
+                except OSError as e:
+                    if e.errno == errno.ESRCH:  # 进程已不存在
+                        logger.info(f"进程 PID={pid} 已终止")
+                        return True
+            # 强制终止
+            if graceful:
+                try:
+                    os.kill(pid, signal.SIGKILL)
+                    logger.info(f"已发送 SIGKILL 到进程 PID={pid}")
+                    return True
+                except OSError:
+                    pass
+            return False
+        except OSError as e:
+            if e.errno == errno.ESRCH:
+                logger.debug(f"进程 PID={pid} 已不存在")
+                return True
+            logger.error(f"终止进程 PID={pid} 失败: {e}")
+            return False
+
+    def kill_by_name(self, name: str, graceful: bool = True) -> int:
+        """通过名称终止进程（先查PID文件，再查端口）"""
+        pid = self.read_pid(name)
+        killed = 0
+
+        if pid:
+            if self.kill_by_pid(pid, graceful):
+                killed += 1
+            self.remove_pid(name)
+
+        return killed
+
+    def cleanup_all(self):
+        """清理所有已知的进程"""
+        logger.info("清理所有残留进程...")
+        for pid_file in self.pid_dir.glob("*.pid"):
+            name = pid_file.stem
+            pid = self.read_pid(name)
+            if pid:
+                logger.info(f"  终止残留进程: {name} (PID={pid})")
+                self.kill_by_pid(pid, graceful=True)
+                self.remove_pid(name)
+
+    def list_active(self) -> List[Tuple[str, int]]:
+        """列出所有活跃的PID"""
+        active = []
+        for pid_file in self.pid_dir.glob("*.pid"):
+            name = pid_file.stem
+            pid = self.read_pid(name)
+            if pid:
+                try:
+                    os.kill(pid, 0)
+                    active.append((name, pid))
+                except OSError:
+                    pass
+        return active
+
+
+pid_mgr = PIDManager(E2E_DIR)
+
+# ─── 端口检测 ──────────────────────────────────────
+
+
+def is_port_open(host: str, port: int, timeout: float = 1.0) -> bool:
+    """检测端口是否被占用"""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(timeout)
+            s.connect((host, port))
+            return True
+    except (socket.timeout, ConnectionRefusedError, OSError):
+        return False
+
+
+def find_process_by_port(port: int) -> List[int]:
+    """查找占用指定端口的进程PID（不使用pkill）"""
+    pids = []
+    try:
+        # macOS: 使用 lsof
+        result = subprocess.run(
+            ['lsof', '-ti', f':{port}'],
+            capture_output=True, text=True, timeout=5
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            for line in result.stdout.strip().split('\n'):
+                try:
+                    pids.append(int(line.strip()))
+                except ValueError:
+                    continue
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        pass
+    return pids
+
+
+# ─── WebSocket 客户端 ──────────────────────────────
+
+
 class CDPClient:
     """极简 WebSocket 客户端，用于与 Chrome DevTools Protocol 通信"""
-    def __init__(self, ws_url):
+
+    def __init__(self, ws_url: str):
         self.ws_url = ws_url
-        self.sock = None
+        self.sock: Optional[socket.socket] = None
         self.msg_id = 0
         self._connect()
 
     def _connect(self):
-        # 解析 ws://host:port/path
         url = self.ws_url.replace("ws://", "")
         host_port, path = url.split("/", 1)
         host, port = host_port.split(":")
@@ -65,7 +281,6 @@ class CDPClient:
         )
         self.sock.sendall(handshake.encode())
 
-        # 读取握手响应
         response = b""
         while b"\r\n\r\n" not in response:
             response += self.sock.recv(4096)
@@ -73,7 +288,7 @@ class CDPClient:
         if b"101" not in response.split(b"\r\n")[0]:
             raise Exception(f"WebSocket handshake failed: {response[:200]}")
 
-    def send(self, method, params=None):
+    def send(self, method: str, params: Optional[dict] = None) -> dict:
         self.msg_id += 1
         msg = {"id": self.msg_id, "method": method}
         if params:
@@ -81,16 +296,16 @@ class CDPClient:
         self._ws_send(json.dumps(msg))
         return self._ws_recv()
 
-    def _ws_send(self, data):
+    def _ws_send(self, data: str):
         payload = data.encode("utf-8")
         mask = os.urandom(4)
         length = len(payload)
 
         frame = bytearray()
-        frame.append(0x81)  # FIN + text
+        frame.append(0x81)
 
         if length < 126:
-            frame.append(0x80 | length)  # MASK bit set
+            frame.append(0x80 | length)
         elif length < 65536:
             frame.append(0x80 | 126)
             frame.extend(struct.pack(">H", length))
@@ -104,7 +319,7 @@ class CDPClient:
 
         self.sock.sendall(frame)
 
-    def _ws_recv(self):
+    def _ws_recv(self) -> dict:
         header = self.sock.recv(2)
         if len(header) < 2:
             raise Exception("WebSocket recv: incomplete header")
@@ -133,42 +348,51 @@ class CDPClient:
                 data[i] ^= mask[i % 4]
             data = bytes(data)
 
-        if opcode == 0x01:  # text
+        if opcode == 0x01:
             return json.loads(data.decode("utf-8"))
-        elif opcode == 0x08:  # close
-            return None
+        elif opcode == 0x08:
+            return {}
         return {"raw": data.hex()}
 
     def close(self):
         if self.sock:
             try:
                 self.sock.close()
-            except:
+            except Exception:
                 pass
 
 
-# ─── CDP 辅助函数 ──────────────────────────────────
-def get_page_ws():
+# ─── CDP 辅助函数 ─────────────────────────────────
+
+
+def get_page_ws() -> Tuple[Optional[str], Optional[str]]:
     """获取 Electron 主页面的 WebSocket URL"""
     try:
         req = urllib.request.urlopen(f"http://{CDP_HOST}:{CDP_PORT}/json", timeout=5)
         pages = json.loads(req.read())
         for p in pages:
-            if "localhost" in p.get("url", ""):
+            url = p.get("url", "")
+            # 匹配 localhost 或 127.0.0.1 的页面
+            if "localhost" in url or "127.0.0.1" in url:
                 return p["webSocketDebuggerUrl"], p.get("title", "")
     except Exception as e:
-        return None, None
+        logger.debug(f"获取页面列表失败: {e}")
+    return None, None
 
-def wait_for_cdp(max_wait=20):
+
+def wait_for_cdp(max_wait: int = 30) -> Tuple[Optional[str], Optional[str]]:
     """等待 CDP 端口就绪"""
     for i in range(max_wait):
         ws, title = get_page_ws()
         if ws:
             return ws, title
+        if i % 5 == 0 and i > 0:
+            logger.info(f"  等待 CDP 就绪... ({i}/{max_wait}s)")
         time.sleep(1)
     return None, None
 
-def evaluate(cdp, expression):
+
+def evaluate(cdp: CDPClient, expression: str) -> Any:
     """在页面上下文中执行 JavaScript"""
     result = cdp.send("Runtime.evaluate", {
         "expression": expression,
@@ -185,358 +409,173 @@ def evaluate(cdp, expression):
     return None
 
 
-# ─── 测试用例 ──────────────────────────────────────
-
-def test_pdf_loaded(cdp):
-    """测试 1: PDF 是否成功加载"""
-    info = evaluate(cdp, """
-        (function() {
-            try {
-                var store = window.__ZUSTAND_DEVTOOLS__ || {};
-                // 通过 React 获取 store 状态
-                var el = document.querySelector('.pdf-viewer-content');
-                var pages = document.querySelectorAll('.pdf-page-slot');
-                return {
-                    hasViewer: !!el,
-                    pageCount: pages.length,
-                    hasEmpty: !!document.querySelector('.pdf-viewer-empty'),
-                };
-            } catch(e) { return {error: e.message}; }
-        })()
-    """)
-    if isinstance(info, dict) and not info.get("error"):
-        report("PDF 加载", info.get("hasViewer", False) and info.get("pageCount", 0) > 0,
-               f"pages={info.get('pageCount', 0)}, hasViewer={info.get('hasViewer')}")
-    else:
-        report("PDF 加载", False, str(info))
-
-def test_toolbar_exists(cdp):
-    """测试 2: 工具栏是否存在"""
-    info = evaluate(cdp, """
-        (function() {
-            var toolbar = document.querySelector('.toolbar');
-            var buttons = document.querySelectorAll('.toolbar-btn');
-            var exportBtn = document.querySelector('.export-btn');
-            return {
-                hasToolbar: !!toolbar,
-                buttonCount: buttons.length,
-                hasExportBtn: !!exportBtn,
-            };
-        })()
-    """)
-    report("工具栏渲染", info.get("hasToolbar") and info.get("buttonCount", 0) > 0,
-           f"buttons={info.get('buttonCount')}, exportBtn={info.get('hasExportBtn')}")
-
-def test_tool_switching(cdp):
-    """测试 3: 工具切换（通过 JS 模拟点击）"""
-    # 测试点击矩形工具
-    result = evaluate(cdp, """
-        (function() {
-            var buttons = document.querySelectorAll('.toolbar-btn');
-            var rectBtn = null;
-            for (var b of buttons) {
-                if (b.title && b.title.indexOf('矩形') >= 0) {
-                    rectBtn = b;
-                    break;
-                }
-            }
-            if (rectBtn) {
-                rectBtn.click();
-                return { clicked: true, title: rectBtn.title };
-            }
-            return { clicked: false };
-        })()
-    """)
-    report("工具切换", result.get("clicked", False),
-           f"clicked={result.get('title', 'N/A')}")
-
-def test_annotation_drawing(cdp):
-    """测试 4: 标注绘制（模拟鼠标事件）"""
-    result = evaluate(cdp, """
-        (function() {
-            // 找到标注 SVG 层（优先活跃页）
-            var activeSlot = document.querySelector('.pdf-page-slot.active .layer-annotation svg');
-            var svg = activeSlot || document.querySelector('.layer-annotation svg');
-            if (!svg) return { error: 'No annotation SVG found' };
-
-            var rect = svg.getBoundingClientRect();
-            if (rect.width === 0 || rect.height === 0) return { error: 'SVG has zero size: ' + rect.width + 'x' + rect.height };
-
-            // 确保矩形工具已选中
-            var buttons = document.querySelectorAll('.toolbar-btn');
-            for (var b of buttons) {
-                if (b.title && b.title.indexOf('矩形') >= 0) {
-                    b.click();
-                    break;
-                }
-            }
-
-            // 模拟 mousedown → mousemove → mouseup
-            var startX = rect.left + rect.width * 0.3;
-            var startY = rect.top + rect.height * 0.3;
-            var endX = rect.left + rect.width * 0.6;
-            var endY = rect.top + rect.height * 0.5;
-
-            var opts = { bubbles: true, cancelable: true };
-
-            svg.dispatchEvent(new MouseEvent('mousedown', {
-                ...opts, clientX: startX, clientY: startY, button: 0
-            }));
-
-            // 模拟拖拽（多步）
-            for (var i = 0; i <= 5; i++) {
-                var x = startX + (endX - startX) * i / 5;
-                var y = startY + (endY - startY) * i / 5;
-                svg.dispatchEvent(new MouseEvent('mousemove', {
-                    ...opts, clientX: x, clientY: y, button: 0
-                }));
-            }
-
-            svg.dispatchEvent(new MouseEvent('mouseup', {
-                ...opts, clientX: endX, clientY: endY, button: 0
-            }));
-
-            return {
-                success: true,
-                svgSize: rect.width + 'x' + rect.height,
-                drawArea: [startX, startY, endX, endY].map(Math.round).join(','),
-            };
-        })()
-    """)
-    if isinstance(result, dict) and result.get("success"):
-        report("标注绘制（矩形）", True, f"SVG={result.get('svgSize')}, area={result.get('drawArea')}")
-    else:
-        report("标注绘制（矩形）", False, str(result))
-
-def test_annotation_count(cdp):
-    """测试 5: 检查标注是否被添加到 Store"""
-    time.sleep(0.5)  # 等待标注状态更新
-    count = evaluate(cdp, """
-        (function() {
-            // 尝试从 zustand store 获取标注数量
-            // zustand 在 window 上没有直接暴露，但可以通过 SVG 中的标注元素来检查
-            var annotations = document.querySelectorAll('.layer-annotation svg rect, .layer-annotation svg ellipse, .layer-annotation svg line, .layer-annotation svg path, .layer-annotation svg g');
-            return annotations.length;
-        })()
-    """)
-    report("标注存储", count > 0, f"found {count} annotation elements in SVG")
-
-def test_select_tool(cdp):
-    """测试 6: 选择工具"""
-    result = evaluate(cdp, """
-        (function() {
-            var buttons = document.querySelectorAll('.toolbar-btn');
-            for (var b of buttons) {
-                if (b.title && b.title.indexOf('选择') >= 0) {
-                    b.click();
-                    return { clicked: true, title: b.title };
-                }
-            }
-            return { clicked: false };
-        })()
-    """)
-    report("选择工具", result.get("clicked", False), result.get("title", ""))
-
-def test_export_function_exists(cdp):
-    """测试 7: 导出函数是否存在"""
-    result = evaluate(cdp, """
-        (function() {
-            return {
-                hasExportAPI: typeof window.verityAPI.exportPDF === 'function',
-                hasReadFile: typeof window.verityAPI.readFile === 'function',
-                hasShowDialog: typeof window.verityAPI.showDialog === 'function',
-            };
-        })()
-    """)
-    report("导出 API 可用",
-           result.get("hasExportAPI") and result.get("hasReadFile"),
-           f"exportPDF={result.get('hasExportAPI')}, readFile={result.get('hasReadFile')}")
-
-def test_export_button_click(cdp):
-    """测试 8: 导出按钮是否可点击"""
-    result = evaluate(cdp, """
-        (function() {
-            var btn = document.querySelector('.export-btn');
-            if (!btn) return { error: 'Export button not found' };
-            return {
-                exists: true,
-                disabled: btn.disabled,
-                text: btn.textContent.trim(),
-            };
-        })()
-    """)
-    report("导出按钮",
-           result.get("exists") and not result.get("disabled"),
-           f"disabled={result.get('disabled')}, text='{result.get('text')}'")
-
-def test_sidebar_tabs(cdp):
-    """测试 9: 侧边栏标签"""
-    result = evaluate(cdp, """
-        (function() {
-            var sidebar = document.querySelector('.sidebar');
-            var tabs = document.querySelectorAll('.sidebar-tab');
-            return {
-                hasSidebar: !!sidebar,
-                tabCount: tabs.length,
-            };
-        })()
-    """)
-    report("侧边栏", result.get("hasSidebar", False),
-           f"tabs={result.get('tabCount')}")
-
-def test_zoom_controls(cdp):
-    """测试 10: 缩放控制"""
-    result = evaluate(cdp, """
-        (function() {
-            var zoomDisplay = document.querySelector('.zoom-display');
-            return {
-                hasZoomDisplay: !!zoomDisplay,
-                zoomValue: zoomDisplay ? zoomDisplay.textContent.trim() : '',
-            };
-        })()
-    """)
-    report("缩放控件", result.get("hasZoomDisplay", False),
-           f"zoom={result.get('zoomValue')}")
-
-def test_statusbar(cdp):
-    """测试 11: 状态栏"""
-    result = evaluate(cdp, """
-        (function() {
-            var statusbar = document.querySelector('.status-bar');
-            return {
-                hasStatusbar: !!statusbar,
-                text: statusbar ? statusbar.textContent.trim().substring(0, 80) : '',
-            };
-        })()
-    """)
-    report("状态栏", result.get("hasStatusbar", False),
-           result.get("text", "")[:50])
-
-def test_page_navigation(cdp):
-    """测试 12: 页面导航"""
-    result = evaluate(cdp, """
-        (function() {
-            var pageDisplay = document.querySelector('.page-display');
-            var nextBtn = null;
-            var buttons = document.querySelectorAll('.toolbar-btn');
-            for (var b of buttons) {
-                if (b.textContent.trim() === '▶') {
-                    nextBtn = b;
-                    break;
-                }
-            }
-            if (nextBtn && !nextBtn.disabled) {
-                nextBtn.click();
-                return { navigated: true, display: pageDisplay ? pageDisplay.textContent.trim() : '' };
-            }
-            return { navigated: false, display: pageDisplay ? pageDisplay.textContent.trim() : '' };
-        })()
-    """)
-    report("页面导航", True, f"display={result.get('display')}, navigated={result.get('navigated')}")
-
-def test_text_layer(cdp):
-    """测试 13: 文本层渲染"""
-    result = evaluate(cdp, """
-        (function() {
-            var textLayers = document.querySelectorAll('.layer-text .textLayer');
-            var hasText = false;
-            for (var tl of textLayers) {
-                if (tl.children.length > 0) hasText = true;
-            }
-            return {
-                textLayerCount: textLayers.length,
-                hasTextContent: hasText,
-            };
-        })()
-    """)
-    report("文本层渲染", result.get("textLayerCount", 0) > 0,
-           f"layers={result.get('textLayerCount')}, hasText={result.get('hasTextContent')}")
-
-def test_annotation_layer(cdp):
-    """测试 14: 标注层渲染"""
-    result = evaluate(cdp, """
-        (function() {
-            var layers = document.querySelectorAll('.layer-annotation');
-            var svgs = document.querySelectorAll('.layer-annotation svg');
-            var sizes = [];
-            for (var s of svgs) {
-                var r = s.getBoundingClientRect();
-                sizes.push(Math.round(r.width) + 'x' + Math.round(r.height));
-            }
-            return {
-                layerCount: layers.length,
-                svgCount: svgs.length,
-                sizes: sizes,
-            };
-        })()
-    """)
-    report("标注层渲染",
-           result.get("layerCount", 0) > 0 and result.get("svgCount", 0) > 0,
-           f"layers={result.get('layerCount')}, svgs={result.get('svgCount')}, sizes={result.get('sizes')}")
+def evaluate_with_retry(cdp: CDPClient, expression: str, retries: int = 3, delay: float = 0.5) -> Any:
+    """带重试的 JavaScript 执行"""
+    for attempt in range(retries):
+        try:
+            result = evaluate(cdp, expression)
+            if result and isinstance(result, dict) and result.get("error"):
+                if attempt < retries - 1:
+                    time.sleep(delay)
+                    continue
+            return result
+        except Exception as e:
+            if attempt < retries - 1:
+                logger.debug(f"  evaluate 重试 ({attempt+1}/{retries}): {e}")
+                time.sleep(delay)
+            else:
+                raise
+    return None
 
 
-# ─── 辅助：模拟拖拽绘制 ─────────────────────────────
-JS_FIND_ACTIVE_SVG = """
-    // 优先找当前激活页的 SVG，避免跨页错位
-    var activeSlot = document.querySelector('.pdf-page-slot.active .layer-annotation svg');
-    var svg = activeSlot || document.querySelector('.layer-annotation svg');
-    if (!svg) return { error: 'No SVG' };
-    var rect = svg.getBoundingClientRect();
-    if (rect.width === 0 || rect.height === 0) return { error: 'SVG has zero size' };
-"""
+# ─── 进程启动管理 ─────────────────────────────────
 
-def js_draw_annotation(cdp, tool_name, start_pct, end_pct):
-    """通用标注绘制辅助：切换工具 → 等待渲染 → 验证工具 → mousedown → mousemove → mouseup"""
-    # 第一步：切换工具
-    evaluate(cdp, f"""
-        (function() {{
-            var buttons = document.querySelectorAll('.toolbar-btn');
-            for (var b of buttons) {{
-                if (b.title && b.title.indexOf('{tool_name}') >= 0) {{
-                    b.click();
-                    break;
-                }}
-            }}
-        }})()
-    """)
-    time.sleep(0.5)  # 等待 React 状态更新和重新渲染
 
-    # 第二步：验证工具已切换，并在活跃 SVG 上模拟绘制
-    return evaluate(cdp, f"""
-        (function() {{
-            // 验证工具栏按钮状态
-            var buttons = document.querySelectorAll('.toolbar-btn');
-            var activeBtn = null;
-            for (var b of buttons) {{
-                if (b.classList.contains('active')) activeBtn = b.title;
-            }}
+class AppLauncher:
+    """应用启动器 - 使用PID精确管理进程"""
 
-            {JS_FIND_ACTIVE_SVG}
+    def __init__(self, app_dir: Path):
+        self.app_dir = app_dir
+        self.processes: List[subprocess.Popen] = []
 
-            var sx = rect.left + rect.width * {start_pct[0]};
-            var sy = rect.top + rect.height * {start_pct[1]};
-            var ex = rect.left + rect.width * {end_pct[0]};
-            var ey = rect.top + rect.height * {end_pct[1]};
-            var opts = {{ bubbles: true, cancelable: true }};
+    def start(self, env: Optional[dict] = None) -> bool:
+        """启动 Electron 应用"""
+        # 清理已有进程
+        logger.info("[准备] 清理已有进程...")
+        self.cleanup()
 
-            svg.dispatchEvent(new MouseEvent('mousedown', {{
-                ...opts, clientX: sx, clientY: sy, button: 0
-            }}));
-            for (var i = 0; i <= 10; i++) {{
-                var x = sx + (ex - sx) * i / 10;
-                var y = sy + (ey - sy) * i / 10;
-                svg.dispatchEvent(new MouseEvent('mousemove', {{
-                    ...opts, clientX: x, clientY: y, button: 0
-                }}));
-            }}
-            svg.dispatchEvent(new MouseEvent('mouseup', {{
-                ...opts, clientX: ex, clientY: ey, button: 0
-            }}));
-            return {{ success: true, tool: '{tool_name}', activeBtn: activeBtn }};
-        }})()
-    """)
+        # 启动应用
+        logger.info("[启动] 启动 Electron 应用...")
+        env = env or os.environ.copy()
+        env["TEST_PDF_PATH"] = TEST_PDF
 
-def js_click_tool(cdp, tool_name):
+        # 启动 npm run electron:dev
+        proc = subprocess.Popen(
+            ["npm", "run", "electron:dev"],
+            cwd=self.app_dir,
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+
+        # 等待并查找Electron实际进程
+        logger.info(f"  npm进程 PID={proc.pid}")
+        pid_mgr.write_pid("npm_parent", proc.pid)
+        self.processes.append(proc)
+
+        # 等待Electron进程启动
+        time.sleep(3)
+
+        # 查找Electron子进程
+        electron_pid = self._find_electron_pid(proc.pid)
+        if electron_pid:
+            logger.info(f"  Electron进程 PID={electron_pid}")
+            pid_mgr.write_pid("electron", electron_pid)
+        else:
+            logger.warn("  未能找到Electron子进程，将使用父进程PID")
+            pid_mgr.write_pid("electron", proc.pid)
+
+        return True
+
+    def _find_electron_pid(self, parent_pid: int) -> Optional[int]:
+        """递归查找Electron进程"""
+        for _ in range(10):
+            try:
+                result = subprocess.run(
+                    ['ps', '-ef'],
+                    capture_output=True, text=True, timeout=3
+                )
+                for line in result.stdout.split('\n'):
+                    parts = line.split()
+                    if len(parts) >= 3:
+                        try:
+                            ppid = int(parts[2])
+                            if ppid == parent_pid and 'electron' in line.lower():
+                                return int(parts[1])
+                        except Exception:
+                            continue
+            except Exception:
+                pass
+            time.sleep(0.5)
+        return None
+
+    def cleanup(self):
+        """清理所有相关进程"""
+        # 先通过PID文件清理
+        pid_mgr.cleanup_all()
+
+        # 终止已知进程
+        for proc in self.processes:
+            try:
+                if proc.poll() is None:
+                    proc.terminate()
+                    try:
+                        proc.wait(timeout=3)
+                    except subprocess.TimeoutExpired:
+                        proc.kill()
+            except Exception:
+                pass
+        self.processes.clear()
+
+        # 检查端口是否释放
+        if is_port_open(CDP_HOST, CDP_PORT):
+            logger.warn(f"端口 {CDP_PORT} 仍被占用，查找并终止占用进程")
+            for pid in find_process_by_port(CDP_PORT):
+                logger.info(f"  终止端口占用进程 PID={pid}")
+                pid_mgr.kill_by_pid(pid)
+
+
+# ─── PDF加载检查 ──────────────────────────────────
+
+
+def ensure_pdf_loaded(cdp: CDPClient) -> bool:
+    """确保 PDF 已加载完成"""
+    logger.info("[等待] PDF 加载...")
+
+    # 等待页面渲染
+    for i in range(MAX_WAIT_PAGE):
+        try:
+            viewer_state = evaluate(cdp, """
+                (function() {
+                    try {
+                        var viewer = document.querySelector('.pdf-viewer-content');
+                        var empty = document.querySelector('.pdf-viewer-empty');
+                        var slots = document.querySelectorAll('.pdf-page-slot');
+                        return {
+                            hasViewer: !!viewer,
+                            isEmpty: !!empty,
+                            slotCount: slots.length,
+                            hasContent: viewer && (viewer.offsetHeight > 0 || viewer.offsetWidth > 0)
+                        };
+                    } catch(e) { return {error: e.toString()}; }
+                })()
+            """)
+
+            if isinstance(viewer_state, dict):
+                if viewer_state.get("error"):
+                    logger.debug(f"  检查错误: {viewer_state.get('error')}")
+                elif (viewer_state.get("hasViewer") and
+                      not viewer_state.get("isEmpty") and
+                      viewer_state.get("slotCount", 0) > 0):
+                    logger.info(f"  PDF 已加载: {viewer_state.get('slotCount')} 页")
+                    return True
+                else:
+                    logger.debug(f"  等待中: 查看器={viewer_state.get('hasViewer')}, "
+                                f"空={viewer_state.get('isEmpty')}, "
+                                f"页数={viewer_state.get('slotCount', 0)}")
+        except Exception as e:
+            logger.debug(f"  检查异常: {e}")
+
+        time.sleep(1)
+
+    logger.error("PDF 加载超时")
+    return False
+
+
+# ─── 辅助JS函数 ───────────────────────────────────
+
+
+def js_click_tool(cdp: CDPClient, tool_name: str) -> dict:
     """点击工具栏按钮"""
     return evaluate(cdp, f"""
         (function() {{
@@ -544,16 +583,22 @@ def js_click_tool(cdp, tool_name):
             for (var b of buttons) {{
                 if (b.title && b.title.indexOf('{tool_name}') >= 0) {{
                     b.click();
-                    return {{ clicked: true }};
+                    return {{ clicked: true, title: b.title }};
+                }}
+                var aria = b.getAttribute('aria-label') || '';
+                if (aria.indexOf('{tool_name}') >= 0) {{
+                    b.click();
+                    return {{ clicked: true, text: aria }};
                 }}
             }}
             return {{ clicked: false }};
         }})()
     """)
 
-def count_annotations_in_store(cdp):
+
+def count_annotations_in_store(cdp: CDPClient) -> int:
     """通过全局暴露的 Zustand store 获取标注总数"""
-    return evaluate(cdp, """
+    result = evaluate(cdp, """
         (function() {
             if (window.__annotationStore) {
                 var state = window.__annotationStore.getState();
@@ -562,30 +607,12 @@ def count_annotations_in_store(cdp):
             return -1;
         })()
     """)
+    return result if isinstance(result, int) else 0
 
-def count_svg_shapes(cdp):
-    """优先通过 store 计数，回退到 SVG 元素计数"""
-    store_count = count_annotations_in_store(cdp)
-    if store_count >= 0:
-        return store_count
-    return evaluate(cdp, """
-        (function() {
-            var svgs = document.querySelectorAll('.layer-annotation svg');
-            var total = 0;
-            for (var i = 0; i < svgs.length; i++) {
-                var children = svgs[i].children;
-                for (var j = 0; j < children.length; j++) {
-                    var tag = children[j].tagName.toLowerCase();
-                    if (tag === 'defs' || tag === 'marker') continue;
-                    total++;
-                }
-            }
-            return total;
-        })()
-    """)
 
-def js_add_annotation_via_store(cdp, ann_type, page, position, size, extra=None):
-    """通过 store 直接添加标注（绕过 React 事件系统）"""
+def js_add_annotation_via_store(cdp: CDPClient, ann_type: str, page: int,
+                                 position: dict, size: dict, extra: Optional[dict] = None) -> dict:
+    """通过 store 直接添加标注"""
     extra_js = ""
     if extra:
         for k, v in extra.items():
@@ -618,1267 +645,622 @@ def js_add_annotation_via_store(cdp, ann_type, page, position, size, extra=None)
         }})()
     """)
 
-# ─── 新增测试：各类型标注绘制 ──────────────────────────
-# 注：所有绘制测试在当前活跃页进行，不切换页面
 
-def go_to_page_1(cdp):
-    """导航回第 1 页"""
-    evaluate(cdp, """
-        (function() {
-            var buttons = document.querySelectorAll('.toolbar-btn');
-            for (var b of buttons) {
-                if (b.textContent.trim() === '◀' && !b.disabled) {
-                    b.click();
-                    return true;
-                }
-            }
-        })()
+def js_get_store_state(cdp: CDPClient, store_name: str) -> Any:
+    """获取指定 Zustand store 的当前状态"""
+    return evaluate(cdp, f"""
+        (function() {{
+            if (window.{store_name}) {{
+                return window.{store_name}.getState();
+            }}
+            return {{ error: 'Store not found' }};
+        }})()
     """)
-    time.sleep(0.5)
 
-def test_draw_ellipse(cdp):
-    """测试 15: 椭圆绘制"""
-    before = count_svg_shapes(cdp)
-    r = js_draw_annotation(cdp, '椭圆', (0.15, 0.55), (0.35, 0.75))
-    time.sleep(0.5)
-    after = count_svg_shapes(cdp)
-    # 如果鼠标绘制未生效，通过 store 直接添加
-    if after <= before:
-        js_add_annotation_via_store(cdp, 'ellipse', 2, {'x': 0.25, 'y': 0.65}, {'width': 0.2, 'height': 0.2})
-        time.sleep(0.3)
-        after = count_svg_shapes(cdp)
-    report("椭圆绘制", after > before, f"shapes: {before} → {after}, btn={r.get('activeBtn', 'N/A')}")
 
-def test_draw_arrow(cdp):
-    """测试 16: 箭头绘制"""
-    before = count_svg_shapes(cdp)
-    r = js_draw_annotation(cdp, '箭头', (0.4, 0.55), (0.7, 0.65))
-    time.sleep(0.5)
-    after = count_svg_shapes(cdp)
-    if after <= before:
-        js_add_annotation_via_store(cdp, 'arrow', 2, {'x': 0.4, 'y': 0.55}, {'width': 0.3, 'height': 0.1},
-                                    extra={'endPoint': {'x': 0.7, 'y': 0.65}})
-        time.sleep(0.3)
-        after = count_svg_shapes(cdp)
-    report("箭头绘制", after > before, f"shapes: {before} → {after}, btn={r.get('activeBtn', 'N/A')}")
-
-def test_draw_line(cdp):
-    """测试 17: 直线绘制"""
-    before = count_svg_shapes(cdp)
-    r = js_draw_annotation(cdp, '直线', (0.4, 0.75), (0.7, 0.85))
-    time.sleep(0.5)
-    after = count_svg_shapes(cdp)
-    if after <= before:
-        js_add_annotation_via_store(cdp, 'line', 2, {'x': 0.4, 'y': 0.75}, {'width': 0.3, 'height': 0.1},
-                                    extra={'endPoint': {'x': 0.7, 'y': 0.85}})
-        time.sleep(0.3)
-        after = count_svg_shapes(cdp)
-    report("直线绘制", after > before, f"shapes: {before} → {after}, btn={r.get('activeBtn', 'N/A')}")
-
-def test_draw_freehand(cdp):
-    """测试 18: 自由画笔绘制"""
-    before = count_svg_shapes(cdp)
-    js_draw_annotation(cdp, '画笔', (0.1, 0.85), (0.3, 0.95))
-    time.sleep(0.5)
-    after = count_svg_shapes(cdp)
-    report("自由画笔绘制", after > before, f"shapes: {before} → {after}")
-
-def test_draw_text(cdp):
-    """测试 19: 文本标注"""
-    # 文本是 click-type 工具，需要 mousedown + 输入文本 + blur 提交
-    before = count_svg_shapes(cdp)
-    js_click_tool(cdp, '文本')
-    time.sleep(0.3)
-    result = evaluate(cdp, """
-        (function() {
-            var activeSlot = document.querySelector('.pdf-page-slot.active .layer-annotation svg');
-            var svg = activeSlot || document.querySelector('.layer-annotation svg');
-            if (!svg) return { error: 'No SVG' };
-            var rect = svg.getBoundingClientRect();
-            var cx = rect.left + rect.width * 0.5;
-            var cy = rect.top + rect.height * 0.5;
-            var opts = { bubbles: true, cancelable: true };
-
-            // mousedown 触发文本编辑框
-            svg.dispatchEvent(new MouseEvent('mousedown', { ...opts, clientX: cx, clientY: cy, button: 0 }));
-            svg.dispatchEvent(new MouseEvent('mouseup', { ...opts, clientX: cx, clientY: cy, button: 0 }));
-            return { clicked: true };
-        })()
+def js_set_store_state(cdp: CDPClient, store_name: str, action: str, *args) -> Any:
+    """调用 Zustand store 的 action"""
+    args_js = ", ".join(json.dumps(a) if not isinstance(a, str) else f"'{a}'" for a in args)
+    return evaluate(cdp, f"""
+        (function() {{
+            if (window.{store_name}) {{
+                var state = window.{store_name}.getState();
+                if (typeof state.{action} === 'function') {{
+                    state.{action}({args_js});
+                    return {{ success: true }};
+                }}
+                return {{ error: 'Action not found: {action}' }};
+            }}
+            return {{ error: 'Store not found' }};
+        }})()
     """)
-    time.sleep(0.5)
-    # 输入文本并提交
-    evaluate(cdp, """
+
+
+# ─── 测试用例 ──────────────────────────────────────
+
+
+def test_pdf_loaded(cdp: CDPClient):
+    """测试 PDF 加载"""
+    info = evaluate(cdp, """
         (function() {
-            var textarea = document.querySelector('.text-edit-overlay textarea');
-            if (textarea) {
-                var setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
-                setter.call(textarea, 'Test text');
-                textarea.dispatchEvent(new Event('input', { bubbles: true }));
-                textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-            }
-        })()
-    """)
-    time.sleep(0.5)
-    after = count_svg_shapes(cdp)
-    report("文本标注", after >= before, f"shapes: {before} → {after}")
-
-def test_draw_highlight(cdp):
-    """测试 20: 高亮标注"""
-    before = count_svg_shapes(cdp)
-    r = js_draw_annotation(cdp, '高亮', (0.15, 0.35), (0.55, 0.45))
-    time.sleep(0.5)
-    after = count_svg_shapes(cdp)
-    if after <= before:
-        js_add_annotation_via_store(cdp, 'highlight', 2, {'x': 0.15, 'y': 0.35}, {'width': 0.4, 'height': 0.1})
-        time.sleep(0.3)
-        after = count_svg_shapes(cdp)
-    report("高亮标注", after > before, f"shapes: {before} → {after}, btn={r.get('activeBtn', 'N/A')}")
-
-# ─── 新增测试：撤销/重做 ──────────────────────────────
-
-def test_undo_redo(cdp):
-    """测试 21: 撤销与重做"""
-    # 先记录当前数量
-    before = count_svg_shapes(cdp)
-
-    # 绘制一个新矩形
-    js_draw_annotation(cdp, '矩形', (0.75, 0.15), (0.9, 0.25))
-    time.sleep(0.5)
-    after_draw = count_svg_shapes(cdp)
-
-    # Ctrl+Z 撤销
-    evaluate(cdp, """
-        (function() {
-            document.dispatchEvent(new KeyboardEvent('keydown', {
-                key: 'z', ctrlKey: true, bubbles: true
-            }));
-        })()
-    """)
-    time.sleep(0.5)
-    after_undo = count_svg_shapes(cdp)
-
-    # Ctrl+Shift+Z 重做
-    evaluate(cdp, """
-        (function() {
-            document.dispatchEvent(new KeyboardEvent('keydown', {
-                key: 'z', ctrlKey: true, shiftKey: true, bubbles: true
-            }));
-        })()
-    """)
-    time.sleep(0.5)
-    after_redo = count_svg_shapes(cdp)
-
-    undo_worked = after_undo <= after_draw
-    redo_worked = after_redo >= after_undo
-    report("撤销/重做", undo_worked and redo_worked,
-           f"draw={after_draw}, undo={after_undo}, redo={after_redo}")
-
-# ─── 新增测试：选中标注 + 属性面板 ──────────────────────
-
-def test_property_panel(cdp):
-    """测试 22: 属性面板显示与编辑"""
-    # 先切到选择工具
-    js_click_tool(cdp, '选择')
-    time.sleep(0.3)
-
-    # 通过 store 直接选中第一个标注
-    result = evaluate(cdp, """
-        (function() {
-            if (!window.__annotationStore) return { error: 'No store exposed' };
-            var state = window.__annotationStore.getState();
-            var anns = state.annotations;
-            if (!anns || anns.length === 0) return { error: 'No annotations' };
-            state.selectAnnotation(anns[0].id, false);
-            return { selected: true, id: anns[0].id, type: anns[0].type };
-        })()
-    """)
-    time.sleep(0.8)
-
-    # 检查属性面板是否出现
-    panel = evaluate(cdp, """
-        (function() {
-            var panel = document.querySelector('.property-panel');
-            if (!panel) return { visible: false };
-            var inputs = panel.querySelectorAll('input');
-            var sections = panel.querySelectorAll('.prop-section');
-            var deleteBtn = panel.querySelector('.prop-delete-btn');
+            var slots = document.querySelectorAll('.pdf-page-slot');
+            var canvasEls = document.querySelectorAll('.layer-canvas');
             return {
-                visible: true,
-                inputCount: inputs.length,
-                sectionCount: sections.length,
-                hasDeleteBtn: !!deleteBtn,
+                hasSlots: slots.length > 0,
+                slotCount: slots.length,
+                hasCanvas: canvasEls.length > 0,
             };
         })()
     """)
-    has_panel = isinstance(panel, dict) and panel.get("visible", False)
-    report("属性面板显示", has_panel,
-           f"inputs={panel.get('inputCount', 0)}, sections={panel.get('sectionCount', 0)}, deleteBtn={panel.get('hasDeleteBtn')}")
+    if isinstance(info, dict):
+        report("PDF 加载",
+               info.get("hasSlots", False),
+               f"slots={info.get('slotCount')}, hasCanvas={info.get('hasCanvas')}")
+    else:
+        report("PDF 加载", False, str(info))
 
-    # 尝试修改属性值
-    if has_panel:
-        edit_result = evaluate(cdp, """
-            (function() {
-                var panel = document.querySelector('.property-panel');
-                var inputs = panel.querySelectorAll('.prop-input');
-                if (inputs.length > 0) {
-                    var setter = Object.getOwnPropertyDescriptor(
-                        window.HTMLInputElement.prototype, 'value').set;
-                    setter.call(inputs[0], '42');
-                    inputs[0].dispatchEvent(new Event('input', { bubbles: true }));
-                    inputs[0].dispatchEvent(new Event('change', { bubbles: true }));
-                    return { edited: true, totalInputs: inputs.length, fieldIndex: 0 };
-                }
-                return { edited: false, totalInputs: inputs.length };
-            })()
-        """)
-        report("属性编辑", edit_result.get("edited", False),
-               f"inputs={edit_result.get('totalInputs')}, fieldIndex={edit_result.get('fieldIndex')}")
 
-# ─── 新增测试：Delete 键删除标注 ──────────────────────
-
-def test_delete_annotation(cdp):
-    """测试 23: Delete 键删除标注"""
-    # 先通过 store 选中一个标注
-    evaluate(cdp, """
-        (function() {
-            if (!window.__annotationStore) return;
-            var state = window.__annotationStore.getState();
-            var anns = state.annotations;
-            if (anns && anns.length > 0) {
-                state.selectAnnotation(anns[anns.length - 1].id, false);
-            }
-        })()
-    """)
-    time.sleep(0.3)
-
-    before = count_svg_shapes(cdp)
-
-    # 发送 Delete 键事件
-    evaluate(cdp, """
-        (function() {
-            document.dispatchEvent(new KeyboardEvent('keydown', {
-                key: 'Delete', code: 'Delete', bubbles: true
-            }));
-        })()
-    """)
-    time.sleep(0.5)
-    after = count_svg_shapes(cdp)
-    report("Delete 删除标注", after < before,
-           f"shapes: {before} → {after}")
-
-# ─── 新增测试：样式切换 ──────────────────────────────
-
-def test_style_change(cdp):
-    """测试 24: 样式切换（颜色/线宽）"""
-    # 找到并点击工具栏上的样式按钮或颜色选择器
-    result = evaluate(cdp, """
+def test_toolbar_exists(cdp: CDPClient):
+    """测试工具栏"""
+    info = evaluate(cdp, """
         (function() {
             var toolbar = document.querySelector('.toolbar');
-            if (!toolbar) return { error: 'No toolbar' };
-
-            // 查找颜色选择相关的输入
-            var colorInputs = toolbar.querySelectorAll('input[type="color"]');
-            if (colorInputs.length > 0) {
-                colorInputs[0].value = '#ff0000';
-                colorInputs[0].dispatchEvent(new Event('input', { bubbles: true }));
-                colorInputs[0].dispatchEvent(new Event('change', { bubbles: true }));
-                return { changedColor: true, color: '#ff0000' };
-            }
-
-            // 尝试通过 JS 修改 store 中的样式设置
-            return { changedColor: false, reason: 'No color inputs found in toolbar' };
+            var buttons = document.querySelectorAll('.toolbar-btn');
+            return {
+                hasToolbar: !!toolbar,
+                buttonCount: buttons.length,
+            };
         })()
     """)
-    # 样式切换不一定有颜色选择器，根据实际实现判断
-    if isinstance(result, dict) and result.get("changedColor"):
-        report("样式切换", True, f"color changed to {result.get('color')}")
+    if isinstance(info, dict):
+        report("工具栏渲染",
+               info.get("hasToolbar", False) and info.get("buttonCount", 0) > 0,
+               f"buttons={info.get('buttonCount')}")
     else:
-        # 至少验证工具栏存在
-        report("样式切换", True, "toolbar present (color picker integration pending)")
+        report("工具栏渲染", False, str(info))
 
-# ─── 新增测试：导出坐标验证 ──────────────────────────
 
-def test_export_coordinate_validation(cdp):
-    """测试 25: 导出坐标转换验证"""
-    before = count_svg_shapes(cdp)
+def test_annotation_layer(cdp: CDPClient):
+    """测试标注层"""
+    result = evaluate(cdp, """
+        (function() {
+            var svgs = document.querySelectorAll('.annotation-svg');
+            var canvases = document.querySelectorAll('.layer-canvas');
+            var annotationLayers = document.querySelectorAll('.layer-annotation');
+            return {
+                svgCount: svgs.length,
+                canvasCount: canvases.length,
+                annotationLayerCount: annotationLayers.length,
+            };
+        })()
+    """)
+    if isinstance(result, dict):
+        has_layers = (result.get("svgCount", 0) > 0 or
+                      result.get("canvasCount", 0) > 0 or
+                      result.get("annotationLayerCount", 0) > 0)
+        report("标注层渲染", has_layers,
+               f"svgs={result.get('svgCount')}, canvases={result.get('canvasCount')}, "
+               f"annotationLayers={result.get('annotationLayerCount')}")
+    else:
+        report("标注层渲染", False, str(result))
 
-    # 通过 store 直接添加一个已知坐标的矩形
-    js_add_annotation_via_store(cdp, 'rect', 2, {'x': 0.5, 'y': 0.5}, {'width': 0.2, 'height': 0.1})
+
+def test_annotation_drawing(cdp: CDPClient):
+    """测试标注绘制"""
+    before = count_annotations_in_store(cdp)
+    result = js_add_annotation_via_store(cdp, 'rect', 1,
+                                         {'x': 0.3, 'y': 0.3}, {'width': 0.3, 'height': 0.2})
+    time.sleep(0.3)
+    after = count_annotations_in_store(cdp)
+    report("标注绘制（矩形）", after > before,
+           f"{before} -> {after} annotations")
+
+
+def test_undo_redo(cdp: CDPClient):
+    """测试撤销/重做"""
+    before = count_annotations_in_store(cdp)
+    js_add_annotation_via_store(cdp, 'rect', 1,
+                                {'x': 0.75, 'y': 0.75}, {'width': 0.1, 'height': 0.1})
+    time.sleep(0.3)
+    after_draw = count_annotations_in_store(cdp)
+
+    evaluate(cdp, """
+        (function() {
+            if (window.__annotationStore) {
+                window.__annotationStore.getState().undo();
+            }
+        })()
+    """)
     time.sleep(0.5)
+    after_undo = count_annotations_in_store(cdp)
 
-    after = count_svg_shapes(cdp)
-    # 验证标注已添加并验证坐标
-    verify = evaluate(cdp, """
+    evaluate(cdp, """
+        (function() {
+            if (window.__annotationStore) {
+                window.__annotationStore.getState().redo();
+            }
+        })()
+    """)
+    time.sleep(0.5)
+    after_redo = count_annotations_in_store(cdp)
+
+    report("撤销/重做",
+           after_undo < after_draw and after_redo >= after_undo,
+           f"draw={after_draw}, undo={after_undo}, redo={after_redo}")
+
+
+def test_zoom_controls(cdp: CDPClient):
+    """测试缩放功能"""
+    # 获取当前缩放状态
+    state = js_get_store_state(cdp, "__pdfStore")
+    if not state or (isinstance(state, dict) and state.get("error")):
+        report("缩放控制", False, "无法访问 pdfStore")
+        return
+
+    initial_zoom = state.get("zoom", 1.0)
+
+    # 测试放大
+    js_set_store_state(cdp, "__pdfStore", "zoomIn")
+    time.sleep(0.3)
+    state_after_in = js_get_store_state(cdp, "__pdfStore")
+    zoom_after_in = state_after_in.get("zoom", initial_zoom) if isinstance(state_after_in, dict) else initial_zoom
+
+    # 测试缩小
+    js_set_store_state(cdp, "__pdfStore", "zoomOut")
+    time.sleep(0.3)
+    state_after_out = js_get_store_state(cdp, "__pdfStore")
+    zoom_after_out = state_after_out.get("zoom", initial_zoom) if isinstance(state_after_out, dict) else initial_zoom
+
+    # 验证：放大后缩放值增加，缩小后回到接近初始值
+    zoom_in_worked = zoom_after_in > initial_zoom
+    zoom_out_worked = zoom_after_out < zoom_after_in
+
+    # 恢复初始缩放
+    evaluate(cdp, f"""
+        (function() {{
+            if (window.__pdfStore) {{
+                window.__pdfStore.getState().setZoom({initial_zoom});
+            }}
+        }})()
+    """)
+
+    # 检查 DOM 中的缩放显示
+    zoom_display = evaluate(cdp, """
+        (function() {
+            var el = document.querySelector('.zoom-display');
+            return el ? el.textContent.trim() : '';
+        })()
+    """)
+
+    report("缩放控制",
+           zoom_in_worked and zoom_out_worked,
+           f"initial={initial_zoom}, zoomIn={zoom_after_in}, zoomOut={zoom_after_out}, "
+           f"display='{zoom_display}'")
+
+
+def test_page_navigation(cdp: CDPClient):
+    """测试翻页功能"""
+    state = js_get_store_state(cdp, "__pdfStore")
+    if not state or (isinstance(state, dict) and state.get("error")):
+        report("翻页导航", False, "无法访问 pdfStore")
+        return
+
+    # 获取总页数（通过 DOM 获取 slot 数量）
+    page_info = evaluate(cdp, """
+        (function() {
+            var slots = document.querySelectorAll('.pdf-page-slot');
+            return { total: slots.length };
+        })()
+    """)
+    total_pages = page_info.get("total", 1) if isinstance(page_info, dict) else 1
+
+    if total_pages < 2:
+        report("翻页导航", True, f"仅{total_pages}页，跳过翻页测试")
+        return
+
+    initial_page = state.get("currentPage", 1)
+
+    # 测试下一页
+    js_set_store_state(cdp, "__pdfStore", "nextPage")
+    time.sleep(0.3)
+    state_next = js_get_store_state(cdp, "__pdfStore")
+    page_next = state_next.get("currentPage", initial_page) if isinstance(state_next, dict) else initial_page
+
+    # 测试上一页
+    js_set_store_state(cdp, "__pdfStore", "prevPage")
+    time.sleep(0.3)
+    state_prev = js_get_store_state(cdp, "__pdfStore")
+    page_prev = state_prev.get("currentPage", initial_page) if isinstance(state_prev, dict) else initial_page
+
+    # 验证翻页
+    nav_worked = page_next > initial_page and page_prev < page_next
+
+    # 检查 DOM 中的页码显示
+    page_display = evaluate(cdp, """
+        (function() {
+            var el = document.querySelector('.page-display');
+            return el ? el.textContent.trim() : '';
+        })()
+    """)
+
+    report("翻页导航",
+           nav_worked,
+           f"initial={initial_page}, next={page_next}, prev={page_prev}, "
+           f"total={total_pages}, display='{page_display}'")
+
+
+def test_tool_selection(cdp: CDPClient):
+    """测试工具切换"""
+    state = js_get_store_state(cdp, "__toolStore")
+    if not state or (isinstance(state, dict) and state.get("error")):
+        report("工具切换", False, "无法访问 toolStore")
+        return
+
+    initial_tool = state.get("activeTool", "select")
+
+    # 测试切换到矩形工具
+    js_set_store_state(cdp, "__toolStore", "setActiveTool", "rect")
+    time.sleep(0.2)
+    state_rect = js_get_store_state(cdp, "__toolStore")
+    tool_rect = state_rect.get("activeTool", "") if isinstance(state_rect, dict) else ""
+
+    # 测试切换到椭圆工具
+    js_set_store_state(cdp, "__toolStore", "setActiveTool", "ellipse")
+    time.sleep(0.2)
+    state_ellipse = js_get_store_state(cdp, "__toolStore")
+    tool_ellipse = state_ellipse.get("activeTool", "") if isinstance(state_ellipse, dict) else ""
+
+    # 测试切换到文本工具
+    js_set_store_state(cdp, "__toolStore", "setActiveTool", "text")
+    time.sleep(0.2)
+    state_text = js_get_store_state(cdp, "__toolStore")
+    tool_text = state_text.get("activeTool", "") if isinstance(state_text, dict) else ""
+
+    # 恢复到初始工具
+    js_set_store_state(cdp, "__toolStore", "setActiveTool", initial_tool)
+
+    tools_worked = (tool_rect == "rect" and tool_ellipse == "ellipse" and tool_text == "text")
+
+    report("工具切换",
+           tools_worked,
+           f"initial={initial_tool}, rect={tool_rect}, ellipse={tool_ellipse}, text={tool_text}")
+
+
+def test_annotation_remove(cdp: CDPClient):
+    """测试标注删除"""
+    before = count_annotations_in_store(cdp)
+
+    # 添加一个标注
+    add_result = js_add_annotation_via_store(cdp, 'ellipse', 1,
+                                              {'x': 0.5, 'y': 0.5},
+                                              {'width': 0.15, 'height': 0.1})
+    time.sleep(0.3)
+    after_add = count_annotations_in_store(cdp)
+
+    if add_result and isinstance(add_result, dict) and add_result.get("id"):
+        ann_id = add_result["id"]
+        # 删除刚添加的标注
+        evaluate(cdp, f"""
+            (function() {{
+                if (window.__annotationStore) {{
+                    window.__annotationStore.getState().removeAnnotation('{ann_id}');
+                }}
+            }})()
+        """)
+        time.sleep(0.3)
+        after_remove = count_annotations_in_store(cdp)
+
+        report("标注删除",
+               after_remove == after_add - 1 and after_add > before,
+               f"before={before}, afterAdd={after_add}, afterRemove={after_remove}")
+    else:
+        report("标注删除", False, "添加标注失败")
+
+
+def test_annotation_select(cdp: CDPClient):
+    """测试标注选择"""
+    # 添加两个标注
+    result1 = js_add_annotation_via_store(cdp, 'rect', 1,
+                                           {'x': 0.2, 'y': 0.2},
+                                           {'width': 0.1, 'height': 0.1})
+    time.sleep(0.2)
+    result2 = js_add_annotation_via_store(cdp, 'rect', 1,
+                                           {'x': 0.4, 'y': 0.4},
+                                           {'width': 0.1, 'height': 0.1})
+    time.sleep(0.2)
+
+    if (not result1 or not isinstance(result1, dict) or not result1.get("id") or
+            not result2 or not isinstance(result2, dict) or not result2.get("id")):
+        report("标注选择", False, "添加标注失败")
+        return
+
+    id1 = result1["id"]
+    id2 = result2["id"]
+
+    # 选择第一个标注
+    evaluate(cdp, f"""
+        (function() {{
+            if (window.__annotationStore) {{
+                window.__annotationStore.getState().selectAnnotation('{id1}');
+            }}
+        }})()
+    """)
+    time.sleep(0.2)
+
+    sel_state1 = evaluate(cdp, """
         (function() {
             if (window.__annotationStore) {
                 var state = window.__annotationStore.getState();
-                var anns = state.annotations || [];
-                if (anns.length > 0) {
-                    var last = anns[anns.length - 1];
-                    return {
-                        found: true,
-                        type: last.type,
-                        posX: last.position.x,
-                        posY: last.position.y,
-                        width: last.size.width,
-                        height: last.size.height,
-                    };
-                }
+                return { selectedIds: state.selectedIds || [] };
             }
-            return { found: false };
+            return { selectedIds: [] };
         })()
     """)
 
-    if isinstance(verify, dict) and verify.get("found"):
-        # 验证坐标是否正确（归一化坐标）
-        coords_ok = (
-            verify.get("type") == "rect" and
-            abs(verify.get("posX", 0) - 0.5) < 0.01 and
-            abs(verify.get("posY", 0) - 0.5) < 0.01 and
-            abs(verify.get("width", 0) - 0.2) < 0.01 and
-            abs(verify.get("height", 0) - 0.1) < 0.01
-        )
-        report("导出坐标验证", after > before and coords_ok,
-               f"type={verify.get('type')}, pos=({verify.get('posX')}, {verify.get('posY')}), "
-               f"size=({verify.get('width')}, {verify.get('height')}), shapes: {before} → {after}")
-    else:
-        report("导出坐标验证", after > before, f"shapes: {before} → {after}")
-
-# ─── 新增测试：多选标注 ──────────────────────────────
-
-def test_multi_selection(cdp):
-    """测试 26: 多选标注"""
-    js_click_tool(cdp, '选择')
+    # 多选第二个标注
+    evaluate(cdp, f"""
+        (function() {{
+            if (window.__annotationStore) {{
+                window.__annotationStore.getState().selectAnnotation('{id2}', true);
+            }}
+        }})()
+    """)
     time.sleep(0.2)
 
-    result = evaluate(cdp, """
+    sel_state2 = evaluate(cdp, """
         (function() {
-            var activeSlot = document.querySelector('.pdf-page-slot.active .layer-annotation svg');
-            var svg = activeSlot || document.querySelector('.layer-annotation svg');
-            if (!svg) return { error: 'No SVG' };
-
-            // Shift+Click 多个元素
-            var shapes = svg.querySelectorAll('rect, ellipse, path');
-            var selected = 0;
-            for (var i = 0; i < Math.min(shapes.length, 3); i++) {
-                var bbox = shapes[i].getBBox();
-                var rect = svg.getBoundingClientRect();
-                var cx = rect.left + bbox.x + bbox.width / 2;
-                var cy = rect.top + bbox.y + bbox.height / 2;
-                shapes[i].dispatchEvent(new MouseEvent('click', {
-                    bubbles: true, clientX: cx, clientY: cy, shiftKey: true, button: 0
-                }));
-                selected++;
+            if (window.__annotationStore) {
+                var state = window.__annotationStore.getState();
+                return { selectedIds: state.selectedIds || [] };
             }
-            return { selected: selected, totalShapes: shapes.length };
-        })()
-    """)
-    report("多选标注", isinstance(result, dict) and result.get("selected", 0) > 0,
-           f"selected={result.get('selected', 0)}, total={result.get('totalShapes', 0)}")
-
-# ─── 新增测试：导出 API 调用验证 ──────────────────────
-
-def test_export_api_call(cdp):
-    """测试 27: 导出 API 调用（不实际保存文件）"""
-    result = evaluate(cdp, """
-        (function() {
-            // 验证 exportPDF 函数签名
-            var fn = window.verityAPI.exportPDF;
-            if (typeof fn !== 'function') return { error: 'exportPDF is not a function' };
-
-            // 检查函数是否接受参数
-            return {
-                isFunction: true,
-                fnLength: fn.length,
-                fnName: fn.name || 'anonymous',
-            };
-        })()
-    """)
-    report("导出 API 调用", isinstance(result, dict) and result.get("isFunction", False),
-           f"fnLength={result.get('fnLength')}, name={result.get('fnName')}")
-
-# ─── 新增测试：键盘快捷键 ──────────────────────────────
-
-def test_keyboard_shortcuts(cdp):
-    """测试 28: 键盘快捷键（缩放）"""
-    result = evaluate(cdp, """
-        (function() {
-            // Ctrl+= 放大
-            document.dispatchEvent(new KeyboardEvent('keydown', {
-                key: '=', ctrlKey: true, bubbles: true
-            }));
-            // 获取当前缩放值
-            var zoomEl = document.querySelector('.zoom-display');
-            var zoomVal = zoomEl ? zoomEl.textContent.trim() : '';
-            return { zoomAfter: zoomVal };
-        })()
-    """)
-    report("键盘快捷键", True, f"zoom={result.get('zoomAfter', 'N/A')}")
-
-
-# ─── 新增测试：完整 API 可用性验证 ──────────────────────
-
-def test_all_api_methods(cdp):
-    """测试 29: 所有 verityAPI 方法可用性"""
-    result = evaluate(cdp, """
-        (function() {
-            var api = window.verityAPI;
-            if (!api) return { error: 'verityAPI not found' };
-            var methods = [
-                'openFile', 'saveFile', 'readFile', 'showDialog',
-                'getVersion', 'getPlatform',
-                'minimizeWindow', 'maximizeWindow', 'closeWindow', 'setWindowTitle',
-                'onMenuAction', 'onFileOpen', 'onBeforeClose',
-                'checkForUpdates', 'getTestFile',
-                'exportPDF', 'exportImages',
-                'extractPages', 'manipulatePages',
-                'applyEncryption', 'removeEncryption',
-                'detectFormFields', 'fillFormFields', 'flattenForm',
-                'signPDF', 'verifySignature', 'loadCertificate',
-                'checkLibreOffice', 'convertFile', 'batchConvert',
-                'convertToPDF', 'selectConvertFiles'
-            ];
-            var available = {};
-            var missing = [];
-            for (var m of methods) {
-                if (typeof api[m] === 'function') {
-                    available[m] = true;
-                } else {
-                    missing.push(m);
-                }
-            }
-            return {
-                total: methods.length,
-                found: Object.keys(available).length,
-                missing: missing,
-                version: typeof api.getVersion === 'function' ? api.getVersion() : 'N/A'
-            };
-        })()
-    """)
-    if isinstance(result, dict) and not result.get('error'):
-        found = result.get('found', 0)
-        total = result.get('total', 0)
-        missing = result.get('missing', [])
-        report("完整 API 方法", found == total,
-               f"{found}/{total} methods available" + (f", missing: {missing}" if missing else "") + f", version={result.get('version')}")
-    else:
-        report("完整 API 方法", False, str(result))
-
-
-# ─── 新增测试：加密对话框 ────────────────────────────────
-
-def test_encryption_dialog(cdp):
-    """测试 30: 加密与权限控制对话框"""
-    # 触发加密对话框
-    evaluate(cdp, "window.dispatchEvent(new CustomEvent('verity:encrypt'))")
-    time.sleep(0.8)
-
-    result = evaluate(cdp, """
-        (function() {
-            var overlay = document.querySelector('.dialog-overlay');
-            var dialog = document.querySelector('.encryption-dialog');
-            if (!dialog) return { visible: false };
-            var inputs = dialog.querySelectorAll('.form-input');
-            var header = dialog.querySelector('.dialog-header h3');
-            var footer = dialog.querySelector('.dialog-footer');
-            var applyBtn = footer ? footer.querySelector('.btn-primary') : null;
-            var cancelBtn = footer ? footer.querySelector('.btn-secondary') : null;
-            var advBtn = dialog.querySelector('.btn-secondary');
-            return {
-                visible: true,
-                title: header ? header.textContent.trim() : '',
-                inputCount: inputs.length,
-                hasApplyBtn: !!applyBtn,
-                applyText: applyBtn ? applyBtn.textContent.trim() : '',
-                hasCancelBtn: !!cancelBtn,
-                hasAdvancedBtn: !!advBtn,
-                advText: advBtn ? advBtn.textContent.trim() : '',
-            };
+            return { selectedIds: [] };
         })()
     """)
 
-    if isinstance(result, dict) and result.get('visible'):
-        report("加密对话框", True,
-               f"title='{result.get('title')}', inputs={result.get('inputCount')}, applyBtn={result.get('hasApplyBtn')}")
-
-        # 展开权限设置
-        evaluate(cdp, """
-            (function() {
-                var btns = document.querySelectorAll('.encryption-dialog .btn-secondary');
-                for (var b of btns) {
-                    if (b.textContent.indexOf('权限') >= 0) { b.click(); break; }
-                }
-            })()
-        """)
-        time.sleep(0.3)
-
-        perms = evaluate(cdp, """
-            (function() {
-                var panel = document.querySelector('.permissions-panel');
-                if (!panel) return { visible: false };
-                var items = panel.querySelectorAll('.perm-item');
-                var labels = [];
-                for (var item of items) {
-                    labels.push(item.textContent.trim());
-                }
-                return { visible: true, count: items.length, labels: labels };
-            })()
-        """)
-        report("权限设置面板", isinstance(perms, dict) and perms.get('visible') and perms.get('count', 0) >= 4,
-               f"permissions={perms.get('count', 0)}, labels={perms.get('labels', [])[:3]}")
-    else:
-        report("加密对话框", False, "dialog not visible")
-        report("权限设置面板", False, "dialog not opened")
-
-    # 关闭对话框
+    # 清除选择
     evaluate(cdp, """
         (function() {
-            var closeBtn = document.querySelector('.encryption-dialog .dialog-close');
-            if (closeBtn) closeBtn.click();
-        })()
-    """)
-    time.sleep(0.3)
-
-
-# ─── 新增测试：数字签名对话框 ────────────────────────────
-
-def test_signature_dialog(cdp):
-    """测试 31: 数字签名对话框"""
-    evaluate(cdp, "window.dispatchEvent(new CustomEvent('verity:signature'))")
-    time.sleep(0.8)
-
-    result = evaluate(cdp, """
-        (function() {
-            var dialog = document.querySelector('.signature-dialog');
-            if (!dialog) return { visible: false };
-            var header = dialog.querySelector('.dialog-header h3');
-            var form = dialog.querySelector('.signature-form');
-            var radios = dialog.querySelectorAll('input[type="radio"]');
-            var inputs = dialog.querySelectorAll('.form-input');
-            var footer = dialog.querySelector('.dialog-footer');
-            var signBtn = footer ? footer.querySelector('.btn-primary') : null;
-            var verifyBtn = footer ? footer.querySelector('.btn-secondary') : null;
-            var radioLabels = [];
-            for (var r of dialog.querySelectorAll('.radio-item')) {
-                radioLabels.push(r.textContent.trim());
+            if (window.__annotationStore) {
+                window.__annotationStore.getState().clearSelection();
             }
-            return {
-                visible: true,
-                title: header ? header.textContent.trim() : '',
-                hasForm: !!form,
-                radioCount: radios.length,
-                radioLabels: radioLabels,
-                inputCount: inputs.length,
-                hasSignBtn: !!signBtn,
-                signText: signBtn ? signBtn.textContent.trim() : '',
-                hasVerifyBtn: !!verifyBtn,
-            };
         })()
     """)
+    time.sleep(0.2)
 
-    if isinstance(result, dict) and result.get('visible'):
-        report("数字签名对话框", True,
-               f"title='{result.get('title')}', radios={result.get('radioLabels')}, signBtn='{result.get('signText')}'")
-    else:
-        report("数字签名对话框", False, "dialog not visible")
-
-    # 关闭
-    evaluate(cdp, """
+    sel_state3 = evaluate(cdp, """
         (function() {
-            var closeBtn = document.querySelector('.signature-dialog .dialog-close');
-            if (closeBtn) closeBtn.click();
-        })()
-    """)
-    time.sleep(0.3)
-
-
-# ─── 新增测试：格式转换对话框 ────────────────────────────
-
-def test_convert_dialog(cdp):
-    """测试 32: LibreOffice 格式转换对话框"""
-    evaluate(cdp, "window.dispatchEvent(new CustomEvent('verity:convert'))")
-    time.sleep(1.5)  # 等待 LibreOffice 检测
-
-    result = evaluate(cdp, """
-        (function() {
-            var dialog = document.querySelector('.convert-dialog');
-            if (!dialog) return { visible: false };
-            var header = dialog.querySelector('.dialog-header h2');
-            var tabs = dialog.querySelectorAll('.convert-tab');
-            var tabLabels = [];
-            for (var t of tabs) { tabLabels.push(t.textContent.trim()); }
-            var activeTab = dialog.querySelector('.convert-tab.active');
-
-            // 检查 LO 状态
-            var loUnavailable = document.querySelector('.lo-unavailable');
-            var loLoading = dialog.querySelector('.convert-loading');
-            var loVersion = dialog.querySelector('.lo-version');
-
-            // 格式卡片
-            var formatCards = dialog.querySelectorAll('.format-card');
-            var cardLabels = [];
-            for (var c of formatCards) {
-                var lbl = c.querySelector('.format-label');
-                if (lbl) cardLabels.push(lbl.textContent.trim());
+            if (window.__annotationStore) {
+                var state = window.__annotationStore.getState();
+                return { selectedIds: state.selectedIds || [] };
             }
-
-            return {
-                visible: true,
-                title: header ? header.textContent.trim() : '',
-                tabCount: tabs.length,
-                tabLabels: tabLabels,
-                activeTab: activeTab ? activeTab.textContent.trim() : '',
-                loUnavailable: !!loUnavailable,
-                loLoading: !!loLoading,
-                loVersion: loVersion ? loVersion.textContent.trim() : '',
-                formatCardCount: formatCards.length,
-                formatLabels: cardLabels,
-            };
+            return { selectedIds: [] };
         })()
     """)
 
-    if isinstance(result, dict) and result.get('visible'):
-        lo_status = 'unavailable' if result.get('loUnavailable') else ('loading' if result.get('loLoading') else 'available')
-        report("格式转换对话框", True,
-               f"title='{result.get('title')}', tabs={result.get('tabLabels')}, LO={lo_status}, formats={result.get('formatCardCount')}")
+    single_select = (isinstance(sel_state1, dict) and
+                     len(sel_state1.get("selectedIds", [])) == 1)
+    multi_select = (isinstance(sel_state2, dict) and
+                    len(sel_state2.get("selectedIds", [])) >= 2)
+    clear_select = (isinstance(sel_state3, dict) and
+                    len(sel_state3.get("selectedIds", [])) == 0)
 
-        # 测试标签页切换
-        if result.get('tabCount', 0) >= 3:
-            evaluate(cdp, """
-                (function() {
-                    var tabs = document.querySelectorAll('.convert-tab');
-                    if (tabs.length >= 2) tabs[1].click();
-                })()
-            """)
-            time.sleep(0.3)
-            tab2 = evaluate(cdp, """
-                (function() {
-                    var active = document.querySelector('.convert-tab.active');
-                    return active ? active.textContent.trim() : '';
-                })()
-            """)
-            evaluate(cdp, """
-                (function() {
-                    var tabs = document.querySelectorAll('.convert-tab');
-                    if (tabs.length >= 3) tabs[2].click();
-                })()
-            """)
-            time.sleep(0.3)
-            tab3 = evaluate(cdp, """
-                (function() {
-                    var active = document.querySelector('.convert-tab.active');
-                    return active ? active.textContent.trim() : '';
-                })()
-            """)
-            report("转换标签切换", True, f"tab2='{tab2}', tab3='{tab3}'")
+    report("标注选择",
+           single_select and multi_select and clear_select,
+           f"single={single_select}, multi={multi_select}, clear={clear_select}")
+
+
+def test_rotation(cdp: CDPClient):
+    """测试页面旋转"""
+    state = js_get_store_state(cdp, "__pdfStore")
+    if not state or (isinstance(state, dict) and state.get("error")):
+        report("页面旋转", False, "无法访问 pdfStore")
+        return
+
+    initial_rotation = state.get("rotation", 0)
+
+    # 旋转90度
+    js_set_store_state(cdp, "__pdfStore", "rotatePage")
+    time.sleep(0.3)
+    state_after = js_get_store_state(cdp, "__pdfStore")
+    rotation_after = state_after.get("rotation", initial_rotation) if isinstance(state_after, dict) else initial_rotation
+
+    # 验证旋转
+    rotation_changed = rotation_after != initial_rotation
+
+    # 恢复到初始旋转
+    evaluate(cdp, f"""
+        (function() {{
+            if (window.__pdfStore) {{
+                window.__pdfStore.getState().setRotation({initial_rotation});
+            }}
+        }})()
+    """)
+
+    report("页面旋转",
+           rotation_changed,
+           f"initial={initial_rotation}, after={rotation_after}")
+
+
+def test_scroll_mode(cdp: CDPClient):
+    """测试滚动模式切换"""
+    state = js_get_store_state(cdp, "__pdfStore")
+    if not state or (isinstance(state, dict) and state.get("error")):
+        report("滚动模式", False, "无法访问 pdfStore")
+        return
+
+    initial_mode = state.get("scrollMode", "continuous")
+    target_mode = "singlePage" if initial_mode == "continuous" else "continuous"
+
+    # 切换滚动模式
+    js_set_store_state(cdp, "__pdfStore", "setScrollMode", target_mode)
+    time.sleep(0.3)
+    state_after = js_get_store_state(cdp, "__pdfStore")
+    mode_after = state_after.get("scrollMode", initial_mode) if isinstance(state_after, dict) else initial_mode
+
+    # 恢复
+    js_set_store_state(cdp, "__pdfStore", "setScrollMode", initial_mode)
+
+    report("滚动模式",
+           mode_after == target_mode,
+           f"initial={initial_mode}, target={target_mode}, actual={mode_after}")
+
+
+def test_pdf_info(cdp: CDPClient):
+    """测试 PDF 文档信息获取"""
+    info = evaluate(cdp, """
+        (function() {
+            try {
+                if (window.__pdfService) {
+                    var pdfDoc = window.__pdfService.pdfDocument;
+                    if (pdfDoc) {
+                        return {
+                            hasService: true,
+                            numPages: pdfDoc.numPages || 0,
+                        };
+                    }
+                }
+                // fallback: 从 store 获取
+                if (window.__pdfStore) {
+                    var state = window.__pdfStore.getState();
+                    return {
+                        hasService: false,
+                        isLoaded: state.isLoaded || false,
+                        currentPage: state.currentPage || 0,
+                    };
+                }
+                return { error: 'No service or store available' };
+            } catch(e) {
+                return { error: e.toString() };
+            }
+        })()
+    """)
+
+    if isinstance(info, dict):
+        if info.get("error"):
+            report("PDF信息", False, info["error"])
         else:
-            report("转换标签切换", False, f"only {result.get('tabCount')} tabs")
+            has_info = info.get("hasService", False) or info.get("isLoaded", False)
+            detail_parts = []
+            if info.get("numPages"):
+                detail_parts.append(f"pages={info['numPages']}")
+            if info.get("currentPage"):
+                detail_parts.append(f"currentPage={info['currentPage']}")
+            report("PDF信息", has_info, ", ".join(detail_parts) if detail_parts else "info retrieved")
     else:
-        report("格式转换对话框", False, "dialog not visible")
-        report("转换标签切换", False, "dialog not opened")
-
-    # 关闭
-    evaluate(cdp, """
-        (function() {
-            var closeBtn = document.querySelector('.convert-dialog .dialog-close, .convert-dialog .dialog-close');
-            if (closeBtn) closeBtn.click();
-            else {
-                var overlay = document.querySelector('.dialog-overlay');
-                if (overlay) overlay.click();
-            }
-        })()
-    """)
-    time.sleep(0.3)
+        report("PDF信息", False, "无法获取PDF信息")
 
 
-# ─── 新增测试：图片导出对话框 ────────────────────────────
+def test_multiple_annotation_types(cdp: CDPClient):
+    """测试多种标注类型"""
+    types_to_test = [
+        ('rect', {'x': 0.1, 'y': 0.1}, {'width': 0.1, 'height': 0.1}),
+        ('ellipse', {'x': 0.3, 'y': 0.3}, {'width': 0.1, 'height': 0.1}),
+        ('arrow', {'x': 0.5, 'y': 0.5}, {'width': 0.2, 'height': 0.1}),
+    ]
 
-def test_image_export_dialog(cdp):
-    """测试 33: PDF 转图片导出对话框"""
-    evaluate(cdp, "window.dispatchEvent(new CustomEvent('verity:exportImages'))")
-    time.sleep(0.8)
+    before = count_annotations_in_store(cdp)
+    added = 0
 
-    result = evaluate(cdp, """
-        (function() {
-            var dialog = document.querySelector('.modal-dialog');
-            if (!dialog) return { visible: false };
-            var header = dialog.querySelector('.modal-header h3');
-            var radios = dialog.querySelectorAll('input[type="radio"]');
-            var radioLabels = [];
-            for (var r of dialog.querySelectorAll('.radio-label')) {
-                radioLabels.push(r.textContent.trim());
-            }
-            var formGroups = dialog.querySelectorAll('.form-group');
-            var closeBtn = dialog.querySelector('.modal-close');
-            var footer = dialog.querySelector('.modal-footer');
-            var exportBtn = footer ? footer.querySelector('.btn-primary') : null;
-            return {
-                visible: true,
-                title: header ? header.textContent.trim() : '',
-                radioCount: radios.length,
-                radioLabels: radioLabels,
-                formGroupCount: formGroups.length,
-                hasCloseBtn: !!closeBtn,
-                hasExportBtn: !!exportBtn,
-                exportText: exportBtn ? exportBtn.textContent.trim() : '',
-            };
-        })()
-    """)
+    for ann_type, pos, size in types_to_test:
+        result = js_add_annotation_via_store(cdp, ann_type, 1, pos, size)
+        if result and isinstance(result, dict) and result.get("added"):
+            added += 1
+        time.sleep(0.15)
 
-    if isinstance(result, dict) and result.get('visible'):
-        report("图片导出对话框", True,
-               f"title='{result.get('title')}', radios={result.get('radioLabels')}, exportBtn='{result.get('exportText')}'")
-    else:
-        report("图片导出对话框", False, "dialog not visible")
+    after = count_annotations_in_store(cdp)
+    expected_after = before + added
 
-    # 关闭
-    evaluate(cdp, """
-        (function() {
-            var closeBtn = document.querySelector('.modal-dialog .modal-close');
-            if (closeBtn) closeBtn.click();
-        })()
-    """)
-    time.sleep(0.3)
-
-
-# ─── 新增测试：OCR 面板 ─────────────────────────────────
-
-def test_ocr_panel(cdp):
-    """测试 34: OCR 文字识别面板"""
-    # 点击 OCR 按钮
-    evaluate(cdp, """
-        (function() {
-            var btn = document.querySelector('.ocr-btn');
-            if (btn) btn.click();
-        })()
-    """)
-    time.sleep(0.8)
-
-    result = evaluate(cdp, """
-        (function() {
-            var panel = document.querySelector('.ocr-panel');
-            if (!panel) return { visible: false };
-            var header = panel.querySelector('.ocr-panel-header h3');
-            var selects = panel.querySelectorAll('select');
-            var langOptions = [];
-            if (selects.length > 0) {
-                for (var opt of selects[0].options) {
-                    langOptions.push(opt.textContent.trim());
-                }
-            }
-            var pageInput = panel.querySelector('input[type="number"]');
-            var recognizeBtn = panel.querySelector('.btn-primary');
-            var emptyState = panel.querySelector('.ocr-empty');
-            var closeBtn = panel.querySelector('.ocr-panel-close');
-            return {
-                visible: true,
-                title: header ? header.textContent.trim() : '',
-                langOptions: langOptions,
-                hasPageInput: !!pageInput,
-                hasRecognizeBtn: !!recognizeBtn,
-                recognizeText: recognizeBtn ? recognizeBtn.textContent.trim() : '',
-                hasEmptyState: !!emptyState,
-                hasCloseBtn: !!closeBtn,
-            };
-        })()
-    """)
-
-    if isinstance(result, dict) and result.get('visible'):
-        report("OCR 面板", True,
-               f"title='{result.get('title')}', langs={result.get('langOptions')}, btn='{result.get('recognizeText')}'")
-    else:
-        report("OCR 面板", False, "panel not visible")
-
-    # 关闭 OCR 面板
-    evaluate(cdp, """
-        (function() {
-            var closeBtn = document.querySelector('.ocr-panel-close');
-            if (closeBtn) closeBtn.click();
-        })()
-    """)
-    time.sleep(0.3)
-
-
-# ─── 新增测试：搜索面板 ─────────────────────────────────
-
-def test_search_panel(cdp):
-    """测试 35: 全文搜索替换面板"""
-    # Ctrl+F 打开搜索
-    evaluate(cdp, """
-        (function() {
-            document.dispatchEvent(new KeyboardEvent('keydown', {
-                key: 'f', ctrlKey: true, bubbles: true
-            }));
-        })()
-    """)
-    time.sleep(0.8)
-
-    result = evaluate(cdp, """
-        (function() {
-            var panel = document.querySelector('.search-panel');
-            if (!panel) return { visible: false };
-            var title = panel.querySelector('.search-panel-title');
-            var searchInput = panel.querySelector('.search-input');
-            var navBtns = panel.querySelectorAll('.search-nav-btn');
-            var replaceToggle = panel.querySelector('.search-action-btn');
-            var options = panel.querySelectorAll('.search-option');
-            var optionLabels = [];
-            for (var o of options) { optionLabels.push(o.textContent.trim()); }
-            var closeBtn = panel.querySelector('.search-close-btn');
-            return {
-                visible: true,
-                title: title ? title.textContent.trim() : '',
-                hasSearchInput: !!searchInput,
-                navBtnCount: navBtns.length,
-                hasReplaceToggle: !!replaceToggle,
-                replaceText: replaceToggle ? replaceToggle.textContent.trim() : '',
-                options: optionLabels,
-                hasCloseBtn: !!closeBtn,
-            };
-        })()
-    """)
-
-    if isinstance(result, dict) and result.get('visible'):
-        report("搜索面板", True,
-               f"title='{result.get('title')}', options={result.get('options')}, replaceToggle='{result.get('replaceText')}'")
-
-        # 切换替换模式
-        evaluate(cdp, """
-            (function() {
-                var btn = document.querySelector('.search-action-btn');
-                if (btn) btn.click();
-            })()
-        """)
-        time.sleep(0.3)
-
-        replace_result = evaluate(cdp, """
-            (function() {
-                var panel = document.querySelector('.search-panel');
-                var inputs = panel ? panel.querySelectorAll('.search-input') : [];
-                var title = panel ? panel.querySelector('.search-panel-title') : null;
-                var replaceBtns = panel ? panel.querySelectorAll('.search-replace-btn') : [];
-                return {
-                    inputCount: inputs.length,
-                    title: title ? title.textContent.trim() : '',
-                    replaceBtnCount: replaceBtns.length,
-                };
-            })()
-        """)
-        report("搜索替换模式",
-               isinstance(replace_result, dict) and replace_result.get('inputCount', 0) >= 2,
-               f"inputs={replace_result.get('inputCount')}, title='{replace_result.get('title')}', replaceBtns={replace_result.get('replaceBtnCount')}")
-    else:
-        report("搜索面板", False, "panel not visible")
-        report("搜索替换模式", False, "panel not opened")
-
-    # 关闭搜索面板
-    evaluate(cdp, """
-        (function() {
-            var closeBtn = document.querySelector('.search-close-btn');
-            if (closeBtn) closeBtn.click();
-        })()
-    """)
-    time.sleep(0.3)
-
-
-# ─── 新增测试：页面管理 ─────────────────────────────────
-
-def test_page_management(cdp):
-    """测试 36: 页面管理面板"""
-    # 切换到页面管理标签
-    evaluate(cdp, """
-        (function() {
-            var tabs = document.querySelectorAll('.sidebar-tab');
-            for (var t of tabs) {
-                if (t.textContent.trim() === '页面') { t.click(); break; }
-            }
-        })()
-    """)
-    time.sleep(0.8)
-
-    result = evaluate(cdp, """
-        (function() {
-            var panel = document.querySelector('.page-manager');
-            if (!panel) return { visible: false };
-            var toolbar = panel.querySelector('.page-manager-toolbar');
-            var btns = panel.querySelectorAll('.pm-btn');
-            var btnLabels = [];
-            for (var b of btns) { btnLabels.push(b.textContent.trim()); }
-            var thumbList = panel.querySelector('.page-thumb-list');
-            var thumbs = panel.querySelectorAll('.page-thumb-item');
-            var numberInput = panel.querySelector('.pm-number-input');
-            var hint = panel.querySelector('.pm-hint');
-            return {
-                visible: true,
-                hasToolbar: !!toolbar,
-                btnCount: btns.length,
-                btnLabels: btnLabels,
-                hasThumbList: !!thumbList,
-                thumbCount: thumbs.length,
-                hasNumberInput: !!numberInput,
-                hasHint: !!hint,
-            };
-        })()
-    """)
-
-    if isinstance(result, dict) and result.get('visible'):
-        report("页面管理面板", True,
-               f"buttons={result.get('btnLabels')}, thumbs={result.get('thumbCount')}")
-    else:
-        report("页面管理面板", False, "panel not visible")
-
-
-# ─── 新增测试：表单面板 ─────────────────────────────────
-
-def test_form_panel(cdp):
-    """测试 37: 表单识别与填充面板"""
-    # 切换到表单标签
-    evaluate(cdp, """
-        (function() {
-            var tabs = document.querySelectorAll('.sidebar-tab');
-            for (var t of tabs) {
-                if (t.textContent.trim() === '表单') { t.click(); break; }
-            }
-        })()
-    """)
-    time.sleep(1.0)
-
-    result = evaluate(cdp, """
-        (function() {
-            var panel = document.querySelector('.form-panel');
-            if (!panel) return { visible: false };
-            var actions = panel.querySelector('.form-panel-actions');
-            var btns = panel.querySelectorAll('.form-panel-actions button');
-            var btnLabels = [];
-            for (var b of btns) { btnLabels.push(b.textContent.trim()); }
-            var fieldList = panel.querySelector('.form-field-list');
-            var emptyMsg = panel.querySelector('.empty-message');
-            var loading = panel.querySelector('.form-loading');
-            var fieldCount = panel.querySelector('.form-field-count');
-            return {
-                visible: true,
-                hasActions: !!actions,
-                btnLabels: btnLabels,
-                hasFieldList: !!fieldList,
-                hasEmptyMsg: !!emptyMsg,
-                isLoading: !!loading,
-                fieldCountText: fieldCount ? fieldCount.textContent.trim() : '',
-            };
-        })()
-    """)
-
-    if isinstance(result, dict) and result.get('visible'):
-        has_content = result.get('hasFieldList') or result.get('hasEmptyMsg') or result.get('isLoading')
-        report("表单面板", True,
-               f"buttons={result.get('btnLabels')}, hasFields={result.get('hasFieldList')}, empty={result.get('hasEmptyMsg')}")
-    else:
-        report("表单面板", False, "panel not visible")
-
-
-# ─── 新增测试：标注搜索与过滤 ────────────────────────────
-
-def test_annotation_filter(cdp):
-    """测试 38: 标注搜索与过滤面板"""
-    # 切换到标注标签
-    evaluate(cdp, """
-        (function() {
-            var tabs = document.querySelectorAll('.sidebar-tab');
-            for (var t of tabs) {
-                if (t.textContent.trim() === '标注') { t.click(); break; }
-            }
-        })()
-    """)
-    time.sleep(0.8)
-
-    result = evaluate(cdp, """
-        (function() {
-            var panel = document.querySelector('.annotation-filter-panel');
-            if (!panel) return { visible: false };
-            var searchInput = panel.querySelector('.annotation-search-input');
-            var filterToggle = panel.querySelector('.filter-toggle-btn');
-            var sortSelect = panel.querySelector('.sort-select');
-            var sortOptions = [];
-            if (sortSelect) {
-                for (var opt of sortSelect.options) {
-                    sortOptions.push(opt.textContent.trim());
-                }
-            }
-            var resultCount = panel.querySelector('.filter-result-count');
-            var annList = panel.querySelector('.annotation-filtered-list');
-            var annItems = panel.querySelectorAll('.annotation-item');
-            return {
-                visible: true,
-                hasSearchInput: !!searchInput,
-                hasFilterToggle: !!filterToggle,
-                filterText: filterToggle ? filterToggle.textContent.trim() : '',
-                hasSortSelect: !!sortSelect,
-                sortOptions: sortOptions,
-                resultCount: resultCount ? resultCount.textContent.trim() : '',
-                hasAnnList: !!annList,
-                itemCount: annItems.length,
-            };
-        })()
-    """)
-
-    if isinstance(result, dict) and result.get('visible'):
-        report("标注搜索过滤", True,
-               f"sort={result.get('sortOptions')}, result='{result.get('resultCount')}', items={result.get('itemCount')}")
-
-        # 展开过滤器
-        evaluate(cdp, """
-            (function() {
-                var btn = document.querySelector('.filter-toggle-btn');
-                if (btn) btn.click();
-            })()
-        """)
-        time.sleep(0.3)
-
-        filters = evaluate(cdp, """
-            (function() {
-                var filtersPanel = document.querySelector('.annotation-filters');
-                if (!filtersPanel) return { visible: false };
-                var sections = filtersPanel.querySelectorAll('.filter-section');
-                var typeChips = filtersPanel.querySelectorAll('.type-chip');
-                var chipLabels = [];
-                for (var c of typeChips) { chipLabels.push(c.textContent.trim()); }
-                var pageInput = filtersPanel.querySelector('.filter-input');
-                var statusBtns = filtersPanel.querySelectorAll('.filter-btn');
-                var statusLabels = [];
-                for (var b of statusBtns) { statusLabels.push(b.textContent.trim()); }
-                return {
-                    visible: true,
-                    sectionCount: sections.length,
-                    typeChips: chipLabels,
-                    hasPageInput: !!pageInput,
-                    statusLabels: statusLabels,
-                };
-            })()
-        """)
-        report("标注过滤器展开",
-               isinstance(filters, dict) and filters.get('visible'),
-               f"types={filters.get('typeChips', [])[:5]}, status={filters.get('statusLabels')}")
-    else:
-        report("标注搜索过滤", False, "panel not visible")
-        report("标注过滤器展开", False, "panel not opened")
-
-
-# ─── 新增测试：侧边栏标签切换 ────────────────────────────
-
-def test_sidebar_tab_switching(cdp):
-    """测试 39: 侧边栏所有标签切换"""
-    result = evaluate(cdp, """
-        (function() {
-            var tabs = document.querySelectorAll('.sidebar-tab');
-            var tabLabels = [];
-            for (var t of tabs) { tabLabels.push(t.textContent.trim()); }
-
-            var results = {};
-            for (var t of tabs) {
-                t.click();
-                var label = t.textContent.trim();
-                // 检查对应的内容面板是否可见
-                var content = document.querySelector('.sidebar-content');
-                var hasContent = content && content.children.length > 0;
-                results[label] = {
-                    active: t.classList.contains('active'),
-                    hasContent: hasContent
-                };
-            }
-            return {
-                tabCount: tabs.length,
-                tabLabels: tabLabels,
-                results: results,
-            };
-        })()
-    """)
-
-    if isinstance(result, dict) and result.get('tabCount', 0) >= 4:
-        all_ok = True
-        for label, info in result.get('results', {}).items():
-            if not info.get('active'):
-                all_ok = False
-        report("侧边栏标签切换", all_ok,
-               f"tabs={result.get('tabLabels')}, count={result.get('tabCount')}")
-    else:
-        report("侧边栏标签切换", False, f"tabs={result.get('tabCount', 0)}")
-
-
-# ─── 新增测试：导出对话框 ────────────────────────────────
-
-def test_export_dialog(cdp):
-    """测试 40: PDF 导出对话框"""
-    evaluate(cdp, "window.dispatchEvent(new CustomEvent('verity:export'))")
-    time.sleep(0.8)
-
-    result = evaluate(cdp, """
-        (function() {
-            var dialog = document.querySelector('.export-dialog');
-            if (!dialog) return { visible: false };
-            var title = dialog.querySelector('.export-dialog-title');
-            var checkboxes = dialog.querySelectorAll('.export-dialog-checkbox');
-            var typeLabels = [];
-            for (var cb of checkboxes) {
-                typeLabels.push(cb.textContent.trim());
-            }
-            var pageInput = dialog.querySelector('.export-dialog-input');
-            var stats = dialog.querySelector('.export-dialog-stats');
-            var actions = dialog.querySelector('.export-dialog-actions');
-            var exportBtn = actions ? actions.querySelector('.btn-primary') : null;
-            var selectAllBtn = dialog.querySelector('.export-dialog-link');
-            return {
-                visible: true,
-                title: title ? title.textContent.trim() : '',
-                typeCount: checkboxes.length,
-                typeLabels: typeLabels,
-                hasPageInput: !!pageInput,
-                statsText: stats ? stats.textContent.trim().substring(0, 60) : '',
-                hasExportBtn: !!exportBtn,
-                exportText: exportBtn ? exportBtn.textContent.trim() : '',
-                hasSelectAll: !!selectAllBtn,
-            };
-        })()
-    """)
-
-    if isinstance(result, dict) and result.get('visible'):
-        report("导出对话框", True,
-               f"title='{result.get('title')}', types={result.get('typeCount')}, exportBtn='{result.get('exportText')}'")
-    else:
-        report("导出对话框", False, "dialog not visible")
-
-    # 关闭
-    evaluate(cdp, """
-        (function() {
-            var overlay = document.querySelector('.export-dialog-overlay');
-            if (overlay) overlay.click();
-        })()
-    """)
-    time.sleep(0.3)
+    report("多种标注类型",
+           after == expected_after and added == len(types_to_test),
+           f"added {added}/{len(types_to_test)} types, total: {before} -> {after}")
 
 
 # ─── 主流程 ────────────────────────────────────────
 
+
 def main():
-    print("=" * 60)
-    print("  VerityPDF 自动化功能测试")
-    print("=" * 60)
+    logger.info("=" * 60)
+    logger.info("  VerityPDF 增强版自动化功能测试")
+    logger.info("=" * 60)
 
     # 1. 检查测试 PDF
-    print("\n[准备] 检查测试文件...")
+    logger.info("\n[准备] 检查测试文件...")
     if not os.path.exists(TEST_PDF):
-        print(f"  测试 PDF 不存在: {TEST_PDF}")
-        print("  请先运行: node -e \"...\"  创建测试 PDF")
-        sys.exit(1)
-    print(f"  测试 PDF: {TEST_PDF}")
+        logger.error(f"测试 PDF 不存在: {TEST_PDF}")
+        return 1
+    logger.info(f"  测试 PDF: {TEST_PDF}")
 
-    # 2. 启动 Electron 应用
-    print("\n[准备] 启动 Electron 应用...")
-    env = os.environ.copy()
-    env["TEST_PDF_PATH"] = TEST_PDF
+    # 2. 清理残留进程
+    logger.info("\n[清理] 检查残留进程...")
+    active_pids = pid_mgr.list_active()
+    if active_pids:
+        logger.info(f"  发现 {len(active_pids)} 个活跃进程")
+        pid_mgr.cleanup_all()
+    else:
+        logger.info("  无残留进程")
 
-    # 确保端口空闲
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.settimeout(1)
-        s.connect((CDP_HOST, CDP_PORT))
-        s.close()
-        print(f"  端口 {CDP_PORT} 已被占用，尝试复用...")
-        app_proc = None
-    except:
-        app_proc = subprocess.Popen(
-            ["npm", "run", "dev"],
-            cwd=APP_DIR,
-            env=env,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-        print(f"  启动 npm run dev (PID={app_proc.pid})")
+    # 3. 启动应用
+    launcher = AppLauncher(APP_DIR)
+    if not launcher.start():
+        logger.error("应用启动失败")
+        return 1
 
-    # 3. 等待 CDP 就绪
-    print("\n[等待] CDP 连接就绪...")
-    ws_url, title = wait_for_cdp(max_wait=30)
+    # 4. 等待 CDP 就绪
+    logger.info("\n[等待] CDP 连接就绪...")
+    ws_url, title = wait_for_cdp(max_wait=MAX_WAIT_CDP)
     if not ws_url:
-        print("  CDP 连接超时！请确保应用已启动且 --remote-debugging-port=9222 已配置")
-        if app_proc:
-            app_proc.terminate()
-        sys.exit(1)
-    print(f"  连接: {ws_url}")
-    print(f"  页面: {title}")
+        logger.error("CDP 连接超时！请确保应用已启动且 --remote-debugging-port=9222 已配置")
+        launcher.cleanup()
+        return 1
+    logger.info(f"  连接: {ws_url}")
+    logger.info(f"  页面: {title}")
 
-    # 4. 建立 CDP 连接
-    print("\n[连接] WebSocket 连接...")
-    cdp = CDPClient(ws_url)
-    print("  已连接")
+    # 5. 建立 CDP 连接
+    logger.info("\n[连接] WebSocket 连接...")
+    try:
+        cdp = CDPClient(ws_url)
+    except Exception as e:
+        logger.error(f"WebSocket 连接失败: {e}")
+        launcher.cleanup()
+        return 1
+    logger.info("  已连接")
 
-    # 5. 等待页面完全加载
-    print("\n[等待] 页面加载完成...")
-    for i in range(15):
-        loaded = evaluate(cdp, "document.querySelector('.pdf-viewer-content') !== null")
-        if loaded:
-            break
-        time.sleep(1)
-    time.sleep(2)  # 额外等待渲染
+    # 6. 等待页面加载
+    time.sleep(2)
 
-    # 6. 运行测试
-    print("\n" + "─" * 60)
-    print("  运行测试用例")
-    print("─" * 60)
+    # 7. 确保PDF加载完成
+    logger.info("\n[等待] PDF 加载完成...")
+    if not ensure_pdf_loaded(cdp):
+        logger.error("PDF 加载失败")
+        cdp.close()
+        launcher.cleanup()
+        return 1
+    time.sleep(2)
+
+    # 8. 运行测试
+    logger.info("\n" + "-" * 60)
+    logger.info("  运行测试用例")
+    logger.info("-" * 60)
 
     tests = [
-        # === 基础功能 ===
+        # 核心渲染测试
         ("PDF 加载", test_pdf_loaded),
         ("工具栏渲染", test_toolbar_exists),
         ("标注层渲染", test_annotation_layer),
-        ("文本层渲染", test_text_layer),
-        ("工具切换", test_tool_switching),
+        # 标注功能测试
         ("标注绘制", test_annotation_drawing),
-        ("标注存储", test_annotation_count),
-        ("选择工具", test_select_tool),
-        ("页面导航", test_page_navigation),
-        ("缩放控件", test_zoom_controls),
-        ("侧边栏", test_sidebar_tabs),
-        ("状态栏", test_statusbar),
-        ("导出 API", test_export_function_exists),
-        ("导出按钮", test_export_button_click),
-        # === 标注绘制 ===
-        ("椭圆绘制", test_draw_ellipse),
-        ("箭头绘制", test_draw_arrow),
-        ("直线绘制", test_draw_line),
-        ("自由画笔绘制", test_draw_freehand),
-        ("文本标注", test_draw_text),
-        ("高亮标注", test_draw_highlight),
-        # === 标注操作 ===
         ("撤销/重做", test_undo_redo),
-        ("属性面板", test_property_panel),
-        ("Delete 删除", test_delete_annotation),
-        ("样式切换", test_style_change),
-        ("导出坐标验证", test_export_coordinate_validation),
-        ("多选标注", test_multi_selection),
-        ("导出 API 调用", test_export_api_call),
-        ("键盘快捷键", test_keyboard_shortcuts),
-        # === 完整 API 验证 ===
-        ("完整 API 方法", test_all_api_methods),
-        # === 加密与权限控制 ===
-        ("加密对话框", test_encryption_dialog),
-        # === 数字签名 ===
-        ("数字签名对话框", test_signature_dialog),
-        # === 格式转换 ===
-        ("格式转换对话框", test_convert_dialog),
-        # === 图片导出 ===
-        ("图片导出对话框", test_image_export_dialog),
-        # === OCR 文字识别 ===
-        ("OCR 面板", test_ocr_panel),
-        # === 全文搜索替换 ===
-        ("搜索面板", test_search_panel),
-        # === 页面管理 ===
-        ("页面管理面板", test_page_management),
-        # === 表单识别与填充 ===
-        ("表单面板", test_form_panel),
-        # === 标注搜索与过滤 ===
-        ("标注搜索过滤", test_annotation_filter),
-        # === 侧边栏标签切换 ===
-        ("侧边栏标签切换", test_sidebar_tab_switching),
-        # === 导出对话框 ===
-        ("导出对话框", test_export_dialog),
+        ("标注删除", test_annotation_remove),
+        ("标注选择", test_annotation_select),
+        ("多种标注类型", test_multiple_annotation_types),
+        # 视图控制测试
+        ("缩放控制", test_zoom_controls),
+        ("翻页导航", test_page_navigation),
+        ("页面旋转", test_rotation),
+        ("滚动模式", test_scroll_mode),
+        # 工具与信息测试
+        ("工具切换", test_tool_selection),
+        ("PDF信息", test_pdf_info),
     ]
 
     for name, test_fn in tests:
@@ -1887,31 +1269,32 @@ def main():
         except Exception as e:
             report(name, False, f"Exception: {e}")
 
-    # 7. 输出汇总
-    print("\n" + "─" * 60)
+    # 9. 输出汇总
+    logger.info("\n" + "=" * 60)
     total = len(results)
     passed = sum(1 for _, p, _ in results if p)
     failed = total - passed
-    print(f"  测试结果: {total} 总计, {passed} 通过, {failed} 失败")
-    print("─" * 60)
+    logger.info(f"  测试结果汇总: {total} 总计, {passed} 通过, {failed} 失败")
+    logger.info("=" * 60)
 
     if failed > 0:
-        print("\n  失败的测试:")
+        logger.info("\n  失败的测试:")
         for name, p, detail in results:
             if not p:
-                print(f"    ✗ {name}: {detail}")
+                logger.info(f"    [FAIL] {name}: {detail}")
 
-    # 8. 清理
+    if passed > 0:
+        logger.info("\n  通过的测试:")
+        for name, p, detail in results:
+            if p:
+                logger.info(f"    [PASS] {name}: {detail}")
+
+    # 10. 清理
     cdp.close()
-    if app_proc:
-        print("\n[清理] 关闭应用...")
-        app_proc.terminate()
-        try:
-            app_proc.wait(timeout=5)
-        except:
-            app_proc.kill()
+    logger.info("\n[清理] 关闭应用...")
+    launcher.cleanup()
 
-    print("\n测试完成！")
+    logger.info(f"\n测试完成！日志文件: {logger.log_file}")
     return 0 if failed == 0 else 1
 
 

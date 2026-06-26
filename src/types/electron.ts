@@ -112,6 +112,32 @@ export const IPC_CHANNELS = {
   PDF_DETECT_COLORS: 'pdf:detectColors',
   PDF_REPLACE_COLORS: 'pdf:replaceColors',
 
+  // PDF 消毒
+  PDF_SANITIZE: 'pdf:sanitize',
+
+  // PDF/A 转换
+  PDF_PDF_A_CONVERT: 'pdf:pdfaConvert',
+
+  // 按书签拆分
+  PDF_SPLIT_BOOKMARKS: 'pdf:splitBookmarks',
+
+  // 反色处理
+  PDF_INVERT_COLORS: 'pdf:invertColors',
+
+  // 移除图片
+  PDF_REMOVE_IMAGES: 'pdf:removeImages',
+
+  // 附件管理
+  PDF_LIST_ATTACHMENTS: 'pdf:listAttachments',
+  PDF_ADD_ATTACHMENT: 'pdf:addAttachment',
+  PDF_EXTRACT_ATTACHMENTS: 'pdf:extractAttachments',
+
+  // PDF 信息 JSON
+  PDF_INFO_JSON: 'pdf:infoJson',
+
+  // 扫描件效果
+  PDF_SCANNER_EFFECT: 'pdf:scannerEffect',
+
   // 任务队列
   TASK_SUBMIT: 'task:submit',
   TASK_CANCEL: 'task:cancel',
@@ -311,6 +337,32 @@ export interface VerityAPI {
   // 颜色替换
   detectColors(pdfData: string): Promise<ColorUsage[]>;
   replaceColors(pdfData: string, options: ColorReplaceOptions): Promise<ColorReplaceResult>;
+
+  // PDF 消毒
+  sanitizePdf(pdfData: string, options: SanitizeOptions): Promise<SanitizeResult>;
+
+  // PDF/A 转换
+  convertToPdfA(pdfData: string, options: PdfAConvertOptions): Promise<PdfAConvertResult>;
+
+  // 按书签拆分
+  splitByBookmarks(pdfData: string, options: SplitByBookmarksOptions): Promise<SplitByBookmarksResult>;
+
+  // 反色处理
+  invertColors(pdfData: string, options: InvertColorsOptions): Promise<InvertColorsResult>;
+
+  // 移除图片
+  removeImages(pdfData: string, options: RemoveImagesOptions): Promise<RemoveImagesResult>;
+
+  // 附件管理
+  listAttachments(pdfData: string): Promise<AttachmentInfo[]>;
+  addAttachment(pdfData: string, options: AddAttachmentOptions): Promise<ArrayBuffer>;
+  extractAttachments(pdfData: string, outputDir: string, names?: string[]): Promise<string[]>;
+
+  // PDF 信息 JSON
+  getPdfInfoJson(pdfData: string): Promise<PdfInfoJsonResult>;
+
+  // 扫描件效果
+  applyScannerEffect(pdfData: string, options: ScannerEffectOptions): Promise<ScannerEffectResult>;
 }
 
 /** 页面操作类型 */
@@ -774,4 +826,126 @@ export interface ColorReplaceResult {
   pdfData: ArrayBuffer;
   replacedCount: number;
   pagesProcessed: number;
+}
+
+// ========== 新功能类型定义（第三批） ==========
+
+/** PDF 消毒选项 */
+export interface SanitizeOptions {
+  removeMetadata: boolean;
+  removeJavaScript: boolean;
+  removeEmbeddedFiles: boolean;
+  removeXmp: boolean;
+  removeDocumentInfo: boolean;
+}
+
+/** PDF 消毒结果 */
+export interface SanitizeResult {
+  pdfData: ArrayBuffer;
+  removedItems: string[];
+  cleanedCount: number;
+}
+
+/** PDF/A 转换选项 */
+export interface PdfAConvertOptions {
+  conformance: 'pdfa-1b' | 'pdfa-2b' | 'pdfa-3b';
+  includeXmp: boolean;
+}
+
+/** PDF/A 转换结果 */
+export interface PdfAConvertResult {
+  pdfData: ArrayBuffer;
+  conformance: string;
+  message: string;
+}
+
+/** 按书签拆分选项 */
+export interface SplitByBookmarksOptions {
+  /** 拆分级别: 'top' = 仅顶级书签, 'all' = 所有书签 */
+  level: 'top' | 'all';
+  /** 输出目录路径 */
+  outputDir: string;
+}
+
+/** 书签条目 */
+export interface BookmarkEntry {
+  title: string;
+  pageIndex: number;
+  level: number;
+}
+
+/** 按书签拆分结果 */
+export interface SplitByBookmarksResult {
+  outputFiles: string[];
+  bookmarks: BookmarkEntry[];
+  splitCount: number;
+}
+
+/** 反色处理选项 */
+export interface InvertColorsOptions {
+  /** 要反色的页面索引，不指定则全部 */
+  pageIndices?: number[];
+}
+
+/** 反色处理结果 */
+export interface InvertColorsResult {
+  pdfData: ArrayBuffer;
+  processedPages: number;
+}
+
+/** 移除图片选项 */
+export interface RemoveImagesOptions {
+  /** 要处理的页面索引，不指定则全部 */
+  pageIndices?: number[];
+}
+
+/** 移除图片结果 */
+export interface RemoveImagesResult {
+  pdfData: ArrayBuffer;
+  removedCount: number;
+  pagesProcessed: number;
+}
+
+/** 附件信息 */
+export interface AttachmentInfo {
+  name: string;
+  description: string;
+  size: number;
+  creationDate?: string;
+  modificationDate?: string;
+}
+
+/** 添加附件选项 */
+export interface AddAttachmentOptions {
+  name: string;
+  data: string; // base64
+  description?: string;
+}
+
+/** PDF 信息 JSON 结果 */
+export interface PdfInfoJsonResult {
+  info: Record<string, unknown>;
+  metadata: Record<string, unknown>;
+  pageCount: number;
+  bookmarks: BookmarkEntry[];
+  attachments: AttachmentInfo[];
+  fonts: string[];
+  images: number;
+  formFields: number;
+}
+
+/** 扫描件效果选项 */
+export interface ScannerEffectOptions {
+  dpi: number;
+  grayscale: boolean;
+  contrast: number;
+  brightness: number;
+  addNoise: boolean;
+  deskew: boolean;
+}
+
+/** 扫描件效果结果 */
+export interface ScannerEffectResult {
+  pdfData: ArrayBuffer;
+  processedPages: number;
 }

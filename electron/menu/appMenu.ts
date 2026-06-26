@@ -196,6 +196,39 @@ export function createAppMenu(win: BrowserWindow): void {
           label: '批量颜色替换...',
           click: () => sendAction('tool:colorReplace'),
         },
+        { type: 'separator' },
+        {
+          label: 'PDF 消毒...',
+          click: () => sendAction('tool:sanitize'),
+        },
+        {
+          label: 'PDF/A 归档转换...',
+          click: () => sendAction('tool:pdfaConvert'),
+        },
+        {
+          label: '按书签拆分...',
+          click: () => sendAction('tool:splitByBookmarks'),
+        },
+        {
+          label: '页面反色处理...',
+          click: () => sendAction('tool:invertColors'),
+        },
+        {
+          label: '移除嵌入图片...',
+          click: () => sendAction('tool:removeImages'),
+        },
+        {
+          label: 'PDF 附件管理...',
+          click: () => sendAction('tool:attachments'),
+        },
+        {
+          label: '导出 PDF 信息 (JSON)...',
+          click: () => sendAction('tool:infoJson'),
+        },
+        {
+          label: '扫描件效果...',
+          click: () => sendAction('tool:scannerEffect'),
+        },
       ],
     },
 

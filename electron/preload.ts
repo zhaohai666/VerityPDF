@@ -273,6 +273,44 @@ const api: VerityAPI = {
 
   replaceColors: (pdfData, options) =>
     wrapInvoke('pdf:replaceColors', { pdfData, options }),
+
+  // PDF 消毒
+  sanitizePdf: (pdfData, options) =>
+    wrapInvoke('pdf:sanitize', { pdfData, options }),
+
+  // PDF/A 转换
+  convertToPdfA: (pdfData, options) =>
+    wrapInvoke('pdf:pdfaConvert', { pdfData, options }),
+
+  // 按书签拆分
+  splitByBookmarks: (pdfData, options) =>
+    wrapInvoke('pdf:splitBookmarks', { pdfData, options }),
+
+  // 反色处理
+  invertColors: (pdfData, options) =>
+    wrapInvoke('pdf:invertColors', { pdfData, options }),
+
+  // 移除图片
+  removeImages: (pdfData, options) =>
+    wrapInvoke('pdf:removeImages', { pdfData, options }),
+
+  // 附件管理
+  listAttachments: (pdfData) =>
+    wrapInvoke('pdf:listAttachments', { pdfData }),
+
+  addAttachment: (pdfData, options) =>
+    wrapInvoke('pdf:addAttachment', { pdfData, options }),
+
+  extractAttachments: (pdfData, outputDir, names) =>
+    wrapInvoke('pdf:extractAttachments', { pdfData, outputDir, names }),
+
+  // PDF 信息 JSON
+  getPdfInfoJson: (pdfData) =>
+    wrapInvoke('pdf:infoJson', { pdfData }),
+
+  // 扫描件效果
+  applyScannerEffect: (pdfData, options) =>
+    wrapInvoke('pdf:scannerEffect', { pdfData, options }),
 };
 
 contextBridge.exposeInMainWorld('verityAPI', api);

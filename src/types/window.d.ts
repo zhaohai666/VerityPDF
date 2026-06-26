@@ -7,5 +7,7 @@ declare global {
     verityAPI: VerityAPI;
     __pdfService?: PDFService;
     __annotationStore?: UseBoundStore<StoreApi<unknown>>;
+    __pdfStore?: UseBoundStore<StoreApi<unknown>>;
+    __toolStore?: UseBoundStore<StoreApi<unknown>>;
   }
 }

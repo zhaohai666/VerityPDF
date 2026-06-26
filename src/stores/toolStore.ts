@@ -29,3 +29,7 @@ export const useToolStore = create<ToolState>((set) => ({
 
   setKeepToolActive: (keep) => set({ keepToolActive: keep }),
 }));
+
+if (typeof window !== 'undefined') {
+  (window as any).__toolStore = useToolStore;
+}

@@ -28,5 +28,16 @@
       "@assets/*": ["src/assets/*"]
     }
   },
-  "include": ["src", "electron", "vite-env.d.ts"]
+  "include": ["src", "electron", "vite-env.d.ts"],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "dist-electron",
+    "release",
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "**/*.spec.ts",
+    "**/*.spec.tsx",
+    "vitest.config.ts"
+  ]
 }

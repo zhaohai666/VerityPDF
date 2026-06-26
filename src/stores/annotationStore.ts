@@ -43,6 +43,8 @@ interface AnnotationState {
   addAnnotation: (annotation: Annotation) => void;
   updateAnnotation: (id: string, changes: Partial<Annotation>) => void;
   removeAnnotation: (id: string) => void;
+  copyAnnotations: (ids?: string[]) => void;
+  pasteAnnotations: (targetPage: number) => Promise<void>;
   selectAnnotation: (id: string | null, multi?: boolean) => void;
   clearSelection: () => void;
   setDirty: (dirty: boolean) => void;
@@ -181,6 +183,67 @@ export const useAnnotationStore = create<AnnotationState>((set, get) => ({
         redoStack: [],
       };
     });
+  },
+
+  /** 复制选中的标注到剪贴板 */
+  copyAnnotations: (ids?: string[]) => {
+    const { annotations, selectedIds } = get();
+    const targetIds = ids || selectedIds;
+    const copyData = annotations.filter((a) => targetIds.includes(a.id));
+    if (copyData.length === 0) return;
+    
+    // 序列化标注数据
+    const serialized = JSON.stringify(copyData);
+    navigator.clipboard.writeText(serialized).catch((err) => {
+      console.error('Failed to copy annotations:', err);
+    });
+  },
+
+  /** 从剪贴板粘贴标注 */
+  pasteAnnotations: async (targetPage: number) => {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (!text) return;
+
+      let copiedAnnotations: Annotation[];
+      try {
+        copiedAnnotations = JSON.parse(text) as Annotation[];
+      } catch {
+        return;
+      }
+
+      if (!Array.isArray(copiedAnnotations) || copiedAnnotations.length === 0) return;
+
+      // 粘贴时生成新ID并偏移位置
+      const newAnnotations: Annotation[] = copiedAnnotations.map((ann) => ({
+        ...ann,
+        id: `ann_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        page: targetPage,
+        // 稍微偏移位置避免完全重叠
+        position: {
+          x: ann.position.x + 10,
+          y: ann.position.y + 10,
+        },
+        metadata: {
+          ...ann.metadata,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+      }));
+
+      set((state) => ({
+        annotations: [...state.annotations, ...newAnnotations],
+        isDirty: true,
+        saveStatus: 'unsaved',
+        undoStack: [
+          ...state.undoStack.slice(-49),
+          { type: 'add', annotation: newAnnotations[0] }, // Simplify to first annotation
+        ],
+        redoStack: [],
+      }));
+    } catch (err) {
+      console.error('Failed to paste annotations:', err);
+    }
   },
 
   selectAnnotation: (id, multi = false) => {

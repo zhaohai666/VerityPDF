@@ -137,3 +137,7 @@ export const usePdfStore = create<PDFState>((set, get) => ({
       outline: [],
     }),
 }));
+
+if (typeof window !== 'undefined') {
+  (window as any).__pdfStore = usePdfStore;
+}

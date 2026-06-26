@@ -29,6 +29,14 @@ import { InfoPanelService } from '../services/enhanced/info-panel/InfoPanelServi
 import { SmartRenameService } from '../services/enhanced/smart-rename/SmartRenameService';
 import { StampLibraryService, StampConfig } from '../services/enhanced/stamp-library/StampLibraryService';
 import { TextExportService } from '../services/enhanced/text-export/TextExportService';
+import { SanitizeService } from '../sanitize/SanitizeService';
+import { PdfAConversionService } from '../pdfa/PdfAConversionService';
+import { SplitByBookmarksService } from '../split-bookmarks/SplitByBookmarksService';
+import { InvertColorsService } from '../invert-colors/InvertColorsService';
+import { RemoveImagesService } from '../remove-images/RemoveImagesService';
+import { AttachmentService } from '../attachments/AttachmentService';
+import { InfoJsonService } from '../info-json/InfoJsonService';
+import { ScannerEffectService } from '../scanner-effect/ScannerEffectService';
 
 const MAX_FILE_SIZE = 500 * 1024 * 1024;
 const ALLOWED_EXTENSIONS = ['.pdf'];
@@ -1134,5 +1142,125 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   }, string>('smart-rename:suggest', async ({ filePath, options }) => {
     if (!filePath) throw new Error('无效的文件路径');
     return smartRenameService.generateRenameSuggestions(filePath, options);
+  });
+
+  // ========== 新功能 IPC ==========
+
+  // PDF 消毒
+  const sanitizeService = new SanitizeService();
+  registerIpcHandler<{
+    pdfData: string;
+    options: {
+      removeMetadata: boolean;
+      removeJavaScript: boolean;
+      removeEmbeddedFiles: boolean;
+      removeXmp: boolean;
+      removeDocumentInfo: boolean;
+    };
+  }, unknown>('pdf:sanitize', async ({ pdfData, options }) => {
+    if (!pdfData) throw new Error('无效的 PDF 数据');
+    const binary = Buffer.from(pdfData, 'base64');
+    const ab = binary.buffer.slice(binary.byteOffset, binary.byteOffset + binary.byteLength) as ArrayBuffer;
+    return sanitizeService.sanitize(ab, options);
+  });
+
+  // PDF/A 转换
+  const pdfaService = new PdfAConversionService();
+  registerIpcHandler<{
+    pdfData: string;
+    options: { conformance: 'pdfa-1b' | 'pdfa-2b' | 'pdfa-3b'; includeXmp: boolean };
+  }, unknown>('pdf:pdfaConvert', async ({ pdfData, options }) => {
+    if (!pdfData) throw new Error('无效的 PDF 数据');
+    const binary = Buffer.from(pdfData, 'base64');
+    const ab = binary.buffer.slice(binary.byteOffset, binary.byteOffset + binary.byteLength) as ArrayBuffer;
+    return pdfaService.convertToPdfA(ab, options);
+  });
+
+  // 按书签拆分
+  const splitBookmarksService = new SplitByBookmarksService();
+  registerIpcHandler<{
+    pdfData: string;
+    options: { level: 'top' | 'all'; outputDir: string };
+  }, unknown>('pdf:splitBookmarks', async ({ pdfData, options }) => {
+    if (!pdfData) throw new Error('无效的 PDF 数据');
+    const binary = Buffer.from(pdfData, 'base64');
+    const ab = binary.buffer.slice(binary.byteOffset, binary.byteOffset + binary.byteLength) as ArrayBuffer;
+    return splitBookmarksService.splitByBookmarks(ab, options);
+  });
+
+  // 反色处理
+  const invertColorsService = new InvertColorsService();
+  registerIpcHandler<{
+    pdfData: string;
+    options: { pageIndices?: number[] };
+  }, unknown>('pdf:invertColors', async ({ pdfData, options }) => {
+    if (!pdfData) throw new Error('无效的 PDF 数据');
+    const binary = Buffer.from(pdfData, 'base64');
+    const ab = binary.buffer.slice(binary.byteOffset, binary.byteOffset + binary.byteLength) as ArrayBuffer;
+    return invertColorsService.invertColors(ab, options);
+  });
+
+  // 移除图片
+  const removeImagesService = new RemoveImagesService();
+  registerIpcHandler<{
+    pdfData: string;
+    options: { pageIndices?: number[] };
+  }, unknown>('pdf:removeImages', async ({ pdfData, options }) => {
+    if (!pdfData) throw new Error('无效的 PDF 数据');
+    const binary = Buffer.from(pdfData, 'base64');
+    const ab = binary.buffer.slice(binary.byteOffset, binary.byteOffset + binary.byteLength) as ArrayBuffer;
+    return removeImagesService.removeImages(ab, options);
+  });
+
+  // 附件管理
+  const attachmentService = new AttachmentService();
+
+  registerIpcHandler<{ pdfData: string }, unknown>('pdf:listAttachments', async ({ pdfData }) => {
+    if (!pdfData) throw new Error('无效的 PDF 数据');
+    const binary = Buffer.from(pdfData, 'base64');
+    const ab = binary.buffer.slice(binary.byteOffset, binary.byteOffset + binary.byteLength) as ArrayBuffer;
+    return attachmentService.listAttachments(ab);
+  });
+
+  registerIpcHandler<{
+    pdfData: string;
+    options: { name: string; data: string; description?: string };
+  }, unknown>('pdf:addAttachment', async ({ pdfData, options }) => {
+    if (!pdfData) throw new Error('无效的 PDF 数据');
+    const binary = Buffer.from(pdfData, 'base64');
+    const ab = binary.buffer.slice(binary.byteOffset, binary.byteOffset + binary.byteLength) as ArrayBuffer;
+    return attachmentService.addAttachment(ab, options);
+  });
+
+  registerIpcHandler<{
+    pdfData: string;
+    outputDir: string;
+    names?: string[];
+  }, string[]>('pdf:extractAttachments', async ({ pdfData, outputDir, names }) => {
+    if (!pdfData) throw new Error('无效的 PDF 数据');
+    const binary = Buffer.from(pdfData, 'base64');
+    const ab = binary.buffer.slice(binary.byteOffset, binary.byteOffset + binary.byteLength) as ArrayBuffer;
+    return attachmentService.extractAttachments(ab, outputDir, names);
+  });
+
+  // PDF 信息 JSON
+  const infoJsonService = new InfoJsonService();
+  registerIpcHandler<{ pdfData: string }, unknown>('pdf:infoJson', async ({ pdfData }) => {
+    if (!pdfData) throw new Error('无效的 PDF 数据');
+    const binary = Buffer.from(pdfData, 'base64');
+    const ab = binary.buffer.slice(binary.byteOffset, binary.byteOffset + binary.byteLength) as ArrayBuffer;
+    return infoJsonService.getInfoJson(ab);
+  });
+
+  // 扫描件效果
+  const scannerEffectService = new ScannerEffectService();
+  registerIpcHandler<{
+    pdfData: string;
+    options: { dpi: number; grayscale: boolean; contrast: number; brightness: number; addNoise: boolean; deskew: boolean };
+  }, unknown>('pdf:scannerEffect', async ({ pdfData, options }) => {
+    if (!pdfData) throw new Error('无效的 PDF 数据');
+    const binary = Buffer.from(pdfData, 'base64');
+    const ab = binary.buffer.slice(binary.byteOffset, binary.byteOffset + binary.byteLength) as ArrayBuffer;
+    return scannerEffectService.applyEffect(ab, options);
   });
 }

@@ -1,0 +1,71 @@
+{
+  "name": "veritypdf-e2e-config",
+  "version": "1.0.0",
+  "description": "E2E测试配置文件 - 进程管理和测试参数",
+  "cdp": {
+    "host": "127.0.0.1",
+    "port": 9222
+  },
+  "processes": {
+    "electron_dev": {
+      "command": "npm run electron:dev",
+      "description": "Electron开发服务器进程",
+      "pid_file": ".e2e/electron_dev.pid",
+      "log_file": ".e2e/electron_dev.log",
+      "env": {
+        "NODE_ENV": "development",
+        "ELECTRON_ENABLE_LOGGING": "1"
+      }
+    },
+    "vite_dev": {
+      "command": "vite --mode electron",
+      "description": "Vite开发服务器进程",
+      "pid_file": ".e2e/vite_dev.pid",
+      "log_file": ".e2e/vite_dev.log"
+    }
+  },
+  "test": {
+    "pdf_sample": "test-export.pdf",
+    "timeout": 15,
+    "max_wait_cdp": 30,
+    "max_wait_page": 15,
+    "retry_count": 3
+  },
+  "annotations": {
+    "default_style": {
+      "stroke": "#3b82f6",
+      "fill": "transparent",
+      "lineWidth": 2,
+      "opacity": 1,
+      "dashArray": ""
+    }
+  },
+  "cleanup": {
+    "strategies": [
+      {
+        "name": "pid_file",
+        "description": "通过PID文件终止特定进程",
+        "priority": 1,
+        "enabled": true
+      },
+      {
+        "name": "port_scan",
+        "description": "扫描CDP端口并终止占用进程",
+        "priority": 2,
+        "enabled": true
+      },
+      {
+        "name": "process_pattern",
+        "description": "通过进程名模式匹配终止(Electron/Node)",
+        "priority": 3,
+        "enabled": false,
+        "note": "仅作为fallback，优先使用PID或端口方式"
+      }
+    ]
+  },
+  "logging": {
+    "level": "info",
+    "save_logs": true,
+    "log_dir": ".e2e/logs"
+  }
+}
