@@ -160,7 +160,7 @@ app.whenReady().then(() => {
   }
 
   // 注册获取测试文件的 IPC 处理器（渲染进程启动后主动拉取）
-  ipcMain.handle('app:getTestFile', () => testFile);
+  ipcMain.handle('app:getTestFile', () => ({ success: true, data: testFile, version: '1.0.0' }));
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

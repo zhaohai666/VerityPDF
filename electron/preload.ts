@@ -4,7 +4,12 @@ import type { VerityAPI, FileDialogOptions, TaskItemInfo } from '../src/types/el
 const APP_VERSION = '1.0.0';
 
 function wrapInvoke<T>(channel: string, payload: unknown): Promise<T> {
-  return ipcRenderer.invoke(channel, { version: APP_VERSION, payload });
+  return ipcRenderer.invoke(channel, { version: APP_VERSION, payload }).then((response: { success: boolean; data?: T; error?: string; errorCode?: string }) => {
+    if (!response.success) {
+      throw new Error(response.error || 'Unknown IPC error');
+    }
+    return response.data as T;
+  });
 }
 
 const api: VerityAPI = {
