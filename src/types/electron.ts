@@ -147,6 +147,11 @@ export const IPC_CHANNELS = {
   // 查看 JavaScript
   PDF_SHOW_JS: 'pdf:showJs',
 
+  // 图片编辑
+  IMAGE_EDIT_EXTRACT: 'image:extractPage',
+  IMAGE_EDIT_REPLACE: 'image:replace',
+  IMAGE_EDIT_LAYOUT: 'image:getLayout',
+
   // 任务队列
   TASK_SUBMIT: 'task:submit',
   TASK_CANCEL: 'task:cancel',
@@ -389,6 +394,16 @@ export interface VerityAPI {
 
   // 查看 JavaScript
   showPdfJavaScript(pdfData: string): Promise<ShowJsResult>;
+
+  // 图片编辑
+  extractPageImages(pdfData: string, pageIndex: number): Promise<PageImageInfo[]>;
+  replacePageImage(pdfData: string, pageIndex: number, imageRef: string, newImageBase64: string, format: 'png' | 'jpeg'): Promise<ReplaceImageResult>;
+  getPageImageLayout(pdfData: string, pageIndex: number): Promise<ImageLayoutItem[]>;
+
+  // 高级表单
+  getFormFieldDetails(pdfData: string): Promise<EnhancedFormFieldInfo[]>;
+  detectFormXFA(pdfData: string): Promise<XFADetectResult>;
+  getFieldActions(pdfData: string, fieldName: string): Promise<FieldActionScripts>;
 }
 
 /** 页面操作类型 */
@@ -1033,4 +1048,66 @@ export interface ShowJsResult {
   scripts: JsEntry[];
   totalCount: number;
   pagesScanned: number;
+}
+
+// ========== 图片编辑类型 ==========
+
+/** 页面图片信息 */
+export interface PageImageInfo {
+  ref: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  data: string;
+  format: 'png' | 'jpeg';
+  originalWidth: number;
+  originalHeight: number;
+}
+
+/** 图片替换结果 */
+export interface ReplaceImageResult {
+  pdfData: ArrayBuffer;
+  replacedCount: number;
+}
+
+/** 图片布局项 */
+export interface ImageLayoutItem {
+  ref: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+// ========== 高级表单类型 ==========
+
+/** 增强表单字段信息 */
+export interface EnhancedFormFieldInfo {
+  name: string;
+  type: 'text' | 'checkbox' | 'dropdown' | 'radio' | 'button' | 'optionList' | 'signature' | 'unknown';
+  value: string | boolean;
+  options?: string[];
+  readOnly: boolean;
+  required: boolean;
+  page: number;
+  rect?: { x: number; y: number; width: number; height: number };
+  maxLength?: number;
+  multiline?: boolean;
+  actions?: FieldActionScripts;
+}
+
+/** 字段动作脚本 */
+export interface FieldActionScripts {
+  validate?: string;
+  calculate?: string;
+  format?: string;
+  keystroke?: string;
+}
+
+/** XFA 检测结果 */
+export interface XFADetectResult {
+  hasXFA: boolean;
+  warning?: string;
+  fieldCount: number;
 }

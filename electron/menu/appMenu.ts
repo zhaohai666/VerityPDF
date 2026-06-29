@@ -242,6 +242,11 @@ export function createAppMenu(win: BrowserWindow): void {
           label: '查看 JavaScript...',
           click: () => sendAction('tool:showJs'),
         },
+        { type: 'separator' },
+        {
+          label: '图片编辑...',
+          click: () => sendAction('tool:imageEdit'),
+        },
       ],
     },
 

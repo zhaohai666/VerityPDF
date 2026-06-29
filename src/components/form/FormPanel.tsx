@@ -1,8 +1,10 @@
-import React, { useEffect, useCallback } from 'react';
+import React, { useEffect, useCallback, useState } from 'react';
 import { useFormStore } from '@/stores/formStore';
 import { usePdfStore } from '@/stores/pdfStore';
 import { useUIStore } from '@/stores/uiStore';
 import type { FormFieldInfo } from '@/services/form/FormService';
+import type { EnhancedFormFieldInfo, XFADetectResult, FieldActionScripts } from '@/types/electron';
+import { FieldScriptViewer } from './FieldScriptViewer';
 
 /** 字段类型标签 */
 const TYPE_LABELS: Record<string, string> = {
@@ -10,6 +12,9 @@ const TYPE_LABELS: Record<string, string> = {
   checkbox: '复选框',
   dropdown: '下拉菜单',
   radio: '单选框',
+  button: '按钮',
+  optionList: '选项列表',
+  signature: '签名',
   unknown: '未知',
 };
 
@@ -92,6 +97,9 @@ export const FormPanel: React.FC = () => {
   const { fields, editedValues, isDetecting, setFields, setEditedValue, setIsDetecting } = useFormStore();
   const filePath = usePdfStore((s) => s.filePath);
   const showToast = useUIStore.getState().showToast;
+  const [xfaInfo, setXfaInfo] = useState<XFADetectResult | null>(null);
+  const [scriptViewerField, setScriptViewerField] = useState<string | null>(null);
+  const [fieldActions, setFieldActions] = useState<Map<string, FieldActionScripts>>(new Map());
 
   // 检测表单字段
   const handleDetect = useCallback(async () => {
@@ -100,10 +108,31 @@ export const FormPanel: React.FC = () => {
     try {
       const data = await window.verityAPI.readFile(filePath);
       const base64 = btoa(String.fromCharCode(...new Uint8Array(data)));
-      const detected = await window.verityAPI.detectFormFields(base64) as FormFieldInfo[];
-      setFields(detected || []);
-      if (!detected || detected.length === 0) {
+
+      // 并行获取字段详情和 XFA 信息
+      const [detected, xfa] = await Promise.all([
+        window.verityAPI.getFormFieldDetails(base64).catch(() => null),
+        window.verityAPI.detectFormXFA(base64).catch(() => null),
+      ]);
+
+      // 回退到基本检测
+      const finalFields = (detected as FormFieldInfo[] | null) || (await window.verityAPI.detectFormFields(base64) as FormFieldInfo[]);
+      setFields(finalFields || []);
+
+      if (xfa) setXfaInfo(xfa);
+      if (!finalFields || finalFields.length === 0) {
         showToast('未检测到表单字段', 'info');
+      }
+
+      // 收集有动作脚本的字段
+      if (detected) {
+        const actionsMap = new Map<string, FieldActionScripts>();
+        for (const f of detected as EnhancedFormFieldInfo[]) {
+          if (f.actions && (f.actions.validate || f.actions.calculate || f.actions.format || f.actions.keystroke)) {
+            actionsMap.set(f.name, f.actions);
+          }
+        }
+        setFieldActions(actionsMap);
       }
     } catch (err) {
       showToast('表单检测失败: ' + (err instanceof Error ? err.message : '未知错误'), 'error');
@@ -166,6 +195,22 @@ export const FormPanel: React.FC = () => {
 
   return (
     <div className="form-panel">
+      {/* XFA 警告 */}
+      {xfaInfo?.hasXFA && (
+        <div style={{
+          padding: '8px 12px',
+          background: '#fff3cd',
+          border: '1px solid #ffc107',
+          borderRadius: '4px',
+          marginBottom: '8px',
+          fontSize: '12px',
+          color: '#856404',
+        }}>
+          <strong>XFA 表单</strong>
+          <div style={{ marginTop: '4px' }}>{xfaInfo.warning}</div>
+        </div>
+      )}
+
       {/* 操作栏 */}
       <div className="form-panel-actions">
         <button
@@ -203,23 +248,53 @@ export const FormPanel: React.FC = () => {
           <div className="form-field-count">
             检测到 {fields.length} 个字段
           </div>
-          {fields.map((field) => (
-            <div key={field.name} className={`form-field-item ${field.readOnly ? 'readonly' : ''}`}>
-              <div className="field-header">
-                <span className="field-name" title={field.name}>{field.name}</span>
-                <span className="field-type">{TYPE_LABELS[field.type] || field.type}</span>
-                {field.readOnly && <span className="field-readonly-badge">只读</span>}
+          {fields.map((field) => {
+            const enhanced = field as EnhancedFormFieldInfo;
+            const hasActions = fieldActions.has(field.name);
+
+            return (
+              <div key={field.name} className={`form-field-item ${field.readOnly ? 'readonly' : ''}`}>
+                <div className="field-header">
+                  <span className="field-name" title={field.name}>{field.name}</span>
+                  <span className="field-type">{TYPE_LABELS[field.type] || field.type}</span>
+                  {field.readOnly && <span className="field-readonly-badge">只读</span>}
+                  {enhanced.required && <span style={{ color: '#e53935', fontSize: '10px', marginLeft: '2px' }}>*</span>}
+                </div>
+                {/* 增强信息 */}
+                <div style={{ fontSize: '10px', color: '#888', marginBottom: '4px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  {enhanced.page > 0 && <span>第{enhanced.page}页</span>}
+                  {enhanced.maxLength != null && <span>最大{enhanced.maxLength}字</span>}
+                  {enhanced.multiline && <span>多行</span>}
+                  {hasActions && (
+                    <button
+                      style={{ fontSize: '10px', color: '#1976d2', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
+                      onClick={() => setScriptViewerField(field.name)}
+                    >
+                      查看脚本
+                    </button>
+                  )}
+                </div>
+                <div className="field-body">
+                  <FormFieldEditor
+                    field={field}
+                    value={editedValues[field.name] ?? field.value}
+                    onChange={(val) => setEditedValue(field.name, val)}
+                  />
+                </div>
               </div>
-              <div className="field-body">
-                <FormFieldEditor
-                  field={field}
-                  value={editedValues[field.name] ?? field.value}
-                  onChange={(val) => setEditedValue(field.name, val)}
-                />
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
+      )}
+
+      {/* 脚本查看器 */}
+      {scriptViewerField && filePath && (
+        <FieldScriptViewer
+          pdfData=""
+          fieldName={scriptViewerField}
+          scripts={fieldActions.get(scriptViewerField)}
+          onClose={() => setScriptViewerField(null)}
+        />
       )}
     </div>
   );

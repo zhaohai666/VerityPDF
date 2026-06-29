@@ -41,6 +41,7 @@ const ScannerEffectDialog = React.lazy(() => import('@/components/scanner-effect
 const ImageToPdfDialog = React.lazy(() => import('@/components/image-to-pdf/ImageToPdfDialog').then(m => ({ default: m.ImageToPdfDialog })));
 const CsvExportDialog = React.lazy(() => import('@/components/csv-export/CsvExportDialog').then(m => ({ default: m.CsvExportDialog })));
 const ShowJsDialog = React.lazy(() => import('@/components/show-js/ShowJsDialog').then(m => ({ default: m.ShowJsDialog })));
+const ImageEditorDialog = React.lazy(() => import('@/components/image-edit/ImageEditorDialog').then(m => ({ default: m.ImageEditorDialog })));
 const LanguageSelector = React.lazy(() => import('@/components/language-selector/LanguageSelector').then(m => ({ default: m.LanguageSelector })));
 
 const App: React.FC = () => {
@@ -154,6 +155,7 @@ const App: React.FC = () => {
         case 'tool:scannerEffect':
         case 'tool:csvExport':
         case 'tool:showJs':
+        case 'tool:imageEdit':
           if (pdf.isLoaded) {
             const fp = pdf.filePath;
             if (fp) {
@@ -357,6 +359,12 @@ const App: React.FC = () => {
             )}
             {activeToolDialog === 'showJs' && (
               <ShowJsDialog
+                pdfData={dialogPdfData}
+                onClose={() => setActiveToolDialog(null)}
+              />
+            )}
+            {activeToolDialog === 'imageEdit' && (
+              <ImageEditorDialog
                 pdfData={dialogPdfData}
                 onClose={() => setActiveToolDialog(null)}
               />

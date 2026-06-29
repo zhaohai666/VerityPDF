@@ -323,6 +323,26 @@ const api: VerityAPI = {
   // 查看 JavaScript
   showPdfJavaScript: (pdfData) =>
     wrapInvoke('pdf:showJs', { pdfData }),
+
+  // 图片编辑
+  extractPageImages: (pdfData, pageIndex) =>
+    wrapInvoke('image:extractPage', { pdfData, pageIndex }),
+
+  replacePageImage: (pdfData, pageIndex, imageRef, newImageBase64, format) =>
+    wrapInvoke('image:replace', { pdfData, pageIndex, imageRef, newImageBase64, format }),
+
+  getPageImageLayout: (pdfData, pageIndex) =>
+    wrapInvoke('image:getLayout', { pdfData, pageIndex }),
+
+  // 高级表单
+  getFormFieldDetails: (pdfData) =>
+    wrapInvoke('form:getDetails', { pdfData }),
+
+  detectFormXFA: (pdfData) =>
+    wrapInvoke('form:detectXfa', { pdfData }),
+
+  getFieldActions: (pdfData, fieldName) =>
+    wrapInvoke('form:getActions', { pdfData, fieldName }),
 };
 
 contextBridge.exposeInMainWorld('verityAPI', api);

@@ -1,10 +1,12 @@
-import React, { useCallback, useRef, useEffect } from 'react';
+import React, { useCallback, useRef, useEffect, useState } from 'react';
 import { useOCRStore } from '@/stores/ocrStore';
 import { usePdfStore } from '@/stores/pdfStore';
 import { useUIStore } from '@/stores/uiStore';
 import { OCRService } from '@/services/ocr/OCRService';
+import { OCREngineManager, type OCREngineType, type EngineComparisonResult } from '@/services/ocr/OCREngineManager';
 
 const ocrService = new OCRService();
+const engineManager = new OCREngineManager();
 
 /** 语言选项 */
 const LANG_OPTIONS = [
@@ -17,6 +19,13 @@ const LANG_OPTIONS = [
   { value: 'kor', label: '韩文' },
 ];
 
+/** 引擎选项 */
+const ENGINE_OPTIONS: { value: OCREngineType; label: string; desc: string }[] = [
+  { value: 'auto', label: '自动选择', desc: '根据语言智能选择引擎' },
+  { value: 'tesseract', label: 'Tesseract.js', desc: '通用引擎，100+ 语言' },
+  { value: 'paddleocr', label: 'PaddleOCR', desc: '中文精度更高' },
+];
+
 /** 进度状态标签 */
 const STATUS_LABELS: Record<string, string> = {
   'loading tesseract core': '加载 OCR 引擎...',
@@ -24,6 +33,10 @@ const STATUS_LABELS: Record<string, string> = {
   'loading language traineddata': '加载语言数据...',
   'initializing api': '初始化 API...',
   'recognizing text': '识别文字...',
+  'loading paddleocr core': '加载 PaddleOCR...',
+  'initializing paddleocr': '初始化 PaddleOCR...',
+  'paddleocr ready': 'PaddleOCR 就绪',
+  'processing results': '处理结果...',
 };
 
 /**
@@ -43,6 +56,16 @@ export const OCRPanel: React.FC = () => {
   const showToast = useUIStore.getState().showToast;
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
 
+  // 引擎选择和对比模式
+  const [selectedEngine, setSelectedEngine] = useState<OCREngineType>('auto');
+  const [compareMode, setCompareMode] = useState(false);
+  const [compareResult, setCompareResult] = useState<EngineComparisonResult | null>(null);
+
+  // 引擎切换
+  useEffect(() => {
+    engineManager.setEngine(selectedEngine);
+  }, [selectedEngine]);
+
   // 识别当前页
   const handleRecognizePage = useCallback(async () => {
     const pdfService = window.__pdfService;
@@ -53,16 +76,32 @@ export const OCRPanel: React.FC = () => {
 
     setIsRecognizing(true);
     setResult(null);
+    setCompareResult(null);
     setProgress({ status: 'loading tesseract core', progress: 0 });
 
     try {
-      await ocrService.initWorker(language, (p) => setProgress(p));
+      // 创建临时 Canvas 渲染页面
+      const canvas = document.createElement('canvas');
+      await pdfService.renderPage(selectedPage || currentPage, canvas, 2.0);
+      const scale = 2.0;
 
-      if (regionMode && selectedRegion) {
-        // 选区识别模式
-        const canvas = document.createElement('canvas');
-        await pdfService.renderPage(selectedPage || currentPage, canvas, 2.0);
-        const scale = 2.0;
+      if (compareMode) {
+        // 对比模式：同时使用两个引擎
+        const comparison = await engineManager.compare(
+          canvas, language,
+          { preprocess: preprocessOptions },
+          (p) => setProgress(p)
+        );
+        setCompareResult(comparison);
+        // 使用最佳引擎的结果作为主结果
+        const bestResult = comparison.best === 'paddleocr'
+          ? comparison.paddleocr
+          : comparison.tesseract;
+        if (bestResult) setResult(bestResult);
+        canvas.remove();
+      } else if (regionMode && selectedRegion) {
+        // 选区识别模式 - 使用 Tesseract 的选区识别能力
+        await ocrService.initWorker(language, (p) => setProgress(p));
         const region = {
           x: selectedRegion.x * scale,
           y: selectedRegion.y * scale,
@@ -73,14 +112,13 @@ export const OCRPanel: React.FC = () => {
         canvas.remove();
         setResult(ocrResult);
       } else {
-        // 整页识别（传入预处理选项）
-        const ocrResult = await ocrService.recognizePage(
-          pdfService,
-          selectedPage || currentPage,
-          2.0,
+        // 整页识别（使用引擎管理器）
+        const ocrResult = await engineManager.recognize(
+          canvas, language,
           { preprocess: preprocessOptions },
           (p) => setProgress(p)
         );
+        canvas.remove();
         setResult(ocrResult);
       }
     } catch (err) {
@@ -88,7 +126,7 @@ export const OCRPanel: React.FC = () => {
     } finally {
       setIsRecognizing(false);
     }
-  }, [selectedPage, currentPage, language, regionMode, selectedRegion, preprocessOptions]);
+  }, [selectedPage, currentPage, language, regionMode, selectedRegion, preprocessOptions, compareMode]);
 
   // 复制结果
   const handleCopy = useCallback(async () => {
@@ -110,6 +148,7 @@ export const OCRPanel: React.FC = () => {
   useEffect(() => {
     return () => {
       ocrService.destroy().catch(() => {});
+      engineManager.destroy().catch(() => {});
     };
   }, []);
 
@@ -140,6 +179,33 @@ export const OCRPanel: React.FC = () => {
         </div>
 
         <div className="ocr-panel-controls">
+          {/* OCR 引擎选择 */}
+          <div className="ocr-control-group">
+            <label>OCR 引擎</label>
+            <select
+              value={selectedEngine}
+              onChange={(e) => setSelectedEngine(e.target.value as OCREngineType)}
+              disabled={isRecognizing}
+            >
+              {ENGINE_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label} - {opt.desc}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* 对比模式 */}
+          <div className="ocr-control-group">
+            <label className="ocr-enhance-row">
+              <input
+                type="checkbox"
+                checked={compareMode}
+                onChange={(e) => setCompareMode(e.target.checked)}
+                disabled={isRecognizing}
+              />
+              对比模式（同时使用两个引擎）
+            </label>
+          </div>
+
           {/* 语言选择 */}
           <div className="ocr-control-group">
             <label>识别语言</label>
@@ -293,7 +359,7 @@ export const OCRPanel: React.FC = () => {
         {result && (
           <div className="ocr-result">
             <div className="ocr-result-header">
-              <span>识别结果</span>
+              <span>识别结果 {compareResult && `(最佳: ${compareResult.best === 'paddleocr' ? 'PaddleOCR' : 'Tesseract'})`}</span>
               <span className="ocr-confidence">
                 置信度: {Math.round(result.confidence)}%
               </span>
@@ -307,6 +373,33 @@ export const OCRPanel: React.FC = () => {
             />
             <div className="ocr-result-stats">
               {result.words.length} 个词 | {result.text.length} 个字符
+            </div>
+          </div>
+        )}
+
+        {/* 对比结果 */}
+        {compareResult && compareResult.tesseract && compareResult.paddleocr && (
+          <div className="ocr-compare-result" style={{ marginTop: '12px' }}>
+            <div style={{ fontSize: '13px', fontWeight: 'bold', marginBottom: '8px' }}>引擎对比</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+              <div style={{ border: `2px solid ${compareResult.best === 'tesseract' ? '#4caf50' : '#ddd'}`, borderRadius: '4px', padding: '8px' }}>
+                <div style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>
+                  Tesseract.js
+                  <span style={{ float: 'right', color: '#666' }}>{Math.round(compareResult.tesseract.confidence)}%</span>
+                </div>
+                <div style={{ fontSize: '11px', color: '#666' }}>
+                  {compareResult.tesseract.words.length} 词 | {compareResult.tesseract.text.length} 字符
+                </div>
+              </div>
+              <div style={{ border: `2px solid ${compareResult.best === 'paddleocr' ? '#4caf50' : '#ddd'}`, borderRadius: '4px', padding: '8px' }}>
+                <div style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>
+                  PaddleOCR
+                  <span style={{ float: 'right', color: '#666' }}>{Math.round(compareResult.paddleocr.confidence)}%</span>
+                </div>
+                <div style={{ fontSize: '11px', color: '#666' }}>
+                  {compareResult.paddleocr.words.length} 词 | {compareResult.paddleocr.text.length} 字符
+                </div>
+              </div>
             </div>
           </div>
         )}

@@ -25,6 +25,7 @@
     "build:verify": "vite build && electron-builder --mac --dir"
   },
   "dependencies": {
+    "@paddleocr/paddleocr-js": "^0.4.2",
     "antd": "^5.20.0",
     "canvas": "^3.2.3",
     "electron-store": "^8.2.0",

@@ -40,6 +40,7 @@ import { ScannerEffectService } from '../scanner-effect/ScannerEffectService';
 import { ImageToPdfService } from '../image-to-pdf/ImageToPdfService';
 import { CsvExportService } from '../csv-export/CsvExportService';
 import { ShowJsService } from '../show-js/ShowJsService';
+import { ImageEditService } from '../image-edit/ImageEditService';
 
 const MAX_FILE_SIZE = 500 * 1024 * 1024;
 const ALLOWED_EXTENSIONS = ['.pdf'];
@@ -1309,5 +1310,56 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     const binary = Buffer.from(pdfData, 'base64');
     const ab = binary.buffer.slice(binary.byteOffset, binary.byteOffset + binary.byteLength) as ArrayBuffer;
     return showJsService.extractJavaScript(ab);
+  });
+
+  // 图片编辑
+  const imageEditService = new ImageEditService();
+  registerIpcHandler<{ pdfData: string; pageIndex: number }, unknown>('image:extractPage', async ({ pdfData, pageIndex }) => {
+    if (!pdfData) throw new Error('无效的 PDF 数据');
+    const binary = Buffer.from(pdfData, 'base64');
+    const ab = binary.buffer.slice(binary.byteOffset, binary.byteOffset + binary.byteLength) as ArrayBuffer;
+    return imageEditService.extractPageImages(ab, pageIndex);
+  });
+
+  registerIpcHandler<{ pdfData: string; pageIndex: number; imageRef: string; newImageBase64: string; format: 'png' | 'jpeg' }, unknown>('image:replace', async ({ pdfData, pageIndex, imageRef, newImageBase64, format }) => {
+    if (!pdfData) throw new Error('无效的 PDF 数据');
+    const binary = Buffer.from(pdfData, 'base64');
+    const ab = binary.buffer.slice(binary.byteOffset, binary.byteOffset + binary.byteLength) as ArrayBuffer;
+    const result = await imageEditService.replaceImage(ab, pageIndex, imageRef, newImageBase64, format);
+    // 将 ArrayBuffer 转回 base64 以便 IPC 传输
+    const resultBytes = new Uint8Array(result.pdfData);
+    let resultB64 = '';
+    for (let i = 0; i < resultBytes.length; i++) resultB64 += String.fromCharCode(resultBytes[i]);
+    return { pdfData: btoa(resultB64), replacedCount: result.replacedCount };
+  });
+
+  registerIpcHandler<{ pdfData: string; pageIndex: number }, unknown>('image:getLayout', async ({ pdfData, pageIndex }) => {
+    if (!pdfData) throw new Error('无效的 PDF 数据');
+    const binary = Buffer.from(pdfData, 'base64');
+    const ab = binary.buffer.slice(binary.byteOffset, binary.byteOffset + binary.byteLength) as ArrayBuffer;
+    return imageEditService.getPageImageLayout(ab, pageIndex);
+  });
+
+  // 高级表单 (复用已有的 formService 实例)
+  registerIpcHandler<{ pdfData: string }, unknown>('form:getDetails', async ({ pdfData }) => {
+    if (!pdfData) throw new Error('无效的 PDF 数据');
+    const binary = Buffer.from(pdfData, 'base64');
+    const ab = binary.buffer.slice(binary.byteOffset, binary.byteOffset + binary.byteLength) as ArrayBuffer;
+    return formService.getFormFieldDetails(ab);
+  });
+
+  registerIpcHandler<{ pdfData: string }, unknown>('form:detectXfa', async ({ pdfData }) => {
+    if (!pdfData) throw new Error('无效的 PDF 数据');
+    const binary = Buffer.from(pdfData, 'base64');
+    const ab = binary.buffer.slice(binary.byteOffset, binary.byteOffset + binary.byteLength) as ArrayBuffer;
+    return formService.detectXFA(ab);
+  });
+
+  registerIpcHandler<{ pdfData: string; fieldName: string }, unknown>('form:getActions', async ({ pdfData, fieldName }) => {
+    if (!pdfData) throw new Error('无效的 PDF 数据');
+    if (!fieldName) throw new Error('无效的字段名');
+    const binary = Buffer.from(pdfData, 'base64');
+    const ab = binary.buffer.slice(binary.byteOffset, binary.byteOffset + binary.byteLength) as ArrayBuffer;
+    return formService.extractFieldActions(ab, fieldName);
   });
 }
