@@ -16,7 +16,10 @@ export default defineConfig(({ mode }) => {
             build: {
               outDir: 'dist-electron',
               rollupOptions: {
-                external: ['electron', 'electron-store'],
+                external: ['electron', 'electron-store', 'canvas', 'node-canvas', '@napi-rs/canvas'],
+                output: {
+                  entryFileNames: 'main.js',
+                },
               },
             },
             resolve: {

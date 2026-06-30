@@ -4,11 +4,18 @@ import type { VerityAPI, FileDialogOptions, TaskItemInfo } from '../src/types/el
 const APP_VERSION = '1.0.0';
 
 function wrapInvoke<T>(channel: string, payload: unknown): Promise<T> {
-  return ipcRenderer.invoke(channel, { version: APP_VERSION, payload }).then((response: { success: boolean; data?: T; error?: string; errorCode?: string }) => {
-    if (!response.success) {
-      throw new Error(response.error || 'Unknown IPC error');
+  return ipcRenderer.invoke(channel, { version: APP_VERSION, payload }).then((response: unknown) => {
+    // 兼容两种返回格式：
+    // 1. registerIpcHandler 包装的 IpcResponse: { success, data, error }
+    // 2. 直接 ipcMain.handle 返回的原始值
+    if (response && typeof response === 'object' && 'success' in (response as Record<string, unknown>)) {
+      const resp = response as { success: boolean; data?: T; error?: string };
+      if (!resp.success) {
+        throw new Error(resp.error || 'Unknown IPC error');
+      }
+      return resp.data as T;
     }
-    return response.data as T;
+    return response as T;
   });
 }
 
