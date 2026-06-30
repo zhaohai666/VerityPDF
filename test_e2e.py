@@ -1517,8 +1517,8 @@ def test_resize_pages(cdp: CDPClient):
         report("页面尺寸调整", False, "无法读取测试 PDF")
         return
     result = call_api(cdp, "resizePages", pdf_b64, {
-        "pageSize": "A4",
-        "scaleContent": True,
+        "targetSize": "A4",
+        "scaleMode": "fit",
         "pageIndices": [0]
     })
     if isinstance(result, dict) and result.get("success"):
@@ -1535,9 +1535,7 @@ def test_nup(cdp: CDPClient):
         report("N 合 1 排版", False, "无法读取测试 PDF")
         return
     result = call_api(cdp, "createNUp", pdf_b64, {
-        "n": 2,
-        "columns": 2,
-        "rows": 1,
+        "layout": "2x1",
         "pageSize": "A4"
     })
     if isinstance(result, dict) and result.get("success"):
@@ -1881,7 +1879,8 @@ def test_color_replace(cdp: CDPClient):
         report("颜色替换", False, "无法读取测试 PDF")
         return
     result = call_api(cdp, "replaceColors", pdf_b64, {
-        "replacements": [{"from": "#000000", "to": "#FF0000"}],
+        "rules": [{"oldColor": "#000000", "newColor": "#FF0000", "colorSpace": "rgb", "tolerance": 0.1}],
+        "tolerance": 0.1,
         "pageIndices": [0]
     })
     if isinstance(result, dict) and result.get("success"):

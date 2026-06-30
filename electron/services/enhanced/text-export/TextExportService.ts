@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import { BrowserWindow } from 'electron';
-import pdfjsLib, { GlobalWorkerOptions } from 'pdfjs-dist';
+import * as pdfjsLib from 'pdfjs-dist';
+import { GlobalWorkerOptions } from 'pdfjs-dist';
 
 /**
  * 文本导出服务

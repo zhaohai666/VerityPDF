@@ -1,8 +1,12 @@
+import { fileURLToPath } from 'url';
+import path from 'path';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import electron from 'vite-plugin-electron';
 import renderer from 'vite-plugin-electron-renderer';
-import path from 'path';
+
+// 👇 添加这一行，兼容 ESM
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig(({ mode }) => {
   const isDev = mode === 'development';

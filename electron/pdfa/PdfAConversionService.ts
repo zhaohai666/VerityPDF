@@ -59,6 +59,19 @@ export interface PdfAConvertResult {
  *   pdfa-2b  -> part 2, conformance B
  *   pdfa-3b  -> part 3, conformance B
  */
+function normalizeConformance(conformance: string): PdfAConformance {
+  // Normalize formats like "2b", "2B", "PDF/A-2b" to "pdfa-2b"
+  const normalized = conformance.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const match = normalized.match(/^(\d)([ab])$/);
+  if (match) {
+    return `pdfa-${match[1]}${match[2]}` as PdfAConformance;
+  }
+  if (normalized.startsWith('pdfa')) {
+    return normalized as PdfAConformance;
+  }
+  return 'pdfa-2b' as PdfAConformance; // default fallback
+}
+
 function conformanceToXmpValues(
   conformance: PdfAConformance,
 ): { part: string; conformanceLetter: string } {
@@ -67,7 +80,7 @@ function conformanceToXmpValues(
     'pdfa-2b': { part: '2', conformanceLetter: 'B' },
     'pdfa-3b': { part: '3', conformanceLetter: 'B' },
   };
-  return map[conformance];
+  return map[conformance] || { part: '2', conformanceLetter: 'B' };
 }
 
 /**
@@ -206,8 +219,9 @@ export class PdfAConversionService {
     options: PdfAConvertOptions,
   ): Promise<PdfAConvertResult> {
     const { conformance, includeXmp } = options;
-    const label = conformanceLabel(conformance);
-    const { part, conformanceLetter } = conformanceToXmpValues(conformance);
+    const normalizedConformance = normalizeConformance(conformance);
+    const label = conformanceLabel(normalizedConformance);
+    const { part, conformanceLetter } = conformanceToXmpValues(normalizedConformance);
 
     // ------------------------------------------------------------------
     // 1. Load the source PDF

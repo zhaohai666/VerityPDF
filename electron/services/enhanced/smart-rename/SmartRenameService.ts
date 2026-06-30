@@ -1,5 +1,5 @@
 import { PDFDocument } from 'pdf-lib';
-import pdfjsLib from 'pdfjs-dist';
+import * as pdfjsLib from 'pdfjs-dist';
 import * as fs from 'fs';
 import { BrowserWindow } from 'electron';
 
