@@ -42,6 +42,11 @@ const ImageToPdfDialog = React.lazy(() => import('@/components/image-to-pdf/Imag
 const CsvExportDialog = React.lazy(() => import('@/components/csv-export/CsvExportDialog').then(m => ({ default: m.CsvExportDialog })));
 const ShowJsDialog = React.lazy(() => import('@/components/show-js/ShowJsDialog').then(m => ({ default: m.ShowJsDialog })));
 const ImageEditorDialog = React.lazy(() => import('@/components/image-edit/ImageEditorDialog').then(m => ({ default: m.ImageEditorDialog })));
+const HyperlinkEditDialog = React.lazy(() => import('@/components/hyperlink/HyperlinkEditDialog').then(m => ({ default: m.HyperlinkEditDialog })));
+const BookmarkEditDialog = React.lazy(() => import('@/components/bookmark/BookmarkEditDialog').then(m => ({ default: m.BookmarkEditDialog })));
+const ScriptExecuteDialog = React.lazy(() => import('@/components/script/ScriptExecuteDialog').then(m => ({ default: m.ScriptExecuteDialog })));
+const CollabDialog = React.lazy(() => import('@/components/collab/CollabDialog').then(m => ({ default: m.CollabDialog })));
+const RestApiDialog = React.lazy(() => import('@/components/api/RestApiDialog').then(m => ({ default: m.RestApiDialog })));
 const LanguageSelector = React.lazy(() => import('@/components/language-selector/LanguageSelector').then(m => ({ default: m.LanguageSelector })));
 
 const App: React.FC = () => {
@@ -156,6 +161,9 @@ const App: React.FC = () => {
         case 'tool:csvExport':
         case 'tool:showJs':
         case 'tool:imageEdit':
+        case 'tool:hyperlinkEdit':
+        case 'tool:bookmarkEdit':
+        case 'tool:scriptExecute':
           if (pdf.isLoaded) {
             const fp = pdf.filePath;
             if (fp) {
@@ -171,6 +179,14 @@ const App: React.FC = () => {
         // 图片转PDF不需要已加载的PDF
         case 'tool:imageToPdf':
           setActiveToolDialog('imageToPdf');
+          break;
+
+        // 服务管理对话框（不需要PDF数据）
+        case 'tool:collab':
+          setActiveToolDialog('collab');
+          break;
+        case 'tool:restApi':
+          setActiveToolDialog('restApi');
           break;
       }
     });
@@ -366,6 +382,34 @@ const App: React.FC = () => {
             {activeToolDialog === 'imageEdit' && (
               <ImageEditorDialog
                 pdfData={dialogPdfData}
+                onClose={() => setActiveToolDialog(null)}
+              />
+            )}
+            {activeToolDialog === 'hyperlinkEdit' && (
+              <HyperlinkEditDialog
+                pdfData={dialogPdfData}
+                onClose={() => setActiveToolDialog(null)}
+              />
+            )}
+            {activeToolDialog === 'bookmarkEdit' && (
+              <BookmarkEditDialog
+                pdfData={dialogPdfData}
+                onClose={() => setActiveToolDialog(null)}
+              />
+            )}
+            {activeToolDialog === 'scriptExecute' && (
+              <ScriptExecuteDialog
+                pdfData={dialogPdfData}
+                onClose={() => setActiveToolDialog(null)}
+              />
+            )}
+            {activeToolDialog === 'collab' && (
+              <CollabDialog
+                onClose={() => setActiveToolDialog(null)}
+              />
+            )}
+            {activeToolDialog === 'restApi' && (
+              <RestApiDialog
                 onClose={() => setActiveToolDialog(null)}
               />
             )}

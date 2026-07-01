@@ -60,6 +60,9 @@ VerityPDF 是一款面向专业用户的**桌面端 PDF 文档批注与审阅工
 | **标注工具** | 便签批注 (Sticky Note) | P1 | ✅ |
 | **标注工具** | 印章、签名（手写/图片） | P1 | ✅ |
 | **标注工具** | 距离/面积测量工具 | P2 | 🔲 |
+| **链接编辑** | 超链接标注 CRUD（URI/页面跳转） | P1 | ✅ |
+| **书签编辑** | 树形书签管理（增删改、层级调整） | P1 | ✅ |
+| **脚本执行** | QuickJS 沙箱脚本引擎（验证/执行/统计） | P2 | ✅ |
 | **页面管理** | 页面旋转、删除、重排 | P1 | ✅ |
 | **页面管理** | 插入空白页 | P2 | 🔲 |
 | **文档导出** | 标注合并导出为新 PDF | P0 | ✅ |
@@ -418,6 +421,12 @@ VerityPDF/
 │   │   │   ├── SignatureDialog.tsx    # 签名对话框
 │   │   │   ├── SignatureCanvas.tsx    # 手写签名画板
 │   │   │   └── SignatureStamp.tsx     # 印章预览
+│   │   ├── hyperlink/                  # 链接编辑模块
+│   │   │   └── HyperlinkEditDialog.tsx # 超链接编辑对话框
+│   │   ├── bookmark/                   # 书签编辑模块
+│   │   │   └── BookmarkEditDialog.tsx  # 书签编辑对话框
+│   │   ├── script/                     # 脚本执行模块
+│   │   │   └── ScriptExecuteDialog.tsx # 脚本执行对话框
 │   │   └── Dialogs/                    # 对话框
 │   │       ├── ExportDialog.tsx       # 导出设置
 │   │       ├── PrintDialog.tsx        # 打印设置
@@ -4140,6 +4149,22 @@ export const IPC_CHANNELS = {
 
   // ── 应用 ──
   APP_VERSION:           'app:version',
+
+  // ── 超链接标注 ──
+  HYPERLINK_LIST:        'hyperlink:list',
+  HYPERLINK_ADD:         'hyperlink:add',
+  HYPERLINK_EDIT:        'hyperlink:edit',
+  HYPERLINK_REMOVE:      'hyperlink:remove',
+
+  // ── 书签 ──
+  BOOKMARK_GET:          'bookmark:get',
+  BOOKMARK_EDIT:         'bookmark:edit',
+  BOOKMARK_SET:          'bookmark:set',
+
+  // ── 脚本执行 ──
+  SCRIPT_EXECUTE:        'script:execute',
+  SCRIPT_VALIDATE:       'script:validate',
+  SCRIPT_STATS:          'script:stats',
 } as const;
 
 /**
@@ -5022,6 +5047,9 @@ async function loadPdfWorker() {
 const SignatureDialog = lazy(() => import('./components/Signature/SignatureDialog'));
 const ExportDialog = lazy(() => import('./components/Dialogs/ExportDialog'));
 const PreferencesDialog = lazy(() => import('./components/Dialogs/PreferencesDialog'));
+const HyperlinkEditDialog = lazy(() => import('./components/hyperlink/HyperlinkEditDialog').then(m => ({ default: m.HyperlinkEditDialog })));
+const BookmarkEditDialog = lazy(() => import('./components/bookmark/BookmarkEditDialog').then(m => ({ default: m.BookmarkEditDialog })));
+const ScriptExecuteDialog = lazy(() => import('./components/script/ScriptExecuteDialog').then(m => ({ default: m.ScriptExecuteDialog })));
 ```
 
 ---
@@ -5615,7 +5643,8 @@ jobs:
 | **v1.0** | MVP 发布 | PDF 浏览、基础标注、导出 |
 | **v1.1** | 体验优化 | 撤销/重做、对齐吸附、键盘快捷键 |
 | **v1.2** | 签名功能 | 手写签名、印章、签名管理 |
-| **v1.3** | 协作基础 | 批注评论、导出评论汇总 |
+| **v1.3** | 编辑增强 | 链接编辑、书签编辑、脚本执行 |
+| **v1.4** | 协作基础 | 批注评论、导出评论汇总 |
 | **v2.0** | 大版本 | 多标签页、插件系统、OCR |
 | **v2.1** | 表单支持 | PDF 表单填写、表单数据导出 |
 | **v2.2** | 云端集成 | 云存储同步、实时协作标注 |

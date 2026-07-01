@@ -247,6 +247,27 @@ export function createAppMenu(win: BrowserWindow): void {
           label: '图片编辑...',
           click: () => sendAction('tool:imageEdit'),
         },
+        {
+          label: '链接编辑...',
+          click: () => sendAction('tool:hyperlinkEdit'),
+        },
+        {
+          label: '书签编辑...',
+          click: () => sendAction('tool:bookmarkEdit'),
+        },
+        {
+          label: '脚本执行...',
+          click: () => sendAction('tool:scriptExecute'),
+        },
+        { type: 'separator' },
+        {
+          label: '多人协作...',
+          click: () => sendAction('tool:collab'),
+        },
+        {
+          label: 'REST API 服务...',
+          click: () => sendAction('tool:restApi'),
+        },
       ],
     },
 

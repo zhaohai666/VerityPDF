@@ -404,6 +404,68 @@ const api: VerityAPI = {
 
   getScriptStats: () =>
     wrapInvoke('script:stats', {}),
+
+  // 多人协作
+  startCollab: (port) =>
+    wrapInvoke<number>('collab:start', { port }),
+
+  stopCollab: () =>
+    wrapInvoke<void>('collab:stop', {}),
+
+  getCollabStatus: () =>
+    wrapInvoke('collab:status', {}),
+
+  createCollabRoom: (name, documentHash) =>
+    wrapInvoke('collab:createRoom', { name, documentHash }),
+
+  deleteCollabRoom: (roomId) =>
+    wrapInvoke<boolean>('collab:deleteRoom', { roomId }),
+
+  listCollabRooms: () =>
+    wrapInvoke('collab:listRooms', {}),
+
+  getCollabRoom: (roomId) =>
+    wrapInvoke('collab:getRoom', { roomId }),
+
+  joinCollabRoom: (options) =>
+    wrapInvoke('collab:joinRoom', options as unknown as Record<string, unknown>),
+
+  leaveCollabRoom: (roomId, userId) =>
+    wrapInvoke<boolean>('collab:leaveRoom', { roomId, userId }),
+
+  addCollabAnnotation: (roomId, annotation) =>
+    wrapInvoke('collab:annotate', { roomId, annotation }),
+
+  updateCollabCursor: (cursor, userId, roomId) =>
+    wrapInvoke<boolean>('collab:cursor', { cursor, userId, roomId }),
+
+  syncCollabData: (roomId) =>
+    wrapInvoke('collab:sync', { roomId }),
+
+  // REST API
+  startRestApi: (config) =>
+    wrapInvoke<number>('rest-api:start', config ? (config as Record<string, unknown>) : {}),
+
+  stopRestApi: () =>
+    wrapInvoke<void>('rest-api:stop', {}),
+
+  getRestApiStatus: () =>
+    wrapInvoke('rest-api:status', {}),
+
+  getRestApiConfig: () =>
+    wrapInvoke('rest-api:config', {}),
+
+  updateRestApiConfig: (updates) =>
+    wrapInvoke<void>('rest-api:updateConfig', updates as Record<string, unknown>),
+
+  generateRestApiKey: (label) =>
+    wrapInvoke('rest-api:generateKey', { label }),
+
+  revokeRestApiKey: (key) =>
+    wrapInvoke<boolean>('rest-api:revokeKey', { key }),
+
+  listRestApiKeys: () =>
+    wrapInvoke('rest-api:listKeys', {}),
 };
 
 contextBridge.exposeInMainWorld('verityAPI', api);

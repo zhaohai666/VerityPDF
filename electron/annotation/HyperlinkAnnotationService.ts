@@ -28,6 +28,8 @@ export interface HyperlinkAnnotationInfo {
   id: string;
   type: HyperlinkType;
   pageIndex: number;
+  /** 注释在页面 Annots 数组中的索引 */
+  annotIndex: number;
   rect: [number, number, number, number];
   uri?: string;
   destPageIndex?: number;
@@ -62,7 +64,7 @@ export class HyperlinkAnnotationService {
         const subtype = annot.get(PDFName.of('Subtype'));
         if (!subtype || subtype.toString() !== '/Link') continue;
 
-        const info = this.parseLinkAnnotation(doc, annot, i);
+        const info = this.parseLinkAnnotation(doc, annot, i, j);
         if (info) result.push(info);
       }
     }
@@ -269,7 +271,7 @@ export class HyperlinkAnnotationService {
     return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
   }
 
-  private parseLinkAnnotation(doc: PDFDocument, annot: PDFDict, pageIndex: number): HyperlinkAnnotationInfo | null {
+  private parseLinkAnnotation(doc: PDFDocument, annot: PDFDict, pageIndex: number, annotIndex: number): HyperlinkAnnotationInfo | null {
     const context = doc.context;
     const rectObj = annot.get(PDFName.of('Rect'));
     let rect: [number, number, number, number] = [0, 0, 0, 0];
@@ -303,7 +305,7 @@ export class HyperlinkAnnotationService {
         if (s && s.toString() === '/URI') {
           const uriObj = actionDict.get(PDFName.of('URI'));
           const uri = uriObj ? (uriObj instanceof PDFString ? uriObj.decodeText() : String(uriObj).replace(/^\//, '')) : '';
-          return { id: `p${pageIndex}_link`, type: 'uri', pageIndex, rect, uri, highlightMode, color };
+          return { id: `p${pageIndex}_a${annotIndex}`, type: 'uri', pageIndex, annotIndex, rect, uri, highlightMode, color };
         }
       }
     }
@@ -324,7 +326,7 @@ export class HyperlinkAnnotationService {
           }
         }
       }
-      return { id: `p${pageIndex}_link`, type: 'goto', pageIndex, rect, destPageIndex, highlightMode, color };
+      return { id: `p${pageIndex}_a${annotIndex}`, type: 'goto', pageIndex, annotIndex, rect, destPageIndex, highlightMode, color };
     }
 
     return null;

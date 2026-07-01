@@ -44,6 +44,8 @@ import { ImageEditService } from '../image-edit/ImageEditService';
 import { HyperlinkAnnotationService } from '../annotation/HyperlinkAnnotationService';
 import { BookmarkEditService } from '../bookmark/BookmarkEditService';
 import { ScriptEngineService } from '../script/ScriptEngineService';
+import { CollabService } from '../collab/CollabService';
+import { RestApiServer } from '../api/RestApiServer';
 
 const MAX_FILE_SIZE = 500 * 1024 * 1024;
 const ALLOWED_EXTENSIONS = ['.pdf'];
@@ -1563,5 +1565,95 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
 
   registerIpcHandler<{}, unknown>('script:stats', async () => {
     return scriptEngineService.getStats();
+  });
+
+  // ─── 多人协作 ───
+  const collabService = new CollabService();
+
+  registerIpcHandler<{ port?: number }, number>('collab:start', async ({ port }) => {
+    return collabService.start(port || 9200);
+  });
+
+  registerIpcHandler<{}, void>('collab:stop', async () => {
+    await collabService.stop();
+  });
+
+  registerIpcHandler<{}, unknown>('collab:status', async () => {
+    return collabService.getStatus();
+  });
+
+  registerIpcHandler<{ name: string; documentHash?: string }, unknown>('collab:createRoom', async ({ name, documentHash }) => {
+    const userId = `user_${Date.now()}`;
+    return collabService.createRoom(name, userId, documentHash);
+  });
+
+  registerIpcHandler<{ roomId: string }, boolean>('collab:deleteRoom', async ({ roomId }) => {
+    return collabService.deleteRoom(roomId);
+  });
+
+  registerIpcHandler<{}, unknown[]>('collab:listRooms', async () => {
+    return collabService.getRooms();
+  });
+
+  registerIpcHandler<{ roomId: string }, unknown>('collab:getRoom', async ({ roomId }) => {
+    return collabService.getRoomInfo(roomId);
+  });
+
+  registerIpcHandler<{ roomId: string; userName: string }, unknown>('collab:joinRoom', async ({ roomId, userName }) => {
+    return collabService.joinRoom(roomId, userName);
+  });
+
+  registerIpcHandler<{ roomId: string; userId: string }, boolean>('collab:leaveRoom', async ({ roomId, userId }) => {
+    return collabService.leaveRoom(roomId, userId);
+  });
+
+  registerIpcHandler<{ roomId: string; annotation: Record<string, unknown> }, unknown>('collab:annotate', async ({ roomId, annotation }) => {
+    return collabService.addAnnotation(roomId, annotation);
+  });
+
+  registerIpcHandler<{ cursor: Record<string, unknown>; userId: string; roomId: string }, boolean>('collab:cursor', async ({ cursor, userId, roomId }) => {
+    return collabService.updateCursor(roomId, userId, cursor);
+  });
+
+  registerIpcHandler<{ roomId: string }, unknown>('collab:sync', async ({ roomId }) => {
+    return collabService.syncRoom(roomId);
+  });
+
+  // ─── REST API ───
+  const restApiServer = new RestApiServer();
+
+  registerIpcHandler<Record<string, unknown>, number>('rest-api:start', async (config) => {
+    if (config && Object.keys(config).length > 0) {
+      restApiServer.updateConfig(config as Partial<import('../api/RestApiServer').RestApiConfig>);
+    }
+    return restApiServer.start();
+  });
+
+  registerIpcHandler<{}, void>('rest-api:stop', async () => {
+    await restApiServer.stop();
+  });
+
+  registerIpcHandler<{}, unknown>('rest-api:status', async () => {
+    return restApiServer.getStatus();
+  });
+
+  registerIpcHandler<{}, unknown>('rest-api:config', async () => {
+    return restApiServer.getConfig();
+  });
+
+  registerIpcHandler<Record<string, unknown>, void>('rest-api:updateConfig', async (updates) => {
+    restApiServer.updateConfig(updates as Partial<import('../api/RestApiServer').RestApiConfig>);
+  });
+
+  registerIpcHandler<{ label: string }, unknown>('rest-api:generateKey', async ({ label }) => {
+    return restApiServer.generateApiKey(label);
+  });
+
+  registerIpcHandler<{ key: string }, boolean>('rest-api:revokeKey', async ({ key }) => {
+    return restApiServer.revokeApiKey(key);
+  });
+
+  registerIpcHandler<{}, unknown[]>('rest-api:listKeys', async () => {
+    return restApiServer.listApiKeys();
   });
 }

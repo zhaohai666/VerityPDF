@@ -175,6 +175,30 @@ export const IPC_CHANNELS = {
   SCRIPT_VALIDATE: 'script:validate',
   SCRIPT_STATS: 'script:stats',
 
+  // 多人协作
+  COLLAB_START: 'collab:start',
+  COLLAB_STOP: 'collab:stop',
+  COLLAB_STATUS: 'collab:status',
+  COLLAB_CREATE_ROOM: 'collab:createRoom',
+  COLLAB_DELETE_ROOM: 'collab:deleteRoom',
+  COLLAB_LIST_ROOMS: 'collab:listRooms',
+  COLLAB_GET_ROOM: 'collab:getRoom',
+  COLLAB_JOIN_ROOM: 'collab:joinRoom',
+  COLLAB_LEAVE_ROOM: 'collab:leaveRoom',
+  COLLAB_ANNOTATE: 'collab:annotate',
+  COLLAB_CURSOR: 'collab:cursor',
+  COLLAB_SYNC: 'collab:sync',
+
+  // REST API
+  REST_API_START: 'rest-api:start',
+  REST_API_STOP: 'rest-api:stop',
+  REST_API_STATUS: 'rest-api:status',
+  REST_API_CONFIG: 'rest-api:config',
+  REST_API_UPDATE_CONFIG: 'rest-api:updateConfig',
+  REST_API_GENERATE_KEY: 'rest-api:generateKey',
+  REST_API_REVOKE_KEY: 'rest-api:revokeKey',
+  REST_API_LIST_KEYS: 'rest-api:listKeys',
+
   // 任务队列
   TASK_SUBMIT: 'task:submit',
   TASK_CANCEL: 'task:cancel',
@@ -445,6 +469,30 @@ export interface VerityAPI {
   executeScript(code: string, options?: ScriptOptions): Promise<ScriptResult>;
   validateScript(code: string): Promise<{ valid: boolean; error?: string }>;
   getScriptStats(): Promise<ScriptEngineStats>;
+
+  // 多人协作
+  startCollab(port?: number): Promise<number>;
+  stopCollab(): Promise<void>;
+  getCollabStatus(): Promise<CollabStatus>;
+  createCollabRoom(name: string, documentHash?: string): Promise<CollabRoomInfo>;
+  deleteCollabRoom(roomId: string): Promise<boolean>;
+  listCollabRooms(): Promise<CollabRoomInfo[]>;
+  getCollabRoom(roomId: string): Promise<CollabRoomDetail | null>;
+  joinCollabRoom(options: CollabJoinOptions): Promise<CollabUser>;
+  leaveCollabRoom(roomId: string, userId: string): Promise<boolean>;
+  addCollabAnnotation(roomId: string, annotation: Omit<CollabAnnotation, 'id' | 'timestamp' | 'deleted'>): Promise<CollabAnnotation>;
+  updateCollabCursor(cursor: CollabCursorPosition, userId: string, roomId: string): Promise<boolean>;
+  syncCollabData(roomId: string): Promise<{ annotations: CollabAnnotation[]; users: CollabUser[] }>;
+
+  // REST API
+  startRestApi(config?: Partial<RestApiConfig>): Promise<number>;
+  stopRestApi(): Promise<void>;
+  getRestApiStatus(): Promise<RestApiStatus>;
+  getRestApiConfig(): Promise<Readonly<RestApiConfig>>;
+  updateRestApiConfig(updates: Partial<RestApiConfig>): Promise<void>;
+  generateRestApiKey(label: string): Promise<ApiKeyInfo>;
+  revokeRestApiKey(key: string): Promise<boolean>;
+  listRestApiKeys(): Promise<ApiKeyInfo[]>;
 
   // 高级表单
   getFormFieldDetails(pdfData: string): Promise<EnhancedFormFieldInfo[]>;
@@ -1188,6 +1236,8 @@ export interface HyperlinkAnnotationInfo {
   id: string;
   type: HyperlinkType;
   pageIndex: number;
+  /** 注释在页面 Annots 数组中的索引 */
+  annotIndex: number;
   rect: [number, number, number, number];
   uri?: string;
   destPageIndex?: number;
@@ -1273,4 +1323,98 @@ export interface ScriptEngineStats {
   successfulExecutions: number;
   failedExecutions: number;
   averageExecutionTime: number;
+}
+
+// ========== 多人协作类型 ==========
+
+/** 协作用户 */
+export interface CollabUser {
+  id: string;
+  name: string;
+  color: string;
+  cursor?: { pageIndex: number; x: number; y: number };
+  lastSeen: number;
+}
+
+/** 协作房间信息 */
+export interface CollabRoomInfo {
+  id: string;
+  name: string;
+  hostUserId: string;
+  userCount: number;
+  createdAt: number;
+}
+
+/** 协作房间详情 */
+export interface CollabRoomDetail {
+  id: string;
+  name: string;
+  hostUserId: string;
+  users: CollabUser[];
+  annotationCount: number;
+  createdAt: number;
+  documentHash?: string;
+}
+
+/** 协作标注 */
+export interface CollabAnnotation {
+  id: string;
+  userId: string;
+  pageIndex: number;
+  type: 'highlight' | 'comment' | 'drawing' | 'stamp';
+  data: unknown;
+  timestamp: number;
+  deleted: boolean;
+}
+
+/** 协作服务状态 */
+export interface CollabStatus {
+  running: boolean;
+  port: number;
+  roomCount: number;
+  totalUsers: number;
+}
+
+/** 加入房间选项 */
+export interface CollabJoinOptions {
+  roomId: string;
+  userName: string;
+}
+
+/** 光标位置 */
+export interface CollabCursorPosition {
+  roomId: string;
+  pageIndex: number;
+  x: number;
+  y: number;
+}
+
+// ========== REST API 类型 ==========
+
+/** REST API 配置 */
+export interface RestApiConfig {
+  port: number;
+  host: string;
+  authToken?: string;
+  maxFileSize: number;
+  corsEnabled: boolean;
+}
+
+/** REST API 状态 */
+export interface RestApiStatus {
+  running: boolean;
+  port: number;
+  host: string;
+  requestCount: number;
+  apiKeyCount: number;
+  uptime: number;
+}
+
+/** API Key 信息 */
+export interface ApiKeyInfo {
+  key: string;
+  label: string;
+  createdAt: number;
+  lastUsed: number;
+  requestCount: number;
 }
