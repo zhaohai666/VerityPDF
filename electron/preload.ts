@@ -355,6 +355,55 @@ const api: VerityAPI = {
 
   getFieldActions: (pdfData, fieldName) =>
     wrapInvoke('form:getActions', { pdfData, fieldName }),
+
+  // 超链接注释
+  listHyperlinks: (pdfData) =>
+    wrapInvoke('hyperlink:list', { pdfData }),
+
+  addHyperlink: (pdfData, link) =>
+    wrapInvoke<ArrayBuffer>('hyperlink:add', { pdfData, link }),
+
+  editHyperlink: (pdfData, pageIndex, annotIndex, updates) =>
+    wrapInvoke<ArrayBuffer>('hyperlink:edit', { pdfData, pageIndex, annotIndex, updates }),
+
+  removeHyperlink: (pdfData, pageIndex, annotIndex) =>
+    wrapInvoke<ArrayBuffer>('hyperlink:remove', { pdfData, pageIndex, annotIndex }),
+
+  // 书签编辑
+  getBookmarks: (pdfData) =>
+    wrapInvoke('bookmark:get', { pdfData }),
+
+  editBookmark: (pdfData, edit) =>
+    wrapInvoke<ArrayBuffer>('bookmark:edit', { pdfData, edit }),
+
+  setBookmarks: (pdfData, bookmarks) =>
+    wrapInvoke<ArrayBuffer>('bookmark:set', { pdfData, bookmarks }),
+
+  // 图片编辑增强
+  rotateImage: (pdfData, pageIndex, imageRef, angle) =>
+    wrapInvoke('image:rotate', { pdfData, pageIndex, imageRef, angle }),
+
+  cropImage: (pdfData, pageIndex, imageRef, cropRect) =>
+    wrapInvoke('image:crop', { pdfData, pageIndex, imageRef, cropRect }),
+
+  scaleImage: (pdfData, pageIndex, imageRef, scale) =>
+    wrapInvoke('image:scale', { pdfData, pageIndex, imageRef, scale }),
+
+  applyImageFilter: (pdfData, pageIndex, imageRef, filter, value) =>
+    wrapInvoke('image:filter', { pdfData, pageIndex, imageRef, filter, value }),
+
+  applyFilterToAllImages: (pdfData, pageIndex, filter, value) =>
+    wrapInvoke('image:filterAll', { pdfData, pageIndex, filter, value }),
+
+  // 脚本引擎
+  executeScript: (code, options) =>
+    wrapInvoke('script:execute', { code, options }),
+
+  validateScript: (code) =>
+    wrapInvoke('script:validate', { code }),
+
+  getScriptStats: () =>
+    wrapInvoke('script:stats', {}),
 };
 
 contextBridge.exposeInMainWorld('verityAPI', api);

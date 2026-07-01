@@ -152,6 +152,29 @@ export const IPC_CHANNELS = {
   IMAGE_EDIT_REPLACE: 'image:replace',
   IMAGE_EDIT_LAYOUT: 'image:getLayout',
 
+  // 超链接注释
+  HYPERLINK_LIST: 'hyperlink:list',
+  HYPERLINK_ADD: 'hyperlink:add',
+  HYPERLINK_EDIT: 'hyperlink:edit',
+  HYPERLINK_REMOVE: 'hyperlink:remove',
+
+  // 书签编辑
+  BOOKMARK_GET: 'bookmark:get',
+  BOOKMARK_EDIT: 'bookmark:edit',
+  BOOKMARK_SET: 'bookmark:set',
+
+  // 图片编辑增强
+  IMAGE_EDIT_ROTATE: 'image:rotate',
+  IMAGE_EDIT_CROP: 'image:crop',
+  IMAGE_EDIT_SCALE: 'image:scale',
+  IMAGE_EDIT_FILTER: 'image:filter',
+  IMAGE_EDIT_FILTER_ALL: 'image:filterAll',
+
+  // 脚本引擎
+  SCRIPT_EXECUTE: 'script:execute',
+  SCRIPT_VALIDATE: 'script:validate',
+  SCRIPT_STATS: 'script:stats',
+
   // 任务队列
   TASK_SUBMIT: 'task:submit',
   TASK_CANCEL: 'task:cancel',
@@ -399,6 +422,29 @@ export interface VerityAPI {
   extractPageImages(pdfData: string, pageIndex: number): Promise<PageImageInfo[]>;
   replacePageImage(pdfData: string, pageIndex: number, imageRef: string, newImageBase64: string, format: 'png' | 'jpeg'): Promise<ReplaceImageResult>;
   getPageImageLayout(pdfData: string, pageIndex: number): Promise<ImageLayoutItem[]>;
+
+  // 超链接注释
+  listHyperlinks(pdfData: string): Promise<HyperlinkAnnotationInfo[]>;
+  addHyperlink(pdfData: string, link: HyperlinkAnnotation): Promise<ArrayBuffer>;
+  editHyperlink(pdfData: string, pageIndex: number, annotIndex: number, updates: Partial<HyperlinkAnnotation>): Promise<ArrayBuffer>;
+  removeHyperlink(pdfData: string, pageIndex: number, annotIndex: number): Promise<ArrayBuffer>;
+
+  // 书签编辑
+  getBookmarks(pdfData: string): Promise<BookmarkItem[]>;
+  editBookmark(pdfData: string, edit: BookmarkEdit): Promise<ArrayBuffer>;
+  setBookmarks(pdfData: string, bookmarks: BookmarkItem[]): Promise<ArrayBuffer>;
+
+  // 图片编辑增强
+  rotateImage(pdfData: string, pageIndex: number, imageRef: string, angle: number): Promise<ReplaceImageResult>;
+  cropImage(pdfData: string, pageIndex: number, imageRef: string, cropRect: ImageCropRect): Promise<ReplaceImageResult>;
+  scaleImage(pdfData: string, pageIndex: number, imageRef: string, scale: number): Promise<ReplaceImageResult>;
+  applyImageFilter(pdfData: string, pageIndex: number, imageRef: string, filter: ImageFilterType, value?: number): Promise<ReplaceImageResult>;
+  applyFilterToAllImages(pdfData: string, pageIndex: number, filter: ImageFilterType, value?: number): Promise<ReplaceImageResult>;
+
+  // 脚本引擎
+  executeScript(code: string, options?: ScriptOptions): Promise<ScriptResult>;
+  validateScript(code: string): Promise<{ valid: boolean; error?: string }>;
+  getScriptStats(): Promise<ScriptEngineStats>;
 
   // 高级表单
   getFormFieldDetails(pdfData: string): Promise<EnhancedFormFieldInfo[]>;
@@ -1110,4 +1156,121 @@ export interface XFADetectResult {
   hasXFA: boolean;
   warning?: string;
   fieldCount: number;
+}
+
+// ========== 超链接注释类型 ==========
+
+/** 超链接类型 */
+export type HyperlinkType = 'uri' | 'goto';
+
+/** 超链接注释数据 */
+export interface HyperlinkAnnotation {
+  id?: string;
+  type: HyperlinkType;
+  /** 注释所在页面 (0-based) */
+  pageIndex: number;
+  /** 矩形区域 [x1, y1, x2, y2] (PDF 点坐标) */
+  rect: [number, number, number, number];
+  /** URI 链接 (type='uri' 时必填) */
+  uri?: string;
+  /** 目标页面索引 (type='goto' 时必填) */
+  destPageIndex?: number;
+  /** 目标页面缩放模式 */
+  destZoom?: 'fit' | 'fitH' | 'fitV' | 'xyz';
+  /** 高亮模式 */
+  highlightMode?: 'none' | 'invert' | 'outline' | 'push';
+  /** 边框颜色 [r, g, b] 0-1 */
+  color?: [number, number, number];
+}
+
+/** 超链接注释查询结果 */
+export interface HyperlinkAnnotationInfo {
+  id: string;
+  type: HyperlinkType;
+  pageIndex: number;
+  rect: [number, number, number, number];
+  uri?: string;
+  destPageIndex?: number;
+  highlightMode: string;
+  color?: [number, number, number];
+}
+
+// ========== 书签编辑类型 ==========
+
+/** 书签条目（树形结构） */
+export interface BookmarkItem {
+  title: string;
+  /** 目标页面索引 (0-based) */
+  pageIndex: number;
+  /** 层级深度 (0 = 顶级) */
+  level: number;
+  /** 目标缩放模式 */
+  zoom?: 'fit' | 'fitH' | 'fitV' | 'xyz';
+  /** 子书签 */
+  children?: BookmarkItem[];
+}
+
+/** 书签编辑操作 */
+export interface BookmarkEdit {
+  /** 操作类型 */
+  action: 'add' | 'delete' | 'edit' | 'reorder';
+  /** 目标书签路径 (如 [0, 1, 2] 表示第1个书签的第2个子书签的第3个子书签) */
+  path?: number[];
+  /** 新书签标题 (add/edit 时使用) */
+  title?: string;
+  /** 目标页面索引 (add/edit 时使用) */
+  pageIndex?: number;
+  /** 目标缩放模式 */
+  zoom?: 'fit' | 'fitH' | 'fitV' | 'xyz';
+  /** 添加位置: 'before' | 'after' | 'child' (add 时使用) */
+  position?: 'before' | 'after' | 'child';
+  /** 新排序顺序 (reorder 时使用) */
+  newOrder?: number[];
+  /** 作为子书签添加时的父路径 */
+  parentPath?: number[];
+}
+
+// ========== 图片编辑增强类型 ==========
+
+/** 图片滤镜类型 */
+export type ImageFilterType = 'brightness' | 'contrast' | 'grayscale' | 'sepia' | 'invert' | 'blur' | 'sharpen';
+
+/** 图片裁剪区域 */
+export interface ImageCropRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+// ========== 脚本引擎类型 ==========
+
+/** 脚本执行结果 */
+export interface ScriptResult {
+  success: boolean;
+  result?: unknown;
+  error?: string;
+  stdout: string[];
+  stderr: string[];
+  executionTime: number;
+}
+
+/** 脚本执行选项 */
+export interface ScriptOptions {
+  /** 最大执行时间 (ms), 默认 5000 */
+  timeout?: number;
+  /** 最大内存 (bytes), 默认 10MB */
+  memoryLimit?: number;
+  /** 传入脚本的上下文数据 */
+  context?: Record<string, unknown>;
+  /** 允许的模块列表 */
+  allowedModules?: string[];
+}
+
+/** 脚本引擎统计信息 */
+export interface ScriptEngineStats {
+  totalExecutions: number;
+  successfulExecutions: number;
+  failedExecutions: number;
+  averageExecutionTime: number;
 }

@@ -41,6 +41,9 @@ import { ImageToPdfService } from '../image-to-pdf/ImageToPdfService';
 import { CsvExportService } from '../csv-export/CsvExportService';
 import { ShowJsService } from '../show-js/ShowJsService';
 import { ImageEditService } from '../image-edit/ImageEditService';
+import { HyperlinkAnnotationService } from '../annotation/HyperlinkAnnotationService';
+import { BookmarkEditService } from '../bookmark/BookmarkEditService';
+import { ScriptEngineService } from '../script/ScriptEngineService';
 
 const MAX_FILE_SIZE = 500 * 1024 * 1024;
 const ALLOWED_EXTENSIONS = ['.pdf'];
@@ -1361,5 +1364,204 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     const binary = Buffer.from(pdfData, 'base64');
     const ab = binary.buffer.slice(binary.byteOffset, binary.byteOffset + binary.byteLength) as ArrayBuffer;
     return formService.extractFieldActions(ab, fieldName);
+  });
+
+  // ========== 超链接注释 ==========
+  const hyperlinkService = new HyperlinkAnnotationService();
+
+  registerIpcHandler<{ pdfData: string }, unknown>('hyperlink:list', async ({ pdfData }) => {
+    if (!pdfData) throw new Error('无效的 PDF 数据');
+    const binary = Buffer.from(pdfData, 'base64');
+    const ab = binary.buffer.slice(binary.byteOffset, binary.byteOffset + binary.byteLength) as ArrayBuffer;
+    return hyperlinkService.listHyperlinks(ab);
+  });
+
+  registerIpcHandler<{
+    pdfData: string;
+    link: {
+      type: 'uri' | 'goto';
+      pageIndex: number;
+      rect: [number, number, number, number];
+      uri?: string;
+      destPageIndex?: number;
+      destZoom?: string;
+      highlightMode?: string;
+      color?: [number, number, number];
+    };
+  }, ArrayBuffer>('hyperlink:add', async ({ pdfData, link }) => {
+    if (!pdfData) throw new Error('无效的 PDF 数据');
+    const binary = Buffer.from(pdfData, 'base64');
+    const ab = binary.buffer.slice(binary.byteOffset, binary.byteOffset + binary.byteLength) as ArrayBuffer;
+    return hyperlinkService.addHyperlink(ab, link as any);
+  });
+
+  registerIpcHandler<{
+    pdfData: string;
+    pageIndex: number;
+    annotIndex: number;
+    updates: Record<string, unknown>;
+  }, ArrayBuffer>('hyperlink:edit', async ({ pdfData, pageIndex, annotIndex, updates }) => {
+    if (!pdfData) throw new Error('无效的 PDF 数据');
+    const binary = Buffer.from(pdfData, 'base64');
+    const ab = binary.buffer.slice(binary.byteOffset, binary.byteOffset + binary.byteLength) as ArrayBuffer;
+    return hyperlinkService.editHyperlink(ab, pageIndex, annotIndex, updates as any);
+  });
+
+  registerIpcHandler<{
+    pdfData: string;
+    pageIndex: number;
+    annotIndex: number;
+  }, ArrayBuffer>('hyperlink:remove', async ({ pdfData, pageIndex, annotIndex }) => {
+    if (!pdfData) throw new Error('无效的 PDF 数据');
+    const binary = Buffer.from(pdfData, 'base64');
+    const ab = binary.buffer.slice(binary.byteOffset, binary.byteOffset + binary.byteLength) as ArrayBuffer;
+    return hyperlinkService.removeHyperlink(ab, pageIndex, annotIndex);
+  });
+
+  // ========== 书签编辑 ==========
+  const bookmarkEditService = new BookmarkEditService();
+
+  registerIpcHandler<{ pdfData: string }, unknown>('bookmark:get', async ({ pdfData }) => {
+    if (!pdfData) throw new Error('无效的 PDF 数据');
+    const binary = Buffer.from(pdfData, 'base64');
+    const ab = binary.buffer.slice(binary.byteOffset, binary.byteOffset + binary.byteLength) as ArrayBuffer;
+    return bookmarkEditService.getBookmarks(ab);
+  });
+
+  registerIpcHandler<{
+    pdfData: string;
+    edit: {
+      action: 'add' | 'delete' | 'edit' | 'reorder';
+      path?: number[];
+      title?: string;
+      pageIndex?: number;
+      zoom?: string;
+      position?: string;
+      newOrder?: number[];
+      parentPath?: number[];
+    };
+  }, ArrayBuffer>('bookmark:edit', async ({ pdfData, edit }) => {
+    if (!pdfData) throw new Error('无效的 PDF 数据');
+    const binary = Buffer.from(pdfData, 'base64');
+    const ab = binary.buffer.slice(binary.byteOffset, binary.byteOffset + binary.byteLength) as ArrayBuffer;
+    return bookmarkEditService.editBookmarks(ab, edit as any);
+  });
+
+  registerIpcHandler<{
+    pdfData: string;
+    bookmarks: Array<{
+      title: string;
+      pageIndex: number;
+      level: number;
+      zoom?: string;
+      children?: unknown[];
+    }>;
+  }, ArrayBuffer>('bookmark:set', async ({ pdfData, bookmarks }) => {
+    if (!pdfData) throw new Error('无效的 PDF 数据');
+    const binary = Buffer.from(pdfData, 'base64');
+    const ab = binary.buffer.slice(binary.byteOffset, binary.byteOffset + binary.byteLength) as ArrayBuffer;
+    return bookmarkEditService.setBookmarks(ab, bookmarks as any);
+  });
+
+  // ========== 图片编辑增强 ==========
+  registerIpcHandler<{
+    pdfData: string;
+    pageIndex: number;
+    imageRef: string;
+    angle: number;
+  }, unknown>('image:rotate', async ({ pdfData, pageIndex, imageRef, angle }) => {
+    if (!pdfData) throw new Error('无效的 PDF 数据');
+    const binary = Buffer.from(pdfData, 'base64');
+    const ab = binary.buffer.slice(binary.byteOffset, binary.byteOffset + binary.byteLength) as ArrayBuffer;
+    const result = await imageEditService.rotateImage(ab, pageIndex, imageRef, angle);
+    const resultBytes = new Uint8Array(result.pdfData);
+    let resultB64 = '';
+    for (let i = 0; i < resultBytes.length; i++) resultB64 += String.fromCharCode(resultBytes[i]);
+    return { pdfData: btoa(resultB64), replacedCount: result.replacedCount };
+  });
+
+  registerIpcHandler<{
+    pdfData: string;
+    pageIndex: number;
+    imageRef: string;
+    cropRect: { x: number; y: number; width: number; height: number };
+  }, unknown>('image:crop', async ({ pdfData, pageIndex, imageRef, cropRect }) => {
+    if (!pdfData) throw new Error('无效的 PDF 数据');
+    const binary = Buffer.from(pdfData, 'base64');
+    const ab = binary.buffer.slice(binary.byteOffset, binary.byteOffset + binary.byteLength) as ArrayBuffer;
+    const result = await imageEditService.cropImage(ab, pageIndex, imageRef, cropRect);
+    const resultBytes = new Uint8Array(result.pdfData);
+    let resultB64 = '';
+    for (let i = 0; i < resultBytes.length; i++) resultB64 += String.fromCharCode(resultBytes[i]);
+    return { pdfData: btoa(resultB64), replacedCount: result.replacedCount };
+  });
+
+  registerIpcHandler<{
+    pdfData: string;
+    pageIndex: number;
+    imageRef: string;
+    scale: number;
+  }, unknown>('image:scale', async ({ pdfData, pageIndex, imageRef, scale }) => {
+    if (!pdfData) throw new Error('无效的 PDF 数据');
+    const binary = Buffer.from(pdfData, 'base64');
+    const ab = binary.buffer.slice(binary.byteOffset, binary.byteOffset + binary.byteLength) as ArrayBuffer;
+    const result = await imageEditService.scaleImage(ab, pageIndex, imageRef, scale);
+    const resultBytes = new Uint8Array(result.pdfData);
+    let resultB64 = '';
+    for (let i = 0; i < resultBytes.length; i++) resultB64 += String.fromCharCode(resultBytes[i]);
+    return { pdfData: btoa(resultB64), replacedCount: result.replacedCount };
+  });
+
+  registerIpcHandler<{
+    pdfData: string;
+    pageIndex: number;
+    imageRef: string;
+    filter: string;
+    value?: number;
+  }, unknown>('image:filter', async ({ pdfData, pageIndex, imageRef, filter, value }) => {
+    if (!pdfData) throw new Error('无效的 PDF 数据');
+    const binary = Buffer.from(pdfData, 'base64');
+    const ab = binary.buffer.slice(binary.byteOffset, binary.byteOffset + binary.byteLength) as ArrayBuffer;
+    const result = await imageEditService.applyImageFilter(ab, pageIndex, imageRef, filter as any, value);
+    const resultBytes = new Uint8Array(result.pdfData);
+    let resultB64 = '';
+    for (let i = 0; i < resultBytes.length; i++) resultB64 += String.fromCharCode(resultBytes[i]);
+    return { pdfData: btoa(resultB64), replacedCount: result.replacedCount };
+  });
+
+  registerIpcHandler<{
+    pdfData: string;
+    pageIndex: number;
+    filter: string;
+    value?: number;
+  }, unknown>('image:filterAll', async ({ pdfData, pageIndex, filter, value }) => {
+    if (!pdfData) throw new Error('无效的 PDF 数据');
+    const binary = Buffer.from(pdfData, 'base64');
+    const ab = binary.buffer.slice(binary.byteOffset, binary.byteOffset + binary.byteLength) as ArrayBuffer;
+    const result = await imageEditService.applyFilterToAllImages(ab, pageIndex, filter as any, value);
+    const resultBytes = new Uint8Array(result.pdfData);
+    let resultB64 = '';
+    for (let i = 0; i < resultBytes.length; i++) resultB64 += String.fromCharCode(resultBytes[i]);
+    return { pdfData: btoa(resultB64), replacedCount: result.replacedCount };
+  });
+
+  // ========== 脚本引擎 ==========
+  const scriptEngineService = new ScriptEngineService();
+
+  registerIpcHandler<{
+    code: string;
+    options?: { timeout?: number; memoryLimit?: number; context?: Record<string, unknown>; allowedModules?: string[] };
+  }, unknown>('script:execute', async ({ code, options }) => {
+    if (!code) throw new Error('脚本代码不能为空');
+    return scriptEngineService.executeScript(code, options || {});
+  });
+
+  registerIpcHandler<{ code: string }, unknown>('script:validate', async ({ code }) => {
+    if (!code) throw new Error('脚本代码不能为空');
+    return scriptEngineService.validateScript(code);
+  });
+
+  registerIpcHandler<{}, unknown>('script:stats', async () => {
+    return scriptEngineService.getStats();
   });
 }
