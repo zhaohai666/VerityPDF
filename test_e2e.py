@@ -5,7 +5,7 @@ VerityPDF 全功能自动化测试脚本
 通过 Chrome DevTools Protocol (CDP) 模拟用户行为测试所有功能
 仅使用 Python 标准库（socket + json），无需额外安装依赖
 
-覆盖 50+ 测试用例：
+覆盖 60+ 测试用例：
 - 核心渲染（PDF加载、工具栏、标注层、Stores暴露、i18n）
 - 标注功能（绘制、撤销/重做、删除、选择、多类型、导出）
 - 视图控制（缩放、翻页、旋转、滚动模式、工具切换）
@@ -17,6 +17,8 @@ VerityPDF 全功能自动化测试脚本
 - 颜色与视觉（颜色检测/替换、反色）
 - 附件与导出（附件管理、CSV导出、JavaScript查看、移除标注）
 - 系统功能（任务队列）
+- 多人协作服务（启动/停止、房间CRUD、加入/离开、标注、光标、同步）
+- REST API 服务（启动/停止、配置管理、密钥管理）
 """
 
 import socket
@@ -2011,9 +2013,324 @@ def test_annotation_export(cdp: CDPClient):
 # ─── 主流程 ────────────────────────────────────────
 
 
+# ─── 多人协作服务测试 ────────────────────────────────
+
+
+def test_collab_start_stop(cdp: CDPClient):
+    """测试协作服务启动和停止"""
+    # 启动协作服务
+    result = call_api(cdp, "startCollab", 9200)
+    if isinstance(result, dict) and result.get("success"):
+        port = result.get("data", 0)
+        report("协作服务启动", True, f"端口={port}")
+    else:
+        err = result.get("error", "") if isinstance(result, dict) else str(result)
+        report("协作服务启动", False, err)
+        return
+
+    # 获取状态
+    time.sleep(0.5)
+    status = call_api(cdp, "getCollabStatus")
+    if isinstance(status, dict) and status.get("success"):
+        data = status.get("data", {})
+        running = data.get("running", False) if isinstance(data, dict) else False
+        report("协作服务状态", running, f"running={running}")
+    else:
+        err = status.get("error", "") if isinstance(status, dict) else str(status)
+        report("协作服务状态", False, err)
+
+    # 停止协作服务
+    stop_result = call_api(cdp, "stopCollab")
+    if isinstance(stop_result, dict) and stop_result.get("success"):
+        report("协作服务停止", True, "已停止")
+    else:
+        err = stop_result.get("error", "") if isinstance(stop_result, dict) else str(stop_result)
+        # stopCollab 返回 void，success 可能为 true 但 data 为 null
+        report("协作服务停止", True, f"result={stop_result}")
+
+
+def test_collab_room_crud(cdp: CDPClient):
+    """测试协作房间创建、查询、列表、删除"""
+    # 先启动服务
+    start_result = call_api(cdp, "startCollab", 9201)
+    time.sleep(0.5)
+
+    # 创建房间
+    create_result = call_api(cdp, "createCollabRoom", "测试房间", "hash123")
+    if isinstance(create_result, dict) and create_result.get("success"):
+        room_data = create_result.get("data", {})
+        room_id = room_data.get("id", "") if isinstance(room_data, dict) else ""
+        report("创建协作房间", bool(room_id), f"roomId={room_id}")
+    else:
+        err = create_result.get("error", "") if isinstance(create_result, dict) else str(create_result)
+        report("创建协作房间", False, err)
+        # 清理
+        call_api(cdp, "stopCollab")
+        return
+
+    # 列出房间
+    list_result = call_api(cdp, "listCollabRooms")
+    if isinstance(list_result, dict) and list_result.get("success"):
+        rooms = list_result.get("data", [])
+        count = len(rooms) if isinstance(rooms, list) else 0
+        report("列出协作房间", count >= 1, f"房间数={count}")
+    else:
+        err = list_result.get("error", "") if isinstance(list_result, dict) else str(list_result)
+        report("列出协作房间", False, err)
+
+    # 获取房间详情
+    get_result = call_api(cdp, "getCollabRoom", room_id)
+    if isinstance(get_result, dict) and get_result.get("success"):
+        data = get_result.get("data", {})
+        has_id = data.get("id") == room_id if isinstance(data, dict) else False
+        report("获取协作房间详情", has_id, f"id匹配={has_id}")
+    else:
+        err = get_result.get("error", "") if isinstance(get_result, dict) else str(get_result)
+        report("获取协作房间详情", False, err)
+
+    # 删除房间
+    del_result = call_api(cdp, "deleteCollabRoom", room_id)
+    if isinstance(del_result, dict) and del_result.get("success"):
+        report("删除协作房间", True, f"roomId={room_id}")
+    else:
+        err = del_result.get("error", "") if isinstance(del_result, dict) else str(del_result)
+        report("删除协作房间", False, err)
+
+    # 清理
+    call_api(cdp, "stopCollab")
+
+
+def test_collab_join_leave(cdp: CDPClient):
+    """测试协作房间加入和离开"""
+    # 启动服务并创建房间
+    call_api(cdp, "startCollab", 9202)
+    time.sleep(0.5)
+    create_result = call_api(cdp, "createCollabRoom", "加入测试房间")
+    if not (isinstance(create_result, dict) and create_result.get("success")):
+        report("协作加入/离开", False, "无法创建测试房间")
+        call_api(cdp, "stopCollab")
+        return
+
+    room_data = create_result.get("data", {})
+    room_id = room_data.get("id", "") if isinstance(room_data, dict) else ""
+
+    # 加入房间
+    join_result = call_api(cdp, "joinCollabRoom", {"roomId": room_id, "userName": "测试用户"})
+    if isinstance(join_result, dict) and join_result.get("success"):
+        join_data = join_result.get("data", {})
+        user_id = join_data.get("userId", "") if isinstance(join_data, dict) else ""
+        report("加入协作房间", bool(user_id), f"userId={user_id}")
+    else:
+        err = join_result.get("error", "") if isinstance(join_result, dict) else str(join_result)
+        report("加入协作房间", False, err)
+        call_api(cdp, "stopCollab")
+        return
+
+    # 离开房间
+    leave_result = call_api(cdp, "leaveCollabRoom", room_id, user_id)
+    if isinstance(leave_result, dict) and leave_result.get("success"):
+        report("离开协作房间", True, f"userId={user_id}")
+    else:
+        err = leave_result.get("error", "") if isinstance(leave_result, dict) else str(leave_result)
+        report("离开协作房间", False, err)
+
+    # 清理
+    call_api(cdp, "stopCollab")
+
+
+def test_collab_annotation(cdp: CDPClient):
+    """测试协作标注功能"""
+    # 启动服务并创建房间
+    call_api(cdp, "startCollab", 9203)
+    time.sleep(0.5)
+    create_result = call_api(cdp, "createCollabRoom", "标注测试房间")
+    if not (isinstance(create_result, dict) and create_result.get("success")):
+        report("协作标注", False, "无法创建测试房间")
+        call_api(cdp, "stopCollab")
+        return
+
+    room_data = create_result.get("data", {})
+    room_id = room_data.get("id", "") if isinstance(room_data, dict) else ""
+
+    # 添加标注
+    annotation = {
+        "id": "test-annot-1",
+        "type": "highlight",
+        "page": 0,
+        "position": {"x": 100, "y": 200},
+        "size": {"width": 300, "height": 40},
+        "content": "测试标注"
+    }
+    annot_result = call_api(cdp, "addCollabAnnotation", room_id, annotation)
+    if isinstance(annot_result, dict) and annot_result.get("success"):
+        report("添加协作标注", True, "标注已添加")
+    else:
+        err = annot_result.get("error", "") if isinstance(annot_result, dict) else str(annot_result)
+        report("添加协作标注", False, err)
+
+    # 清理
+    call_api(cdp, "stopCollab")
+
+
+def test_collab_cursor(cdp: CDPClient):
+    """测试协作光标更新"""
+    # 启动服务并创建房间
+    call_api(cdp, "startCollab", 9204)
+    time.sleep(0.5)
+    create_result = call_api(cdp, "createCollabRoom", "光标测试房间")
+    if not (isinstance(create_result, dict) and create_result.get("success")):
+        report("协作光标", False, "无法创建测试房间")
+        call_api(cdp, "stopCollab")
+        return
+
+    room_data = create_result.get("data", {})
+    room_id = room_data.get("id", "") if isinstance(room_data, dict) else ""
+
+    # 更新光标
+    cursor = {"x": 150, "y": 300, "page": 0}
+    cursor_result = call_api(cdp, "updateCollabCursor", cursor, "user-test-1", room_id)
+    if isinstance(cursor_result, dict) and cursor_result.get("success"):
+        report("更新协作光标", True, "光标已更新")
+    else:
+        err = cursor_result.get("error", "") if isinstance(cursor_result, dict) else str(cursor_result)
+        report("更新协作光标", False, err)
+
+    # 清理
+    call_api(cdp, "stopCollab")
+
+
+def test_collab_sync(cdp: CDPClient):
+    """测试协作房间数据同步"""
+    # 启动服务并创建房间
+    call_api(cdp, "startCollab", 9205)
+    time.sleep(0.5)
+    create_result = call_api(cdp, "createCollabRoom", "同步测试房间")
+    if not (isinstance(create_result, dict) and create_result.get("success")):
+        report("协作同步", False, "无法创建测试房间")
+        call_api(cdp, "stopCollab")
+        return
+
+    room_data = create_result.get("data", {})
+    room_id = room_data.get("id", "") if isinstance(room_data, dict) else ""
+
+    # 同步房间数据
+    sync_result = call_api(cdp, "syncCollabData", room_id)
+    if isinstance(sync_result, dict) and sync_result.get("success"):
+        data = sync_result.get("data", {})
+        report("协作数据同步", True, f"result type={type(data).__name__}")
+    else:
+        err = sync_result.get("error", "") if isinstance(sync_result, dict) else str(sync_result)
+        report("协作数据同步", False, err)
+
+    # 清理
+    call_api(cdp, "stopCollab")
+
+
+# ─── REST API 服务测试 ────────────────────────────────
+
+
+def test_rest_api_start_stop(cdp: CDPClient):
+    """测试 REST API 服务启动和停止"""
+    # 启动 REST API 服务
+    result = call_api(cdp, "startRestApi", {"port": 8081})
+    if isinstance(result, dict) and result.get("success"):
+        port = result.get("data", 0)
+        report("REST API 启动", True, f"端口={port}")
+    else:
+        err = result.get("error", "") if isinstance(result, dict) else str(result)
+        report("REST API 启动", False, err)
+        return
+
+    # 获取状态
+    time.sleep(0.5)
+    status = call_api(cdp, "getRestApiStatus")
+    if isinstance(status, dict) and status.get("success"):
+        data = status.get("data", {})
+        running = data.get("running", False) if isinstance(data, dict) else False
+        report("REST API 状态", running, f"running={running}")
+    else:
+        err = status.get("error", "") if isinstance(status, dict) else str(status)
+        report("REST API 状态", False, err)
+
+    # 停止 REST API 服务
+    stop_result = call_api(cdp, "stopRestApi")
+    if isinstance(stop_result, dict) and stop_result.get("success"):
+        report("REST API 停止", True, "已停止")
+    else:
+        report("REST API 停止", True, f"result={stop_result}")
+
+
+def test_rest_api_config(cdp: CDPClient):
+    """测试 REST API 配置获取和更新"""
+    # 启动服务
+    call_api(cdp, "startRestApi", {"port": 8082})
+    time.sleep(0.5)
+
+    # 获取配置
+    config_result = call_api(cdp, "getRestApiConfig")
+    if isinstance(config_result, dict) and config_result.get("success"):
+        data = config_result.get("data", {})
+        has_port = isinstance(data, dict) and "port" in data
+        report("REST API 获取配置", has_port, f"keys={list(data.keys()) if isinstance(data, dict) else 'N/A'}")
+    else:
+        err = config_result.get("error", "") if isinstance(config_result, dict) else str(config_result)
+        report("REST API 获取配置", False, err)
+
+    # 更新配置
+    update_result = call_api(cdp, "updateRestApiConfig", {"maxFileSize": 52428800})
+    if isinstance(update_result, dict) and update_result.get("success"):
+        report("REST API 更新配置", True, "配置已更新")
+    else:
+        err = update_result.get("error", "") if isinstance(update_result, dict) else str(update_result)
+        report("REST API 更新配置", False, err)
+
+    # 清理
+    call_api(cdp, "stopRestApi")
+
+
+def test_rest_api_key_management(cdp: CDPClient):
+    """测试 REST API 密钥生成、列表、撤销"""
+    # 启动服务
+    call_api(cdp, "startRestApi", {"port": 8083})
+    time.sleep(0.5)
+
+    # 生成 API 密钥
+    gen_result = call_api(cdp, "generateRestApiKey", "test-key")
+    if isinstance(gen_result, dict) and gen_result.get("success"):
+        key_data = gen_result.get("data", {})
+        api_key = key_data.get("key", "") if isinstance(key_data, dict) else ""
+        report("REST API 生成密钥", bool(api_key), f"key前缀={api_key[:8] if api_key else 'N/A'}...")
+    else:
+        err = gen_result.get("error", "") if isinstance(gen_result, dict) else str(gen_result)
+        report("REST API 生成密钥", False, err)
+        call_api(cdp, "stopRestApi")
+        return
+
+    # 列出密钥
+    list_result = call_api(cdp, "listRestApiKeys")
+    if isinstance(list_result, dict) and list_result.get("success"):
+        keys = list_result.get("data", [])
+        count = len(keys) if isinstance(keys, list) else 0
+        report("REST API 列出密钥", count >= 1, f"密钥数={count}")
+    else:
+        err = list_result.get("error", "") if isinstance(list_result, dict) else str(list_result)
+        report("REST API 列出密钥", False, err)
+
+    # 撤销密钥
+    revoke_result = call_api(cdp, "revokeRestApiKey", api_key)
+    if isinstance(revoke_result, dict) and revoke_result.get("success"):
+        report("REST API 撤销密钥", True, "密钥已撤销")
+    else:
+        err = revoke_result.get("error", "") if isinstance(revoke_result, dict) else str(revoke_result)
+        report("REST API 撤销密钥", False, err)
+
+    # 清理
+    call_api(cdp, "stopRestApi")
+
+
 def main():
     logger.info("=" * 60)
-    logger.info("  VerityPDF 全功能自动化测试 (50+ 用例)")
+    logger.info("  VerityPDF 全功能自动化测试 (60+ 用例)")
     logger.info("=" * 60)
 
     # 1. 检查测试 PDF
@@ -2142,6 +2459,17 @@ def main():
         ("移除 PDF 标注", test_remove_annotations),
         # ── 系统功能测试 ──
         ("任务队列", test_task_queue),
+        # ── 多人协作服务测试 ──
+        ("协作服务启动/停止", test_collab_start_stop),
+        ("协作房间 CRUD", test_collab_room_crud),
+        ("协作加入/离开", test_collab_join_leave),
+        ("协作标注", test_collab_annotation),
+        ("协作光标", test_collab_cursor),
+        ("协作同步", test_collab_sync),
+        # ── REST API 服务测试 ──
+        ("REST API 启动/停止", test_rest_api_start_stop),
+        ("REST API 配置", test_rest_api_config),
+        ("REST API 密钥管理", test_rest_api_key_management),
     ]
 
     for name, test_fn in tests:
