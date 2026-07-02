@@ -2638,45 +2638,143 @@ Week 21-24: [测试发布] ────── 依赖: 全部模块              
 
 | 通道名称 | 方向 | 参数 | 返回值 | 说明 |
 |----------|------|------|--------|------|
-| `pdf:open` | R→M | `{ filePath: string }` | `{ success: boolean, data?: ArrayBuffer }` | 打开 PDF 文件 |
-| `pdf:getRecentFiles` | R→M | — | `string[]` | 获取最近文件列表 |
-| `annotation:save` | R→M | `{ filePath, data }` | `{ success: boolean }` | 保存 .verity 文件 |
-| `annotation:load` | R→M | `{ filePath }` | `{ success, data? }` | 加载 .verity 文件 |
-| `export:merge` | R→M | `{ pdfPath, annotations, outputPath }` | `{ success, outputPath? }` | 导出标注 PDF |
-| `file:dialog` | R→M | `{ type: 'open'|'save', filters }` | `string | null` | 文件对话框 |
-| `app:getVersion` | R→M | — | `string` | 获取应用版本 |
-| `app:getPlatform` | R→M | — | `string` | 获取平台信息 |
+| **文件操作** | | | | |
+| `file:open` | R→M | — | `string \| null` | 打开文件对话框 |
+| `file:read` | R→M | `{ filePath }` | `ArrayBuffer` | 读取文件内容 |
+| `file:save` | R→M | `{ data, defaultName }` | `string \| null` | 保存文件对话框 |
+| `file:exists` | R→M | `{ filePath }` | `boolean` | 检查文件是否存在 |
+| **PDF 操作** | | | | |
+| `pdf:open` | R→M | `{ filePath }` | `PdfOpenResult` | 打开 PDF 文件 |
+| `pdf:save` | R→M | `{ filePath, data }` | `boolean` | 保存 PDF 文件 |
+| `pdf:export` | R→M | `{ options }` | `ExportResult` | 导出 PDF |
+| `pdf:pdfaConvert` | R→M | `{ pdfData, flavour, options }` | `PdfAConvertResult` | PDF/A 转换 |
+| **标注操作** | | | | |
+| `annotation:save` | R→M | `{ filePath, data }` | `boolean` | 保存 .verity 文件 |
+| `annotation:load` | R→M | `{ filePath }` | `AnnotationData` | 加载 .verity 文件 |
+| **字体管理** | | | | |
+| `font:listFamilies` | R→M | — | `FontFamilyInfo[]` | 列出字体族 |
+| `font:getInfo` | R→M | `{ family, weight }` | `FontInfo` | 获取字体信息 |
+| `font:getPath` | R→M | `{ family, weight }` | `string \| null` | 获取字体路径 |
+| `font:register` | R→M | `{ family, weight }` | `boolean` | 注册字体 |
+| `font:registerFamily` | R→M | `{ family }` | `{ registered, failed }` | 注册字体族 |
+| `font:verifyIntegrity` | R→M | `{ family, weight }` | `boolean` | 验证字体完整性 |
+| `font:getAvailable` | R→M | — | `FontInfo[]` | 获取可用字体 |
+| `font:export` | R→M | `{ targetDir, family }` | `string[]` | 导出字体 |
+| **审计日志** | | | | |
+| `audit:initialize` | R→M | — | `void` | 初始化审计日志 |
+| `audit:log` | R→M | `{ action, ...options }` | `AuditLogEntry` | 记录审计日志 |
+| `audit:query` | R→M | `{ query }` | `AuditLogEntry[]` | 查询审计日志 |
+| `audit:verifyIntegrity` | R→M | — | `IntegrityCheckResult` | 验证完整性 |
+| `audit:getStats` | R→M | — | `AuditLogStats` | 获取统计信息 |
+| `audit:export` | R→M | `{ format }` | `string` | 导出审计日志 |
+| `audit:close` | R→M | — | `void` | 关闭审计日志 |
+| **PDF/A 验证** | | | | |
+| `pdfa:validate` | R→M | `{ pdfData, flavour }` | `PdfAValidationResult` | 验证 PDF/A 合规性 |
+| `pdfa:checkGs` | R→M | — | `{ available, version }` | 检测 Ghostscript |
+| `pdfa:checkVeraPdf` | R→M | — | `{ available, version }` | 检测 VeraPDF |
+| **国密算法 (SM2)** | | | | |
+| `sm2:generateKeyPair` | R→M | — | `{ privateKey, publicKey }` | 生成 SM2 密钥对 |
+| `sm2:sign` | R→M | `{ data, privateKey, publicKey, der, userId }` | `string` | SM2 签名 |
+| `sm2:verify` | R→M | `{ data, signature, publicKey, der, userId }` | `boolean` | SM2 验签 |
+| `sm2:encrypt` | R→M | `{ data, publicKey, cipherMode }` | `string` | SM2 加密 |
+| `sm2:decrypt` | R→M | `{ cipherText, privateKey, cipherMode }` | `string` | SM2 解密 |
+| **国密算法 (SM3)** | | | | |
+| `sm3:hash` | R→M | `{ data, key }` | `string` | SM3 哈希/HMAC |
+| **国密算法 (SM4)** | | | | |
+| `sm4:generateKey` | R→M | — | `string` | 生成 SM4 密钥 |
+| `sm4:encrypt` | R→M | `{ data, key, mode, iv }` | `string` | SM4 加密 |
+| `sm4:decrypt` | R→M | `{ cipherText, key, mode, iv }` | `string` | SM4 解密 |
+| `sm4:encryptFile` | R→M | `{ pdfData, key, iv }` | `string` | SM4 文件加密 |
+| `sm4:decryptFile` | R→M | `{ cipherText, key, iv }` | `string` | SM4 文件解密 |
+| **窗口控制** | | | | |
 | `window:minimize` | R→M | — | — | 最小化窗口 |
-| `window:maximize` | R→M | — | — | 最大化窗口 |
+| `window:maximize` | R→M | — | — | 最大化/还原窗口 |
 | `window:close` | R→M | — | — | 关闭窗口 |
-| `update:check` | R→M | — | `{ hasUpdate, version }` | 检查更新 |
+| `window:isMaximized` | R→M | — | `boolean` | 窗口是否最大化 |
+| **系统** | | | | |
+| `system:clipboardWrite` | R→M | `{ text }` | — | 写入剪贴板 |
+| `system:clipboardRead` | R→M | — | `string` | 读取剪贴板 |
+| `system:showInFolder` | R→M | `{ filePath }` | — | 在文件夹中显示 |
+| `system:openExternal` | R→M | `{ url }` | — | 打开外部链接 |
 
 ### E.2 Preload API 接口
 
 ```typescript
 // preload.ts 暴露的安全 API
 interface VerityAPI {
-  // 文件操作
+  // ── 文件操作 ──
   openFile(): Promise<string | null>;
   saveFile(data: string, defaultPath: string): Promise<boolean>;
   readFile(filePath: string): Promise<ArrayBuffer>;
+  fileExists(filePath: string): Promise<boolean>;
 
-  // 应用信息
-  getVersion(): string;
-  getPlatform(): string;
+  // ── PDF 操作 ──
+  openPdf(filePath: string): Promise<PdfOpenResult>;
+  savePdf(filePath: string, data: ArrayBuffer): Promise<boolean>;
+  exportPdf(options: ExportOptions): Promise<ExportResult>;
+  convertToPdfA(pdfData: string, flavour: string, options?: PdfAConvertOptions): Promise<PdfAConvertResult>;
 
-  // 窗口控制
+  // ── 标注操作 ──
+  saveAnnotations(filePath: string, data: string): Promise<boolean>;
+  loadAnnotations(filePath: string): Promise<AnnotationData>;
+
+  // ── 字体管理 ──
+  listFontFamilies(): Promise<FontFamilyInfo[]>;
+  getFontInfo(family: string, weight: string): Promise<FontInfo>;
+  getFontPath(family: string, weight?: string): Promise<string | null>;
+  registerFont(family: string, weight?: string): Promise<boolean>;
+  registerFontFamily(family: string): Promise<{ registered: number; failed: number }>;
+  verifyFontIntegrity(family: string, weight: string): Promise<boolean>;
+  getAvailableFonts(): Promise<FontInfo[]>;
+  exportFonts(targetDir: string, family?: string): Promise<string[]>;
+
+  // ── 审计日志 ──
+  initializeAudit(): Promise<void>;
+  logAudit(action: string, options?: Record<string, unknown>): Promise<AuditLogEntry>;
+  queryAudit(query?: AuditLogQuery): Promise<AuditLogEntry[]>;
+  verifyAuditIntegrity(): Promise<IntegrityCheckResult>;
+  getAuditStats(): Promise<AuditLogStats>;
+  exportAuditLogs(format?: string): Promise<string>;
+  closeAudit(): Promise<void>;
+
+  // ── PDF/A 验证 ──
+  validatePdfA(pdfData: string, flavour?: string): Promise<PdfAValidationResult>;
+  checkGhostscript(): Promise<{ available: boolean; version?: string }>;
+  checkVeraPdf(): Promise<{ available: boolean; version?: string }>;
+
+  // ── 国密算法 (SM2) ──
+  sm2GenerateKeyPair(): Promise<{ privateKey: string; publicKey: string }>;
+  sm2Sign(data: string, privateKey: string, publicKey: string, options?: { der?: boolean; userId?: string }): Promise<string>;
+  sm2Verify(data: string, signature: string, publicKey: string, options?: { der?: boolean; userId?: string }): Promise<boolean>;
+  sm2Encrypt(data: string, publicKey: string, cipherMode?: number): Promise<string>;
+  sm2Decrypt(cipherText: string, privateKey: string, cipherMode?: number): Promise<string>;
+
+  // ── 国密算法 (SM3) ──
+  sm3Hash(data: string, key?: string): Promise<string>;
+
+  // ── 国密算法 (SM4) ──
+  sm4GenerateKey(): Promise<string>;
+  sm4Encrypt(data: string, key: string, options?: { mode?: string; iv?: string }): Promise<string>;
+  sm4Decrypt(cipherText: string, key: string, options?: { mode?: string; iv?: string }): Promise<string>;
+  sm4EncryptFile(pdfData: string, key: string, iv?: string): Promise<string>;
+  sm4DecryptFile(cipherText: string, key: string, iv?: string): Promise<string>;
+
+  // ── 窗口控制 ──
   minimizeWindow(): void;
   maximizeWindow(): void;
   closeWindow(): void;
+  isMaximized(): boolean;
 
-  // 事件监听
+  // ── 系统操作 ──
+  clipboardWrite(text: string): void;
+  clipboardRead(): string;
+  showInFolder(filePath: string): void;
+  openExternal(url: string): void;
+
+  // ── 事件监听 ──
   onMenuAction(callback: (action: string) => void): void;
   onFileOpen(callback: (filePath: string) => void): void;
   onBeforeClose(callback: () => Promise<boolean>): void;
-
-  // 更新
-  checkForUpdates(): Promise<UpdateInfo>;
 }
 
 declare global {

@@ -1,7 +1,7 @@
 # VerityPDF — 软件开发技术文档
 
-> **版本**: v1.0.0  
-> **最后更新**: 2026-06-15  
+> **版本**: v0.0.1  
+> **最后更新**: 2026-07-02  
 > **技术栈**: Electron 30 · PDF.js 4.x · Konva.js 9.x · React 18 · TypeScript 5 · Vite 5
 
 ---
@@ -4103,7 +4103,7 @@ export const Toolbar: React.FC = () => {
 ### 11.1 通道定义
 
 ```typescript
-// src/types/ipc.ts
+// src/types/electron.ts
 
 /**
  * IPC 通道定义
@@ -4112,179 +4112,677 @@ export const Toolbar: React.FC = () => {
 export const IPC_CHANNELS = {
   // ── 文件操作 ──
   FILE_OPEN:           'file:open',
-  FILE_READ:           'file:read',
   FILE_SAVE:           'file:save',
-  FILE_EXISTS:         'file:exists',
-  FILE_RECENT_LIST:    'file:recent-list',
-  FILE_RECENT_CLEAR:   'file:recent-clear',
+  FILE_READ:           'file:read',
+  FILE_DIALOG:         'file:dialog',
+  FILE_RECENT:         'file:recent',
 
-  // ── PDF 导出 ──
-  EXPORT_PDF:          'export:pdf',
-  EXPORT_IMAGE:        'export:image',
+  // ── PDF 操作 ──
+  PDF_LOAD:            'pdf:load',
+  PDF_GET_INFO:        'pdf:getInfo',
+  PDF_REPAIR:          'pdf:repair',
+  PDF_EDIT_TEXT:       'pdf:editText',
+  PDF_GET_TEXT_SEGMENTS: 'pdf:getTextSegments',
+  PDF_MULTI_MERGE:     'pdf:multiMerge',
+  PDF_SPLIT:           'pdf:split',
+  PDF_SELECT_FILES:    'pdf:selectFiles',
+  PDF_OVERLAY:         'pdf:overlay',
+  PDF_EXTRACT_IMAGES:  'pdf:extractImages',
+  PDF_SAVE_EXTRACTED_IMAGES: 'pdf:saveExtractedImages',
+  PDF_REMOVE_ANNOTATIONS: 'pdf:removeAnnotations',
+  PDF_DETECT_ANNOTATIONS: 'pdf:detectAnnotations',
+  PDF_GET_METADATA:    'pdf:getMetadata',
+  PDF_SET_METADATA:    'pdf:setMetadata',
+  PDF_RESIZE_PAGES:    'pdf:resizePages',
+  PDF_NUP:             'pdf:nup',
+  PDF_DIFF:            'pdf:diff',
+  PDF_DETECT_SENSITIVE: 'pdf:detectSensitive',
+  PDF_REDACT_SENSITIVE: 'pdf:redactSensitive',
+  PDF_BOOKLET:         'pdf:booklet',
+  PDF_DETECT_COLORS:   'pdf:detectColors',
+  PDF_REPLACE_COLORS:  'pdf:replaceColors',
+  PDF_SANITIZE:        'pdf:sanitize',
+  PDF_PDF_A_CONVERT:   'pdf:pdfaConvert',
+  PDF_SPLIT_BOOKMARKS: 'pdf:splitBookmarks',
+  PDF_INVERT_COLORS:   'pdf:invertColors',
+  PDF_REMOVE_IMAGES:   'pdf:removeImages',
+  PDF_LIST_ATTACHMENTS: 'pdf:listAttachments',
+  PDF_ADD_ATTACHMENT:  'pdf:addAttachment',
+  PDF_EXTRACT_ATTACHMENTS: 'pdf:extractAttachments',
+  PDF_INFO_JSON:       'pdf:infoJson',
+  PDF_SCANNER_EFFECT:  'pdf:scannerEffect',
+  PDF_CSV_EXPORT:      'pdf:csvExport',
+  PDF_SHOW_JS:         'pdf:showJs',
 
-  // ── 系统 ──
-  SYSTEM_CLIPBOARD_WRITE: 'system:clipboard-write',
-  SYSTEM_CLIPBOARD_READ:  'system:clipboard-read',
-  SYSTEM_SHOW_IN_FOLDER:  'system:show-in-folder',
-  SYSTEM_OPEN_EXTERNAL:   'system:open-external',
+  // ── 标注操作 ──
+  ANNOTATION_SAVE:     'annotation:save',
+  ANNOTATION_LOAD:     'annotation:load',
 
-  // ── 窗口 ──
-  WINDOW_MINIMIZE:       'window:minimize',
-  WINDOW_MAXIMIZE:       'window:maximize',
-  WINDOW_CLOSE:          'window:close',
-  WINDOW_IS_MAXIMIZED:   'window:is-maximized',
-  WINDOW_MAXIMIZED_CHANGED: 'window:maximized-changed',
+  // ── 导出 ──
+  EXPORT_MERGE:        'export:merge',
+  EXPORT_IMAGES:       'export:images',
 
-  // ── 自动更新 ──
-  UPDATER_CHECK:         'updater:check',
-  UPDATER_DOWNLOAD:      'updater:download',
-  UPDATER_INSTALL:       'updater:install',
-  UPDATER_AVAILABLE:     'updater:available',
-  UPDATER_PROGRESS:      'updater:progress',
+  // ── 页面管理 ──
+  PAGE_EXTRACT:        'page:extract',
+  PAGE_MANIPULATE:     'page:manipulate',
 
-  // ── 菜单事件 (Main → Renderer) ──
-  MENU_ACTION:           'menu:action',
-  FILE_OPEN_FROM_ARGV:   'file:open-from-argv',
-  MENU_PRINT:            'menu:print',
+  // ── 加密 ──
+  ENCRYPT_APPLY:       'encrypt:apply',
+  ENCRYPT_REMOVE:      'encrypt:remove',
+  ENCRYPT_DECRYPT:     'encrypt:decrypt',
+  ENCRYPT_CHECK_QPDF:  'encrypt:checkQpdf',
 
-  // ── 应用 ──
-  APP_VERSION:           'app:version',
+  // ── 压缩 ──
+  COMPRESS_CHECK_GS:   'compress:checkGs',
+  COMPRESS_SMART:      'compress:smart',
+
+  // ── 密文擦除 ──
+  REDACT_APPLY:        'redact:apply',
+
+  // ── 表单 ──
+  FORM_DETECT:         'form:detect',
+  FORM_FILL:           'form:fill',
+  FORM_FLATTEN:        'form:flatten',
+
+  // ── 签名 ──
+  SIGNATURE_SIGN:      'signature:sign',
+  SIGNATURE_VERIFY:    'signature:verify',
+  SIGNATURE_LOAD_CERT: 'signature:loadCert',
+  SIGNATURE_PADES:     'signature:signPades',
+  SIGNATURE_VERIFY_PADES: 'signature:verifyPades',
+  SIGNATURE_VERIFY_CHAIN: 'signature:verifyChain',
+
+  // ── 格式转换 ──
+  CONVERT_CHECK:       'convert:check',
+  CONVERT_FILE:        'convert:file',
+  CONVERT_BATCH:       'convert:batch',
+  CONVERT_TO_PDF:      'convert:toPdf',
+  CONVERT_SELECT_FILES: 'convert:selectFiles',
+
+  // ── 批量页面操作 ──
+  BATCH_PAGE_OPERATE:  'batch:pageOperate',
+  BATCH_DETECT_BLANK:  'batch:detectBlank',
+  BATCH_CROP:          'batch:crop',
+  BATCH_ADD_WATERMARK: 'batch:addWatermark',
+  BATCH_ADD_PAGE_NUMBERS: 'batch:addPageNumbers',
+  BATCH_ADD_HEADER_FOOTER: 'batch:addHeaderFooter',
+  BATCH_PROGRESS:      'batch:progress',
+
+  // ── 图片转 PDF ──
+  IMAGE_TO_PDF:        'image:toPdf',
+
+  // ── 图片编辑 ──
+  IMAGE_EDIT_EXTRACT:  'image:extractPage',
+  IMAGE_EDIT_REPLACE:  'image:replace',
+  IMAGE_EDIT_LAYOUT:   'image:getLayout',
+  IMAGE_EDIT_ROTATE:   'image:rotate',
+  IMAGE_EDIT_CROP:     'image:crop',
+  IMAGE_EDIT_SCALE:    'image:scale',
+  IMAGE_EDIT_FILTER:   'image:filter',
+  IMAGE_EDIT_FILTER_ALL: 'image:filterAll',
 
   // ── 超链接标注 ──
-  HYPERLINK_LIST:        'hyperlink:list',
-  HYPERLINK_ADD:         'hyperlink:add',
-  HYPERLINK_EDIT:        'hyperlink:edit',
-  HYPERLINK_REMOVE:      'hyperlink:remove',
+  HYPERLINK_LIST:      'hyperlink:list',
+  HYPERLINK_ADD:       'hyperlink:add',
+  HYPERLINK_EDIT:      'hyperlink:edit',
+  HYPERLINK_REMOVE:    'hyperlink:remove',
 
   // ── 书签 ──
-  BOOKMARK_GET:          'bookmark:get',
-  BOOKMARK_EDIT:         'bookmark:edit',
-  BOOKMARK_SET:          'bookmark:set',
+  BOOKMARK_GET:        'bookmark:get',
+  BOOKMARK_EDIT:       'bookmark:edit',
+  BOOKMARK_SET:        'bookmark:set',
 
   // ── 脚本执行 ──
-  SCRIPT_EXECUTE:        'script:execute',
-  SCRIPT_VALIDATE:       'script:validate',
-  SCRIPT_STATS:          'script:stats',
+  SCRIPT_EXECUTE:      'script:execute',
+  SCRIPT_VALIDATE:     'script:validate',
+  SCRIPT_STATS:        'script:stats',
+
+  // ── 多人协作 ──
+  COLLAB_START:        'collab:start',
+  COLLAB_STOP:         'collab:stop',
+  COLLAB_STATUS:       'collab:status',
+  COLLAB_CREATE_ROOM:  'collab:createRoom',
+  COLLAB_DELETE_ROOM:  'collab:deleteRoom',
+  COLLAB_LIST_ROOMS:   'collab:listRooms',
+  COLLAB_GET_ROOM:     'collab:getRoom',
+  COLLAB_JOIN_ROOM:    'collab:joinRoom',
+  COLLAB_LEAVE_ROOM:   'collab:leaveRoom',
+  COLLAB_ANNOTATE:     'collab:annotate',
+  COLLAB_CURSOR:       'collab:cursor',
+  COLLAB_SYNC:         'collab:sync',
+
+  // ── REST API ──
+  REST_API_START:      'rest-api:start',
+  REST_API_STOP:       'rest-api:stop',
+  REST_API_STATUS:     'rest-api:status',
+  REST_API_CONFIG:     'rest-api:config',
+  REST_API_UPDATE_CONFIG: 'rest-api:updateConfig',
+  REST_API_GENERATE_KEY: 'rest-api:generateKey',
+  REST_API_REVOKE_KEY: 'rest-api:revokeKey',
+  REST_API_LIST_KEYS:  'rest-api:listKeys',
+
+  // ── 字体管理 ──
+  FONT_LIST_FAMILIES:  'font:listFamilies',
+  FONT_GET_INFO:       'font:getInfo',
+  FONT_GET_PATH:       'font:getPath',
+  FONT_REGISTER:       'font:register',
+  FONT_REGISTER_FAMILY: 'font:registerFamily',
+  FONT_VERIFY_INTEGRITY: 'font:verifyIntegrity',
+  FONT_GET_AVAILABLE:  'font:getAvailable',
+  FONT_EXPORT:         'font:export',
+
+  // ── 审计日志 ──
+  AUDIT_INITIALIZE:    'audit:initialize',
+  AUDIT_LOG:           'audit:log',
+  AUDIT_QUERY:         'audit:query',
+  AUDIT_VERIFY_INTEGRITY: 'audit:verifyIntegrity',
+  AUDIT_GET_STATS:     'audit:getStats',
+  AUDIT_EXPORT:        'audit:export',
+  AUDIT_CLOSE:         'audit:close',
+
+  // ── PDF/A 验证 ──
+  PDFA_VALIDATE:       'pdfa:validate',
+  PDFA_CHECK_GS:       'pdfa:checkGs',
+  PDFA_CHECK_VERAPDF:  'pdfa:checkVeraPdf',
+
+  // ── 国密算法 (SM-crypto) ──
+  SM2_GENERATE_KEY_PAIR: 'sm2:generateKeyPair',
+  SM2_SIGN:            'sm2:sign',
+  SM2_VERIFY:          'sm2:verify',
+  SM2_ENCRYPT:         'sm2:encrypt',
+  SM2_DECRYPT:         'sm2:decrypt',
+  SM3_HASH:            'sm3:hash',
+  SM4_GENERATE_KEY:    'sm4:generateKey',
+  SM4_ENCRYPT:         'sm4:encrypt',
+  SM4_DECRYPT:         'sm4:decrypt',
+  SM4_ENCRYPT_FILE:    'sm4:encryptFile',
+  SM4_DECRYPT_FILE:    'sm4:decryptFile',
+
+  // ── 任务队列 ──
+  TASK_SUBMIT:         'task:submit',
+  TASK_CANCEL:         'task:cancel',
+  TASK_CANCEL_ALL:     'task:cancelAll',
+  TASK_RETRY:          'task:retry',
+  TASK_GET_STATUS:     'task:getStatus',
+  TASK_CLEAR_COMPLETED: 'task:clearCompleted',
+  TASK_REMOVE:         'task:remove',
+  TASK_PROGRESS:       'task:progress',
+  TASK_COMPLETED:      'task:completed',
+  TASK_SELECT_OUTPUT:  'task:selectOutput',
+  TASK_SELECT_INPUTS:  'task:selectInputs',
+
+  // ── 应用 ──
+  APP_VERSION:         'app:getVersion',
+  APP_PLATFORM:        'app:getPlatform',
+
+  // ── 窗口 ──
+  WINDOW_MINIMIZE:     'window:minimize',
+  WINDOW_MAXIMIZE:     'window:maximize',
+  WINDOW_CLOSE:        'window:close',
+  WINDOW_TITLE:        'window:setTitle',
+
+  // ── 更新 ──
+  UPDATE_CHECK:        'update:check',
+
+  // ── 菜单事件 (Main → Renderer) ──
+  MENU_ACTION:         'menu:action',
+  FILE_OPENED:         'file:opened',
+  BEFORE_CLOSE:        'app:beforeClose',
+  RENDERER_RECOVERED:  'app:rendererRecovered',
 } as const;
 
 /**
  * IPC 请求/响应类型映射
  */
 export interface IpcRequestMap {
+  // 文件操作
   [IPC_CHANNELS.FILE_OPEN]: void;
   [IPC_CHANNELS.FILE_READ]: { filePath: string };
   [IPC_CHANNELS.FILE_SAVE]: { data: ArrayBuffer; defaultName: string };
-  [IPC_CHANNELS.FILE_EXISTS]: { filePath: string };
-  [IPC_CHANNELS.EXPORT_PDF]: {
-    annotations: unknown[];
-    sourcePath: string;
-    outputPath: string;
-  };
-  [IPC_CHANNELS.SYSTEM_CLIPBOARD_WRITE]: { text: string };
-  [IPC_CHANNELS.SYSTEM_OPEN_EXTERNAL]: { url: string };
+  [IPC_CHANNELS.FILE_DIALOG]: FileDialogOptions;
+
+  // PDF 操作
+  [IPC_CHANNELS.PDF_LOAD]: { filePath: string };
+  [IPC_CHANNELS.PDF_GET_INFO]: { pdfData: string };
+  [IPC_CHANNELS.PDF_REPAIR]: { pdfData: string };
+
+  // 加密
+  [IPC_CHANNELS.ENCRYPT_APPLY]: { pdfData: string; options: EncryptOptions };
+  [IPC_CHANNELS.ENCRYPT_REMOVE]: { pdfData: string; password: string };
+
+  // 签名
+  [IPC_CHANNELS.SIGNATURE_SIGN]: { pdfData: string; options: SignOptions };
+  [IPC_CHANNELS.SIGNATURE_VERIFY]: { pdfData: string };
+
+  // 字体管理
+  [IPC_CHANNELS.FONT_LIST_FAMILIES]: void;
+  [IPC_CHANNELS.FONT_GET_INFO]: { family: string; weight: string };
+  [IPC_CHANNELS.FONT_GET_PATH]: { family: string; weight?: string };
+  [IPC_CHANNELS.FONT_REGISTER]: { family: string; weight?: string };
+  [IPC_CHANNELS.FONT_REGISTER_FAMILY]: { family: string };
+  [IPC_CHANNELS.FONT_VERIFY_INTEGRITY]: { family: string; weight: string };
+  [IPC_CHANNELS.FONT_GET_AVAILABLE]: void;
+  [IPC_CHANNELS.FONT_EXPORT]: { targetDir: string; family?: string };
+
+  // 审计日志
+  [IPC_CHANNELS.AUDIT_INITIALIZE]: void;
+  [IPC_CHANNELS.AUDIT_LOG]: { action: AuditAction; level?: string; userId?: string; resourceId?: string; details?: string };
+  [IPC_CHANNELS.AUDIT_QUERY]: { query?: AuditLogQuery };
+  [IPC_CHANNELS.AUDIT_VERIFY_INTEGRITY]: void;
+  [IPC_CHANNELS.AUDIT_GET_STATS]: void;
+  [IPC_CHANNELS.AUDIT_EXPORT]: { format?: string };
+  [IPC_CHANNELS.AUDIT_CLOSE]: void;
+
+  // PDF/A 验证
+  [IPC_CHANNELS.PDFA_VALIDATE]: { pdfData: string; flavour?: string };
+  [IPC_CHANNELS.PDFA_CHECK_GS]: void;
+  [IPC_CHANNELS.PDFA_CHECK_VERAPDF]: void;
+
+  // 国密算法
+  [IPC_CHANNELS.SM2_GENERATE_KEY_PAIR]: void;
+  [IPC_CHANNELS.SM2_SIGN]: { data: string; privateKey: string; publicKey: string };
+  [IPC_CHANNELS.SM2_VERIFY]: { data: string; signature: string; publicKey: string };
+  [IPC_CHANNELS.SM2_ENCRYPT]: { data: string; publicKey: string };
+  [IPC_CHANNELS.SM2_DECRYPT]: { cipherText: string; privateKey: string };
+  [IPC_CHANNELS.SM3_HASH]: { data: string; key?: string };
+  [IPC_CHANNELS.SM4_GENERATE_KEY]: void;
+  [IPC_CHANNELS.SM4_ENCRYPT]: { data: string; key: string };
+  [IPC_CHANNELS.SM4_DECRYPT]: { cipherText: string; key: string };
+  [IPC_CHANNELS.SM4_ENCRYPT_FILE]: { pdfData: string; key: string; iv?: string };
+  [IPC_CHANNELS.SM4_DECRYPT_FILE]: { cipherText: string; key: string; iv?: string };
 }
 
 export interface IpcResponseMap {
   [IPC_CHANNELS.FILE_OPEN]: string | null;
   [IPC_CHANNELS.FILE_READ]: ArrayBuffer;
   [IPC_CHANNELS.FILE_SAVE]: string | null;
-  [IPC_CHANNELS.FILE_EXISTS]: boolean;
-  [IPC_CHANNELS.EXPORT_PDF]: boolean;
-  [IPC_CHANNELS.SYSTEM_CLIPBOARD_READ]: string;
-  [IPC_CHANNELS.APP_VERSION]: string;
+  [IPC_CHANNELS.FILE_DIALOG]: string | null;
+
+  // 字体管理
+  [IPC_CHANNELS.FONT_LIST_FAMILIES]: FontFamilyInfo[];
+  [IPC_CHANNELS.FONT_GET_INFO]: FontInfo;
+  [IPC_CHANNELS.FONT_GET_PATH]: string | null;
+  [IPC_CHANNELS.FONT_REGISTER]: boolean;
+  [IPC_CHANNELS.FONT_REGISTER_FAMILY]: { registered: number; failed: number };
+  [IPC_CHANNELS.FONT_VERIFY_INTEGRITY]: boolean;
+  [IPC_CHANNELS.FONT_GET_AVAILABLE]: FontInfo[];
+  [IPC_CHANNELS.FONT_EXPORT]: string[];
+
+  // 审计日志
+  [IPC_CHANNELS.AUDIT_INITIALIZE]: void;
+  [IPC_CHANNELS.AUDIT_LOG]: AuditLogEntry;
+  [IPC_CHANNELS.AUDIT_QUERY]: AuditLogEntry[];
+  [IPC_CHANNELS.AUDIT_VERIFY_INTEGRITY]: IntegrityCheckResult;
+  [IPC_CHANNELS.AUDIT_GET_STATS]: AuditLogStats;
+  [IPC_CHANNELS.AUDIT_EXPORT]: string;
+  [IPC_CHANNELS.AUDIT_CLOSE]: void;
+
+  // PDF/A 验证
+  [IPC_CHANNELS.PDFA_VALIDATE]: PdfAValidationResult;
+  [IPC_CHANNELS.PDFA_CHECK_GS]: { available: boolean; version?: string };
+  [IPC_CHANNELS.PDFA_CHECK_VERAPDF]: { available: boolean; version?: string };
+
+  // 国密算法
+  [IPC_CHANNELS.SM2_GENERATE_KEY_PAIR]: { privateKey: string; publicKey: string };
+  [IPC_CHANNELS.SM2_SIGN]: string;
+  [IPC_CHANNELS.SM2_VERIFY]: boolean;
+  [IPC_CHANNELS.SM2_ENCRYPT]: string;
+  [IPC_CHANNELS.SM2_DECRYPT]: string;
+  [IPC_CHANNELS.SM3_HASH]: string;
+  [IPC_CHANNELS.SM4_GENERATE_KEY]: string;
+  [IPC_CHANNELS.SM4_ENCRYPT]: string;
+  [IPC_CHANNELS.SM4_DECRYPT]: string;
+  [IPC_CHANNELS.SM4_ENCRYPT_FILE]: string;
+  [IPC_CHANNELS.SM4_DECRYPT_FILE]: string;
 }
 ```
 
 ### 11.2 IPC 处理器注册
 
 ```typescript
-// electron/ipc/index.ts
-import { ipcMain, dialog, clipboard, shell, BrowserWindow, app } from 'electron';
-import * as fs from 'fs/promises';
-import { IPC_CHANNELS } from '../../src/types/ipc';
+// electron/ipc/handlers.ts
+import { ipcMain, dialog, BrowserWindow, app } from 'electron';
+import { registerIpcHandler } from '../utils/ipcWrapper';
+import { fontService } from '../font/FontService';
+import { auditLogService } from '../audit/AuditLogService';
+import { PdfAConversionService } from '../pdfa/PdfAConversionService';
+import { SmCryptoService } from '../crypto/SmCryptoService';
+// ... 其他服务导入
 
 export function registerIpcHandlers(): void {
   // ── 文件操作 ──
-  ipcMain.handle(IPC_CHANNELS.FILE_OPEN, async () => {
-    const result = await dialog.showOpenDialog({
-      properties: ['openFile'],
-      filters: [
-        { name: 'PDF 文件', extensions: ['pdf'] },
-        { name: '所有文件', extensions: ['*'] },
-      ],
-    });
+  registerIpcHandler<void, string | null>('file:open', async () => {
+    const result = await dialog.showOpenDialog({ /* ... */ });
     if (result.canceled) return null;
     return result.filePaths[0];
   });
 
-  ipcMain.handle(IPC_CHANNELS.FILE_READ, async (_event, { filePath }) => {
+  registerIpcHandler<{ filePath: string }, ArrayBuffer>('file:read', async ({ filePath }) => {
     const buffer = await fs.readFile(filePath);
-    return buffer.buffer.slice(
-      buffer.byteOffset,
-      buffer.byteOffset + buffer.byteLength
-    );
+    return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
   });
 
-  ipcMain.handle(IPC_CHANNELS.FILE_SAVE, async (_event, { data, defaultName }) => {
-    const result = await dialog.showSaveDialog({
-      defaultPath: defaultName,
-      filters: [{ name: 'PDF 文件', extensions: ['pdf'] }],
-    });
-    if (result.canceled || !result.filePath) return null;
-    await fs.writeFile(result.filePath, Buffer.from(data));
-    return result.filePath;
+  // ── 字体管理 ──
+  registerIpcHandler<void, FontFamilyInfo[]>('font:listFamilies', async () => {
+    return fontService.listFontFamilies();
   });
 
-  ipcMain.handle(IPC_CHANNELS.FILE_EXISTS, async (_event, { filePath }) => {
-    try {
-      await fs.access(filePath);
-      return true;
-    } catch {
-      return false;
-    }
+  registerIpcHandler<{ family: string; weight: string }, FontInfo>('font:getInfo', async ({ family, weight }) => {
+    return fontService.getFontInfo(family, weight as FontWeight);
   });
 
-  // ── 系统 ──
-  ipcMain.handle(IPC_CHANNELS.SYSTEM_CLIPBOARD_WRITE, async (_event, { text }) => {
-    clipboard.writeText(text);
+  registerIpcHandler<{ family: string; weight?: string }, string | null>('font:getPath', async ({ family, weight }) => {
+    return fontService.getFontPath(family, (weight || 'Regular') as FontWeight);
   });
 
-  ipcMain.handle(IPC_CHANNELS.SYSTEM_CLIPBOARD_READ, async () => {
-    return clipboard.readText();
+  registerIpcHandler<{ family: string; weight?: string }, boolean>('font:register', async ({ family, weight }) => {
+    return fontService.registerFont(family, (weight || 'Regular') as FontWeight);
   });
 
-  ipcMain.on(IPC_CHANNELS.SYSTEM_SHOW_IN_FOLDER, (_event, filePath: string) => {
-    shell.showItemInFolder(filePath);
+  registerIpcHandler<{ family: string }, { registered: number; failed: number }>('font:registerFamily', async ({ family }) => {
+    return fontService.registerFontFamily(family);
   });
 
-  ipcMain.handle(IPC_CHANNELS.SYSTEM_OPEN_EXTERNAL, async (_event, { url }) => {
-    await shell.openExternal(url);
+  registerIpcHandler<{ family: string; weight: string }, boolean>('font:verifyIntegrity', async ({ family, weight }) => {
+    return fontService.verifyFontIntegrity(family, weight as FontWeight);
   });
 
-  // ── 窗口 ──
-  ipcMain.on(IPC_CHANNELS.WINDOW_MINIMIZE, (event) => {
-    BrowserWindow.fromWebContents(event.sender)?.minimize();
+  registerIpcHandler<void, FontInfo[]>('font:getAvailable', async () => {
+    return fontService.getAvailableFonts();
   });
 
-  ipcMain.on(IPC_CHANNELS.WINDOW_MAXIMIZE, (event) => {
-    const win = BrowserWindow.fromWebContents(event.sender);
-    if (win?.isMaximized()) win.unmaximize();
-    else win?.maximize();
+  registerIpcHandler<{ targetDir: string; family?: string }, string[]>('font:export', async ({ targetDir, family }) => {
+    return fontService.exportFonts(targetDir, family);
   });
 
-  ipcMain.on(IPC_CHANNELS.WINDOW_CLOSE, (event) => {
-    BrowserWindow.fromWebContents(event.sender)?.close();
+  // ── 审计日志 ──
+  registerIpcHandler<void, void>('audit:initialize', async () => {
+    await auditLogService.initialize();
   });
 
-  ipcMain.handle(IPC_CHANNELS.WINDOW_IS_MAXIMIZED, (event) => {
-    return BrowserWindow.fromWebContents(event.sender)?.isMaximized() ?? false;
+  registerIpcHandler<{ action: AuditAction; [key: string]: unknown }, AuditLogEntry>('audit:log', async ({ action, ...options }) => {
+    return auditLogService.log(action, options);
   });
 
-  // ── 应用 ──
-  ipcMain.on(IPC_CHANNELS.APP_VERSION, (event) => {
-    event.returnValue = app.getVersion();
+  registerIpcHandler<{ query?: AuditLogQuery }, AuditLogEntry[]>('audit:query', async ({ query }) => {
+    return auditLogService.query(query);
   });
+
+  registerIpcHandler<void, IntegrityCheckResult>('audit:verifyIntegrity', async () => {
+    return auditLogService.verifyIntegrity();
+  });
+
+  registerIpcHandler<void, AuditLogStats>('audit:getStats', async () => {
+    return auditLogService.getStats();
+  });
+
+  registerIpcHandler<{ format?: string }, string>('audit:export', async ({ format }) => {
+    return auditLogService.exportLogs(format as 'json' | 'csv');
+  });
+
+  registerIpcHandler<void, void>('audit:close', async () => {
+    auditLogService.close();
+  });
+
+  // ── PDF/A 验证与检测 ──
+  const pdfaService = new PdfAConversionService();
+
+  registerIpcHandler<{ pdfData: string; flavour?: string }, PdfAValidationResult>('pdfa:validate', async ({ pdfData, flavour }) => {
+    const binary = Buffer.from(pdfData, 'base64');
+    const ab = binary.buffer.slice(binary.byteOffset, binary.byteOffset + binary.byteLength);
+    return pdfaService.validateWithVeraPdf(ab as ArrayBuffer, flavour as '1b' | '2b' | '3b' | undefined);
+  });
+
+  registerIpcHandler<void, { available: boolean; version?: string }>('pdfa:checkGs', async () => {
+    return pdfaService.isGhostscriptAvailable();
+  });
+
+  registerIpcHandler<void, { available: boolean; version?: string }>('pdfa:checkVeraPdf', async () => {
+    return pdfaService.isVeraPdfAvailable();
+  });
+
+  // ── 国密算法 (SM-crypto) ──
+  const smCryptoService = new SmCryptoService();
+
+  registerIpcHandler<void, { privateKey: string; publicKey: string }>('sm2:generateKeyPair', async () => {
+    return smCryptoService.sm2.generateKeyPair();
+  });
+
+  registerIpcHandler<{ data: string; privateKey: string; publicKey: string; der?: boolean; userId?: string }, string>('sm2:sign', async ({ data, privateKey, publicKey, der, userId }) => {
+    const buffer = Buffer.from(data, 'base64');
+    return smCryptoService.sm2.sign(buffer, privateKey, { der, userId, publicKey });
+  });
+
+  registerIpcHandler<{ data: string; signature: string; publicKey: string; der?: boolean; userId?: string }, boolean>('sm2:verify', async ({ data, signature, publicKey, der, userId }) => {
+    const buffer = Buffer.from(data, 'base64');
+    return smCryptoService.sm2.verify(buffer, signature, publicKey, { der, userId });
+  });
+
+  registerIpcHandler<{ data: string; publicKey: string; cipherMode?: number }, string>('sm2:encrypt', async ({ data, publicKey, cipherMode }) => {
+    return smCryptoService.sm2.encrypt(data, publicKey, cipherMode || 1);
+  });
+
+  registerIpcHandler<{ cipherText: string; privateKey: string; cipherMode?: number }, string>('sm2:decrypt', async ({ cipherText, privateKey, cipherMode }) => {
+    return smCryptoService.sm2.decrypt(cipherText, privateKey, cipherMode || 1);
+  });
+
+  registerIpcHandler<{ data: string; key?: string }, string>('sm3:hash', async ({ data, key }) => {
+    const buffer = Buffer.from(data, 'base64');
+    if (key) return smCryptoService.sm3.hmac(buffer, key);
+    return smCryptoService.sm3.hash(buffer);
+  });
+
+  registerIpcHandler<void, string>('sm4:generateKey', async () => {
+    return smCryptoService.sm4.generateKey();
+  });
+
+  registerIpcHandler<{ data: string; key: string; mode?: string; iv?: string }, string>('sm4:encrypt', async ({ data, key, mode, iv }) => {
+    return smCryptoService.sm4.encrypt(data, key, { mode, iv }) as Promise<string>;
+  });
+
+  registerIpcHandler<{ cipherText: string; key: string; mode?: string; iv?: string }, string>('sm4:decrypt', async ({ cipherText, key, mode, iv }) => {
+    return smCryptoService.sm4.decrypt(cipherText, key, { mode, iv, output: 'string' }) as Promise<string>;
+  });
+
+  registerIpcHandler<{ pdfData: string; key: string; iv?: string }, string>('sm4:encryptFile', async ({ pdfData, key, iv }) => {
+    const buffer = Buffer.from(pdfData, 'base64');
+    const encrypted = await smCryptoService.sm4.encryptBuffer(buffer, key, { mode: 'cbc', iv });
+    return encrypted.toString('base64');
+  });
+
+  registerIpcHandler<{ cipherText: string; key: string; iv?: string }, string>('sm4:decryptFile', async ({ cipherText, key, iv }) => {
+    const buffer = await smCryptoService.sm4.decryptToBuffer(cipherText, key, { mode: 'cbc', iv });
+    return buffer.toString('base64');
+  });
+
+  // ... 其他 IPC 处理器（加密、签名、压缩、表单、标注、书签等）
 }
+```
+
+### 11.3 字体管理服务 (FontService)
+
+中文字体管理服务支持思源宋体 (Source Han Serif) 和阿里巴巴普惠体 (Alibaba PuHuiTi) 的发现、注册和嵌入。
+
+```typescript
+// electron/font/FontService.ts
+export class FontService {
+  private fontDir: string;
+  private fontCache: Map<string, FontInfo> = new Map();
+
+  constructor() {
+    this.fontDir = path.join(process.resourcesPath, 'fonts');
+  }
+
+  /** 列出所有已注册的字体族 */
+  listFontFamilies(): FontFamilyInfo[];
+
+  /** 获取指定字体的详细信息 */
+  getFontInfo(family: string, weight: FontWeight): FontInfo;
+
+  /** 获取字体文件路径（用于 PDF 嵌入） */
+  getFontPath(family: string, weight: FontWeight): string | null;
+
+  /** 获取字体文件的 ArrayBuffer（用于 pdf-lib 嵌入） */
+  getFontBuffer(family: string, weight: FontWeight): ArrayBuffer | null;
+
+  /** 注册字体到系统（macOS/Linux/Windows） */
+  async registerFont(family: string, weight: FontWeight): Promise<boolean>;
+
+  /** 注册某个字体族的所有可用字体 */
+  async registerFontFamily(family: string): Promise<{ registered: number; failed: number }>;
+
+  /** 验证字体文件完整性（SHA-256 校验） */
+  verifyFontIntegrity(family: string, weight: FontWeight): boolean;
+
+  /** 获取所有可用字体 */
+  getAvailableFonts(): FontInfo[];
+
+  /** 将字体文件复制到指定目录 */
+  async exportFonts(targetDir: string, family?: string): Promise<string[]>;
+}
+
+export const fontService = new FontService();
+```
+
+**字体注册平台策略**：
+
+| 平台 | 注册方式 | 路径 |
+|------|---------|------|
+| macOS | 复制到用户字体目录 | `~/Library/Fonts/` |
+| Linux | 复制 + fc-cache 刷新 | `~/.local/share/fonts/` |
+| Windows | 复制到本地字体目录 | `%LOCALAPPDATA%/Microsoft/Windows/Fonts/` |
+
+### 11.4 审计日志服务 (AuditLogService)
+
+等保三级合规审计日志服务，基于 SQLite + SM3 哈希链实现防篡改日志记录。
+
+```typescript
+// electron/audit/AuditLogService.ts
+export class AuditLogService {
+  private db: Database.Database | null = null;
+  private smCrypto: SmCryptoService;
+
+  /** 初始化数据库和表结构（含防篡改触发器） */
+  async initialize(): Promise<void>;
+
+  /** 记录审计日志（自动计算 SM3 哈希链） */
+  async log(action: AuditAction, options?: {
+    level?: AuditLevel;
+    userId?: string;
+    resourceId?: string;
+    details?: string;
+    clientIp?: string;
+    sessionId?: string;
+  }): Promise<AuditLogEntry>;
+
+  /** 查询审计日志（支持多条件过滤） */
+  query(query?: AuditLogQuery): AuditLogEntry[];
+
+  /** 验证完整性哈希链（遍历所有记录重新计算 SM3） */
+  async verifyIntegrity(): Promise<IntegrityCheckResult>;
+
+  /** 获取审计日志统计信息 */
+  async getStats(): Promise<AuditLogStats>;
+
+  /** 导出审计日志为 JSON/CSV */
+  async exportLogs(format?: 'json' | 'csv'): Promise<string>;
+
+  /** 关闭数据库连接 */
+  close(): void;
+}
+
+export const auditLogService = new AuditLogService();
+```
+
+**审计动作类型**：
+
+| 类别 | 动作 |
+|------|------|
+| 文档操作 | `document.open/save/export/print/close/delete` |
+| 签名操作 | `signature.sign/verify/pades/pades_verify` |
+| 加密操作 | `encryption.encrypt/decrypt/remove` |
+| 密文擦除 | `redaction.apply/sensitive_detect` |
+| 权限变更 | `permission.change` |
+| 用户操作 | `user.login/logout` |
+| 系统事件 | `system.startup/shutdown` |
+| 配置变更 | `config.change` |
+| API 访问 | `api.access` |
+| 协作操作 | `collab.join/leave` |
+| 字体管理 | `font.register` |
+| PDF/A 转换 | `pdfa.convert/validate` |
+
+**防篡改机制**：
+- 每条记录的 `hash = SM3(id + timestamp + action + level + userId + resourceId + details + prevHash)`
+- `prevHash` 链接前一条记录，形成区块链式哈希链
+- SQLite 触发器禁止 UPDATE 和 DELETE 操作
+- `verifyIntegrity()` 遍历全量记录重新计算哈希，检测任何篡改
+
+### 11.5 PDF/A 转换与验证服务
+
+```typescript
+// electron/pdfa/PdfAConversionService.ts
+export class PdfAConversionService {
+  /** 使用 Ghostscript 将 PDF 转换为 PDF/A */
+  async convertToPdfA(pdfData: ArrayBuffer, options: PdfAConvertOptions): Promise<PdfAConvertResult>;
+
+  /** 使用 VeraPDF 验证 PDF/A 合规性 */
+  async validateWithVeraPdf(pdfData: ArrayBuffer, flavour?: '1b' | '2b' | '3b'): Promise<PdfAValidationResult>;
+
+  /** 检测 Ghostscript 是否可用 */
+  async isGhostscriptAvailable(): Promise<{ available: boolean; version?: string }>;
+
+  /** 检测 VeraPDF 是否可用 */
+  async isVeraPdfAvailable(): Promise<{ available: boolean; version?: string }>;
+}
+```
+
+**支持的 PDF/A 合规级别**：
+- `pdfa-1b` — PDF/A-1b (ISO 19005-1)
+- `pdfa-2b` — PDF/A-2b (ISO 19005-2)
+- `pdfa-3b` — PDF/A-3b (ISO 19005-3)
+
+**转换引擎**：
+1. **Ghostscript（生产级）**：完整字体嵌入、色彩空间转换、JS/透明度/注释剥离、ICC 配置文件嵌入
+2. **pdf-lib（降级）**：仅 XMP 元数据 + OutputIntent 占位
+
+### 11.6 国密算法服务 (SmCryptoService)
+
+```typescript
+// electron/crypto/SmCryptoService.ts
+export class SmCryptoService {
+  /** SM2 非对称加密 */
+  sm2: {
+    generateKeyPair(): { privateKey: string; publicKey: string };
+    sign(data: Buffer, privateKey: string, options?: SignOptions): string;
+    verify(data: Buffer, signature: string, publicKey: string, options?: VerifyOptions): boolean;
+    encrypt(data: string, publicKey: string, cipherMode?: number): string;
+    decrypt(cipherText: string, privateKey: string, cipherMode?: number): string;
+  };
+
+  /** SM3 哈希算法 */
+  sm3: {
+    hash(data: Buffer): string;
+    hmac(data: Buffer, key: string): string;
+  };
+
+  /** SM4 对称加密 */
+  sm4: {
+    generateKey(): string;
+    encrypt(data: string, key: string, options?: Sm4Options): Promise<string>;
+    decrypt(cipherText: string, key: string, options?: Sm4Options): Promise<string>;
+    encryptBuffer(buffer: Buffer, key: string, options?: Sm4Options): Promise<Buffer>;
+    decryptToBuffer(cipherText: string, key: string, options?: Sm4Options): Promise<Buffer>;
+  };
+}
+```
+
+**国密算法对照**：
+
+| 算法 | 用途 | 密钥长度 | 对标国际标准 |
+|------|------|---------|------------|
+| SM2 | 数字签名/加密 | 256-bit | ECC (ECDSA/ECIES) |
+| SM3 | 哈希/HMAC | — | SHA-256 |
+| SM4 | 对称加密 | 128-bit | AES-128 |
 ```
 
 ---
@@ -5096,10 +5594,12 @@ win.webContents.session.webRequest.onHeadersReceived((details, callback) => {
 
 ### 17.2 IPC 安全
 
-- 所有 IPC 通道使用 `ipcMain.handle` (请求-响应模式)，避免 `ipcMain.on` 的单向通信
-- Preload 脚本只暴露最小化 API，不暴露 `ipcRenderer` 本身
+- 所有 IPC 通道使用 `registerIpcHandler<Request, Response>` 封装，内部基于 `ipcMain.handle` (请求-响应模式)
+- 类型安全：请求/响应类型通过 TypeScript 泛型约束，编译期检查通道与类型匹配
+- Preload 脚本只暴露 `wrapInvoke` 封装的最小化 API，不暴露 `ipcRenderer` 本身
 - 文件路径验证：确保读取的文件在用户授权的范围内
 - 外部 URL 打开使用 `shell.openExternal`，经过验证
+- 高安全等级通道 (SM2/SM4/加密操作) 需额外审计日志记录
 
 ### 17.3 数据安全
 
@@ -5107,6 +5607,86 @@ win.webContents.session.webRequest.onHeadersReceived((details, callback) => {
 - 用户偏好存储在 `localStorage`，不包含敏感信息
 - PDF 文件内容仅在内存中处理，不做临时文件缓存
 - 签名图片数据以 base64 存储在标注数据中，不写入临时文件
+
+### 17.4 国密算法安全 (SM-crypto)
+
+VerityPDF 集成国密算法套件 (SM2/SM3/SM4)，满足等保三级和《密码法》合规要求。
+
+**SM2 非对称加密**：
+- 密钥对生成：256-bit 椭圆曲线 (sm2p256v1)
+- 数字签名：SM2-with-SM3 签名方案，支持 DER 编码和自定义 userId
+- 加密/解密：SM2 公钥加密 (ECIES)，支持 C1C3C2 和 C1C2C3 密文模式
+- 应用场景：PAdES 签名验证、文档加密传输
+
+**SM3 哈希算法**：
+- 输出长度：256-bit
+- 支持纯哈希和 HMAC 两种模式
+- 应用场景：审计日志哈希链、文档完整性校验、签名消息摘要
+
+**SM4 对称加密**：
+- 密钥长度：128-bit
+- 工作模式：CBC (默认)、ECB、CTR
+- 支持 Buffer 加密（PDF 文件级加密）和字符串加密（元数据加密）
+- 应用场景：PDF 文件加密存储、敏感数据加密传输
+
+**IPC 通道安全控制**：
+
+| 通道域 | 通道数 | 安全等级 | 说明 |
+|--------|--------|---------|------|
+| `sm2:*` | 5 | 高 | 密钥生成、签名/验签、加密/解密 |
+| `sm3:*` | 1 | 中 | 哈希计算，无状态操作 |
+| `sm4:*` | 5 | 高 | 密钥生成、加密/解密、文件加密 |
+
+### 17.5 审计日志安全 (AuditLog)
+
+审计日志服务实现等保三级要求的防篡改日志记录机制。
+
+**存储架构**：
+- 存储引擎：SQLite (better-sqlite3)，同步写入保证原子性
+- 数据库位置：`app.getPath('userData')/audit/audit.db`
+- 表结构：`audit_logs` 表含 `id, timestamp, action, level, userId, resourceId, details, clientIp, sessionId, hash, prevHash` 字段
+
+**防篡改机制**：
+
+1. **SM3 哈希链**：
+   ```
+   hash_n = SM3(id_n + timestamp_n + action_n + level_n + userId_n + resourceId_n + details_n + hash_{n-1})
+   ```
+   每条记录的哈希包含前一条记录的哈希值，形成区块链式链式结构
+
+2. **SQLite 触发器保护**：
+   ```sql
+   -- 禁止 UPDATE
+   CREATE TRIGGER prevent_update BEFORE UPDATE ON audit_logs
+   BEGIN
+     SELECT RAISE(ABORT, 'Audit logs cannot be modified');
+   END;
+
+   -- 禁止 DELETE
+   CREATE TRIGGER prevent_delete BEFORE DELETE ON audit_logs
+   BEGIN
+     SELECT RAISE(ABORT, 'Audit logs cannot be deleted');
+   END;
+   ```
+
+3. **完整性验证**：`verifyIntegrity()` 遍历全量记录重新计算哈希链，检测任何篡改
+
+**审计覆盖范围**：
+
+| 类别 | 审计动作 | 安全等级 |
+|------|---------|---------|
+| 文档操作 | open/save/export/print/close/delete | 中 |
+| 签名操作 | sign/verify/pades/pades_verify | 高 |
+| 加密操作 | encrypt/decrypt/remove | 高 |
+| 密文擦除 | apply/sensitive_detect | 高 |
+| 权限变更 | change | 高 |
+| 用户操作 | login/logout | 中 |
+| 系统事件 | startup/shutdown | 低 |
+| 配置变更 | change | 中 |
+| API 访问 | access | 中 |
+| 协作操作 | join/leave | 低 |
+| 字体管理 | register | 低 |
+| PDF/A 转换 | convert/validate | 低 |
 
 ---
 
@@ -5400,75 +5980,115 @@ export default defineConfig({
 
 ### 20.2 electron-builder 配置
 
-```yaml
-# electron-builder.yml
-appId: com.veritypdf.app
-productName: VerityPDF
-copyright: Copyright © 2026 VerityPDF Team
+```json
+// package.json → build 配置
+{
+  "appId": "com.veritypdf.app",
+  "productName": "VerityPDF",
+  "copyright": "Copyright © 2024 VerityPDF Team",
+  "directories": {
+    "output": "release"
+  },
+  "files": [
+    "dist/**/*",
+    "dist-electron/**/*"
+  ],
+  "extraResources": [
+    {
+      "from": "vendor",
+      "to": "vendor",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "resources/fonts",
+      "to": "fonts",
+      "filter": ["**/*.ttf", "**/*.otf", "**/*.ttc"]
+    }
+  ],
+  "asar": true,
+  "asarUnpack": [
+    "**/*.node",
+    "node_modules/better-sqlite3/**/*",
+    "node_modules/canvas/**/*",
+    "node_modules/@paddleocr/**/*"
+  ]
+}
+```
 
-directories:
-  output: release
-  buildResources: resources
+**asarUnpack 配置说明**：
 
-files:
-  - dist/**/*
-  - dist-electron/**/*
+| 模块 | 原因 | 用途 |
+|------|------|------|
+| `**/*.node` | Node 原生模块 | better-sqlite3、canvas 等原生绑定 |
+| `better-sqlite3` | 原生 SQLite 绑定 | 审计日志数据库 (AuditLogService) |
+| `canvas` | 原生 Canvas 绑定 | PDF 渲染、图像处理 |
+| `@paddleocr` | 原生 OCR 引擎 | 中英文 OCR 文字识别 |
 
-extraResources:
-  - from: node_modules/pdfjs-dist/cmaps
-    to: cmaps
-  - from: node_modules/pdfjs-dist/standard_fonts
-    to: standard_fonts
+**extraResources 配置说明**：
 
-asar: true
-asarUnpack:
-  - "**/*.node"
+| 资源 | 目标路径 | 用途 |
+|------|---------|------|
+| `vendor/` | `vendor/` | Ghostscript (PDF/A 转换)、VeraPDF (PDF/A 验证)、qpdf (PDF 修复) |
+| `resources/fonts/` | `fonts/` | 思源宋体、阿里巴巴普惠体等中文字体 |
 
-mac:
-  target:
-    - target: dmg
-      arch: [x64, arm64]
-    - target: zip
-      arch: [x64, arm64]
-  category: public.app-category.productivity
-  hardenedRuntime: true
-  gatekeeperAssess: false
-  entitlements: build/entitlements.mac.plist
-  entitlementsInherit: build/entitlements.mac.plist
-  notarize: build/notarize.js
-  icon: resources/icon.icns
+**平台构建配置**：
 
-win:
-  target:
-    - target: nsis
-      arch: [x64]
-    - target: portable
-      arch: [x64]
-  icon: resources/icon.ico
-  publisherName: VerityPDF Team
+```json
+// macOS
+"mac": {
+  "target": [{ "target": "dmg", "arch": ["x64", "arm64"] }],
+  "icon": "resources/icons/mac/icon.icns",
+  "artifactName": "${productName}-${version}-mac-${arch}.${ext}",
+  "category": "public.app-category.productivity",
+  "hardenedRuntime": true,
+  "gatekeeperAssess": false
+}
 
-linux:
-  target:
-    - target: AppImage
-      arch: [x64]
-    - target: deb
-      arch: [x64]
-  category: Office
-  icon: resources/icon.png
+// Windows
+"win": {
+  "target": [{ "target": "nsis", "arch": ["x64"] }],
+  "icon": "resources/icons/win/icon.ico",
+  "artifactName": "${productName}-${version}-win-${arch}-setup.${ext}"
+}
 
-nsis:
-  oneClick: false
-  perMachine: false
-  allowToChangeInstallationDirectory: true
-  installerIcon: resources/icon.ico
-  uninstallerIcon: resources/icon.ico
-  createDesktopShortcut: true
-  createStartMenuShortcut: true
+// Linux
+"linux": {
+  "target": [
+    { "target": "AppImage", "arch": ["x64"] },
+    { "target": "deb", "arch": ["x64"] }
+  ],
+  "icon": "resources/icons/png",
+  "artifactName": "${productName}-${version}-linux-${arch}.${ext}",
+  "category": "Office"
+}
+```
 
-publish:
-  provider: github
-  owner: your-org
-  repo: VerityPDF
+**v0.0.1 构建产物**：
+
+| 平台 | 文件名 | 格式 | 架构 |
+|------|--------|------|------|
+| macOS | `VerityPDF-0.0.1-mac-arm64.dmg` | DMG | arm64 |
+| macOS | `VerityPDF-0.0.1-mac-x64.dmg` | DMG | x64 |
+| Windows | `VerityPDF-0.0.1-win-x64-setup.exe` | NSIS | x64 |
+| Linux | `VerityPDF-0.0.1-linux-x86_64.AppImage` | AppImage | x64 |
+| Linux | `VerityPDF-0.0.1-linux-amd64.deb` | deb | x64 |
+
+**构建脚本**：
+
+```bash
+# 开发模式
+pnpm dev
+
+# 完整构建 (TypeScript 检查 + Vite 构建 + electron-builder)
+pnpm build
+
+# 单平台打包
+pnpm pack:mac      # macOS DMG (x64 + arm64)
+pnpm pack:win      # Windows NSIS (x64)
+pnpm pack:linux    # Linux AppImage + deb (x64)
+
+# 构建验证 (不打包)
+pnpm build:verify  # vite build + electron-builder --mac --dir
 ```
 
 ### 20.3 代码签名 (macOS)
@@ -5638,17 +6258,16 @@ jobs:
 
 ### 22.2 版本路线图
 
-| 版本 | 目标 | 关键特性 |
-|------|------|---------|
-| **v1.0** | MVP 发布 | PDF 浏览、基础标注、导出 |
-| **v1.1** | 体验优化 | 撤销/重做、对齐吸附、键盘快捷键 |
-| **v1.2** | 签名功能 | 手写签名、印章、签名管理 |
-| **v1.3** | 编辑增强 | 链接编辑、书签编辑、脚本执行 |
-| **v1.4** | 协作基础 | 批注评论、导出评论汇总 |
-| **v2.0** | 大版本 | 多标签页、插件系统、OCR |
-| **v2.1** | 表单支持 | PDF 表单填写、表单数据导出 |
-| **v2.2** | 云端集成 | 云存储同步、实时协作标注 |
-| **v3.0** | AI 增强 | AI 辅助摘要、智能标注建议 |
+| 版本 | 状态 | 目标 | 关键特性 |
+|------|------|------|---------|
+| **v0.0.1** | ✅ 已发布 | 基础功能 + 国密合规 | PDF 浏览/标注/导出、国密算法 (SM2/SM3/SM4)、审计日志 (等保三级)、中文字体管理 (思源宋体/阿里巴巴普惠体)、PDF/A 转换与验证、跨平台打包 (macOS/Windows/Linux) |
+| **v0.1.0** | 🔲 计划中 | 体验优化 | 撤销/重做、对齐吸附、键盘快捷键、多标签页支持 |
+| **v0.2.0** | 🔲 计划中 | 签名增强 | PAdES 签名 (SM2)、手写签名、印章管理、签名验证 |
+| **v0.3.0** | 🔲 计划中 | 编辑增强 | 链接编辑、书签编辑、脚本执行、PDF 表单填写 |
+| **v0.4.0** | 🔲 计划中 | 协作基础 | 批注评论、导出评论汇总、REST API 服务 |
+| **v1.0.0** | 🔲 计划中 | 正式发布 | 多标签页、插件系统、OCR (PaddleOCR)、完整等保三级合规 |
+| **v1.1.0** | 🔲 计划中 | 云端集成 | 云存储同步、实时协作标注 |
+| **v2.0.0** | 🔲 计划中 | AI 增强 | AI 辅助摘要、智能标注建议、敏感信息自动检测 |
 
 ---
 
@@ -5658,38 +6277,50 @@ jobs:
 
 | 包名 | 版本 | 用途 | License |
 |------|------|------|---------|
-| `electron` | ^30.0.0 | 桌面应用框架 | MIT |
-| `pdfjs-dist` | ^4.0.0 | PDF 解析与渲染 | Apache-2.0 |
+| `react` | ^18.3.1 | UI 框架 | MIT |
+| `react-dom` | ^18.3.1 | React DOM 渲染 | MIT |
+| `pdfjs-dist` | ^4.4.0 | PDF 解析与渲染 | Apache-2.0 |
 | `konva` | ^9.3.0 | 2D Canvas 图形引擎 | MIT |
-| `react` | ^18.3.0 | UI 框架 | MIT |
-| `react-dom` | ^18.3.0 | React DOM 渲染 | MIT |
-| `react-konva` | ^18.2.0 | Konva React 绑定 | MIT |
+| `react-konva` | ^18.2.10 | Konva React 绑定 | MIT |
 | `zustand` | ^4.5.0 | 状态管理 | MIT |
-| `pdf-lib` | ^1.17.0 | PDF 生成/修改 | MIT |
-| `i18next` | ^23.0.0 | 国际化 | MIT |
-| `react-i18next` | ^14.0.0 | React i18n 绑定 | MIT |
-| `electron-log` | ^5.0.0 | 日志系统 | MIT |
-| `electron-updater` | ^6.0.0 | 自动更新 | MIT |
-| `chokidar` | ^3.6.0 | 文件监听 | MIT |
+| `pdf-lib` | ^1.17.1 | PDF 生成/修改 | MIT |
+| `i18next` | ^23.12.0 | 国际化 | MIT |
+| `react-i18next` | ^14.1.0 | React i18n 绑定 | MIT |
+| `antd` | ^5.20.0 | UI 组件库 | MIT |
+| `electron-store` | ^8.2.0 | 持久化存储 | MIT |
+| `node-forge` | ^1.4.0 | RSA/ECDSA 签名与加密 | BSD-3-Clause |
+| `sm-crypto` | ^0.4.0 | 国密算法 (SM2/SM3/SM4) | MIT |
+| `better-sqlite3` | ^12.11.1 | SQLite 数据库 (审计日志) | MIT |
+| `canvas` | ^3.2.3 | Node.js Canvas (PDF 渲染) | MIT |
+| `@paddleocr/paddleocr-js` | ^0.4.2 | OCR 文字识别引擎 | Apache-2.0 |
+| `tesseract.js` | ^7.0.0 | OCR 文字识别 (降级方案) | Apache-2.0 |
+| `quickjs-emscripten` | ^0.32.0 | JavaScript 沙箱执行 | MIT |
 
 ### 23.2 开发依赖
 
 | 包名 | 版本 | 用途 |
 |------|------|------|
-| `typescript` | ^5.4.0 | 类型系统 |
-| `vite` | ^5.2.0 | 构建工具 |
+| `electron` | ^30.1.0 | 桌面应用框架 |
+| `electron-builder` | ^24.13.3 | 打包发布 |
+| `typescript` | ^5.5.0 | 类型系统 |
+| `vite` | ^5.4.0 | 构建工具 |
 | `vite-plugin-electron` | ^0.28.0 | Vite Electron 集成 |
-| `@vitejs/plugin-react` | ^4.2.0 | React 快速刷新 |
-| `vitest` | ^1.5.0 | 单元测试 |
-| `@testing-library/react` | ^15.0.0 | React 组件测试 |
-| `playwright` | ^1.43.0 | E2E 测试 |
-| `electron-builder` | ^24.0.0 | 打包发布 |
-| `eslint` | ^9.0.0 | 代码检查 |
-| `prettier` | ^3.2.0 | 代码格式化 |
-| `tailwindcss` | ^3.4.0 | CSS 框架 |
-| `@electron/notarize` | ^2.0.0 | macOS 公证 |
-| `husky` | ^9.0.0 | Git hooks |
-| `lint-staged` | ^15.0.0 | 暂存文件检查 |
+| `vite-plugin-electron-renderer` | ^0.14.5 | Electron 渲染进程集成 |
+| `@vitejs/plugin-react` | ^4.3.1 | React 快速刷新 |
+| `vitest` | ^1.6.0 | 单元测试 |
+| `@testing-library/react` | ^16.3.2 | React 组件测试 |
+| `@testing-library/jest-dom` | ^6.9.1 | Jest DOM 断言 |
+| `@testing-library/user-event` | ^14.6.1 | 用户事件模拟 |
+| `@types/better-sqlite3` | ^7.6.13 | better-sqlite3 类型定义 |
+| `@types/node-forge` | ^1.3.14 | node-forge 类型定义 |
+| `@types/react` | ^18.3.3 | React 类型定义 |
+| `@types/react-dom` | ^18.3.0 | React DOM 类型定义 |
+| `@typescript-eslint/eslint-plugin` | ^7.18.0 | TypeScript ESLint 插件 |
+| `@typescript-eslint/parser` | ^7.18.0 | TypeScript ESLint 解析器 |
+| `eslint` | ^8.57.0 | 代码检查 |
+| `eslint-plugin-react` | ^7.37.5 | React ESLint 插件 |
+| `eslint-plugin-react-hooks` | ^4.6.2 | React Hooks ESLint 插件 |
+| `jsdom` | ^29.1.1 | JSDOM 测试环境 |
 
 ---
 

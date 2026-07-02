@@ -47,6 +47,8 @@ import { BookmarkEditService } from '../bookmark/BookmarkEditService';
 import { ScriptEngineService } from '../script/ScriptEngineService';
 import { CollabService } from '../collab/CollabService';
 import { RestApiServer } from '../api/RestApiServer';
+import { fontService } from '../font/FontService';
+import { auditLogService } from '../audit/AuditLogService';
 
 const MAX_FILE_SIZE = 500 * 1024 * 1024;
 const ALLOWED_EXTENSIONS = ['.pdf'];
@@ -1781,5 +1783,91 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
 
   registerIpcHandler<{}, unknown[]>('rest-api:listKeys', async () => {
     return restApiServer.listApiKeys();
+  });
+
+  // ─── 字体管理 ────────────────────────────────────────────────
+  registerIpcHandler<{}, unknown[]>('font:listFamilies', async () => {
+    return fontService.listFontFamilies();
+  });
+
+  registerIpcHandler<{ family: string; weight: string }, unknown>('font:getInfo', async ({ family, weight }) => {
+    return fontService.getFontInfo(family, weight as import('../font/FontService').FontWeight);
+  });
+
+  registerIpcHandler<{ family: string; weight?: string }, string | null>('font:getPath', async ({ family, weight }) => {
+    return fontService.getFontPath(family, (weight || 'Regular') as import('../font/FontService').FontWeight);
+  });
+
+  registerIpcHandler<{ family: string; weight?: string }, boolean>('font:register', async ({ family, weight }) => {
+    return fontService.registerFont(family, (weight || 'Regular') as import('../font/FontService').FontWeight);
+  });
+
+  registerIpcHandler<{ family: string }, { registered: number; failed: number }>('font:registerFamily', async ({ family }) => {
+    return fontService.registerFontFamily(family);
+  });
+
+  registerIpcHandler<{ family: string; weight: string }, boolean>('font:verifyIntegrity', async ({ family, weight }) => {
+    return fontService.verifyFontIntegrity(family, weight as import('../font/FontService').FontWeight);
+  });
+
+  registerIpcHandler<{}, unknown[]>('font:getAvailable', async () => {
+    return fontService.getAvailableFonts();
+  });
+
+  registerIpcHandler<{ targetDir: string; family?: string }, string[]>('font:export', async ({ targetDir, family }) => {
+    return fontService.exportFonts(targetDir, family);
+  });
+
+  // ─── 审计日志 ────────────────────────────────────────────────
+  registerIpcHandler<{}, void>('audit:initialize', async () => {
+    await auditLogService.initialize();
+  });
+
+  registerIpcHandler<{
+    action: import('../audit/AuditLogService').AuditAction;
+    level?: string;
+    userId?: string;
+    resourceId?: string;
+    details?: string;
+    clientIp?: string;
+    sessionId?: string;
+  }, unknown>('audit:log', async ({ action, ...options }) => {
+    return auditLogService.log(action, options as Parameters<typeof auditLogService.log>[1]);
+  });
+
+  registerIpcHandler<{ query?: import('../audit/AuditLogService').AuditLogQuery }, unknown[]>('audit:query', async ({ query }) => {
+    return auditLogService.query(query);
+  });
+
+  registerIpcHandler<{}, unknown>('audit:verifyIntegrity', async () => {
+    return auditLogService.verifyIntegrity();
+  });
+
+  registerIpcHandler<{}, unknown>('audit:getStats', async () => {
+    return auditLogService.getStats();
+  });
+
+  registerIpcHandler<{ format?: string }, string>('audit:export', async ({ format }) => {
+    return auditLogService.exportLogs(format as 'json' | 'csv');
+  });
+
+  registerIpcHandler<{}, void>('audit:close', async () => {
+    auditLogService.close();
+  });
+
+  // ─── PDF/A 验证与检测 ────────────────────────────────────────
+  registerIpcHandler<{ pdfData: string; flavour?: string }, unknown>('pdfa:validate', async ({ pdfData, flavour }) => {
+    if (!pdfData) throw new Error('无效的 PDF 数据');
+    const binary = Buffer.from(pdfData, 'base64');
+    const ab = binary.buffer.slice(binary.byteOffset, binary.byteOffset + binary.byteLength) as ArrayBuffer;
+    return pdfaService.validateWithVeraPdf(ab, flavour as '1b' | '2b' | '3b' | undefined);
+  });
+
+  registerIpcHandler<{}, unknown>('pdfa:checkGs', async () => {
+    return pdfaService.isGhostscriptAvailable();
+  });
+
+  registerIpcHandler<{}, unknown>('pdfa:checkVeraPdf', async () => {
+    return pdfaService.isVeraPdfAvailable();
   });
 }

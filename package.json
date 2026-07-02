@@ -1,10 +1,10 @@
 {
   "name": "verity-pdf",
-  "version": "1.0.0",
+  "version": "0.0.1",
   "description": "A professional PDF annotation and review tool built with Electron + PDF.js + Konva.js",
   "main": "dist-electron/main.js",
   "license": "MIT",
-  "author": "VerityPDF Team",
+  "author": "VerityPDF Team <veritypdf@example.com>",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build && electron-builder",
@@ -70,6 +70,7 @@
   "build": {
     "appId": "com.veritypdf.app",
     "productName": "VerityPDF",
+    "copyright": "Copyright © 2024 VerityPDF Team",
     "directories": {
       "output": "release"
     },
@@ -84,22 +85,97 @@
         "filter": [
           "**/*"
         ]
+      },
+      {
+        "from": "resources/fonts",
+        "to": "fonts",
+        "filter": [
+          "**/*.ttf",
+          "**/*.otf",
+          "**/*.ttc"
+        ]
       }
     ],
+    "asar": true,
+    "asarUnpack": [
+      "**/*.node",
+      "node_modules/better-sqlite3/**/*",
+      "node_modules/canvas/**/*",
+      "node_modules/@paddleocr/**/*"
+    ],
     "mac": {
-      "target": "dmg",
-      "icon": "resources/icon.png"
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "resources/icons/mac/icon.icns",
+      "artifactName": "${productName}-${version}-mac-${arch}.${ext}",
+      "category": "public.app-category.productivity",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false
+    },
+    "dmg": {
+      "contents": [
+        {
+          "x": 130,
+          "y": 220
+        },
+        {
+          "x": 410,
+          "y": 220,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
     },
     "win": {
-      "target": "nsis",
-      "icon": "resources/icon.png"
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "resources/icons/win/icon.ico",
+      "artifactName": "${productName}-${version}-win-${arch}-setup.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "deleteAppDataOnUninstall": false,
+      "shortcutName": "VerityPDF"
     },
     "linux": {
       "target": [
-        "AppImage",
-        "deb"
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64"
+          ]
+        }
       ],
-      "icon": "resources/icon.png"
+      "icon": "resources/icons/png",
+      "artifactName": "${productName}-${version}-linux-${arch}.${ext}",
+      "category": "Office"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "zhaohai666",
+      "repo": "VerityPDF",
+      "releaseType": "release"
     }
   }
 }
