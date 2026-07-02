@@ -16,6 +16,12 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
     "forceConsistentCasingInFileNames": true,
+    "declaration": false,
+    "declarationMap": false,
+    "incremental": true,
+    "tsBuildInfoFile": "./tsconfig.node.tsbuildinfo",
+    "removeComments": true,
+    "newLine": "lf",
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"],

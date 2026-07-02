@@ -231,3 +231,5 @@ export function useAutoSave(interval = 5000): void {
     return () => window.removeEventListener('keydown', handler);
   }, [save]);
 }
+
+export * from './useOptimizedCallback';

@@ -66,8 +66,13 @@ export default defineConfig(({ mode }) => {
     },
     optimizeDeps: {
       include: ['pdfjs-dist', 'tesseract.js', 'react', 'react-dom', 'konva', 'react-konva'],
+      exclude: ['@paddleocr/paddleocr-js'], // Exclude heavy OCR dependency from pre-bundling
       esbuildOptions: {
         target: 'es2022',
+        treeShaking: true,
+        supported: {
+          'dynamic-import': true,
+        },
       },
     },
     build: {
@@ -76,6 +81,7 @@ export default defineConfig(({ mode }) => {
       sourcemap: isDev,
       cssCodeSplit: true,
       minify: !isDev ? 'esbuild' : false,
+      chunkSizeWarningLimit: 2000, // Increase chunk size warning limit
       rollupOptions: {
         output: {
           manualChunks: {
@@ -83,7 +89,13 @@ export default defineConfig(({ mode }) => {
             'vendor-pdfjs': ['pdfjs-dist'],
             'vendor-konva': ['konva', 'react-konva'],
             'vendor-tesseract': ['tesseract.js'],
+            'vendor-antd': ['antd'],
+            'vendor-crypto': ['node-forge', 'sm-crypto'],
+            'vendor-storage': ['zustand', 'electron-store'],
           },
+          chunkFileNames: 'assets/js/[name]-[hash].js',
+          entryFileNames: 'assets/js/[name]-[hash].js',
+          assetFileNames: 'assets/[ext]/[name]-[hash].[ext]',
         },
       },
     },
