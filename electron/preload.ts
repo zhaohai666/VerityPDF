@@ -466,6 +466,97 @@ const api: VerityAPI = {
 
   listRestApiKeys: () =>
     wrapInvoke('rest-api:listKeys', {}),
+
+  // 国密算法 (SM-crypto)
+  sm2GenerateKeyPair: () =>
+    wrapInvoke('sm2:generateKeyPair', {}),
+
+  sm2Sign: (data, privateKey, publicKey, der, userId) =>
+    wrapInvoke('sm2:sign', { data, privateKey, publicKey, der, userId }),
+
+  sm2Verify: (data, signature, publicKey, der, userId) =>
+    wrapInvoke('sm2:verify', { data, signature, publicKey, der, userId }),
+
+  sm2Encrypt: (data, publicKey, cipherMode) =>
+    wrapInvoke('sm2:encrypt', { data, publicKey, cipherMode }),
+
+  sm2Decrypt: (cipherText, privateKey, cipherMode) =>
+    wrapInvoke('sm2:decrypt', { cipherText, privateKey, cipherMode }),
+
+  sm3Hash: (data, key) =>
+    wrapInvoke('sm3:hash', { data, key }),
+
+  sm4GenerateKey: () =>
+    wrapInvoke('sm4:generateKey', {}),
+
+  sm4Encrypt: (data, key, mode, iv) =>
+    wrapInvoke('sm4:encrypt', { data, key, mode, iv }),
+
+  sm4Decrypt: (cipherText, key, mode, iv) =>
+    wrapInvoke('sm4:decrypt', { cipherText, key, mode, iv }),
+
+  sm4EncryptFile: (pdfData, key, iv) =>
+    wrapInvoke('sm4:encryptFile', { pdfData, key, iv }),
+
+  sm4DecryptFile: (cipherText, key, iv) =>
+    wrapInvoke('sm4:decryptFile', { cipherText, key, iv }),
+
+  // 字体管理
+  listFontFamilies: () =>
+    wrapInvoke('font:listFamilies', {}),
+
+  getFontInfo: (family, weight) =>
+    wrapInvoke('font:getInfo', { family, weight }),
+
+  getFontPath: (family, weight) =>
+    wrapInvoke('font:getPath', { family, weight }),
+
+  registerFont: (family, weight) =>
+    wrapInvoke('font:register', { family, weight }),
+
+  registerFontFamily: (family) =>
+    wrapInvoke('font:registerFamily', { family }),
+
+  verifyFontIntegrity: (family, weight) =>
+    wrapInvoke('font:verifyIntegrity', { family, weight }),
+
+  getAvailableFonts: () =>
+    wrapInvoke('font:getAvailable', {}),
+
+  exportFonts: (targetDir, family?) =>
+    wrapInvoke('font:export', { targetDir, family }),
+
+  // 审计日志
+  initializeAuditLog: () =>
+    wrapInvoke('audit:initialize', {}),
+
+  auditLog: (action, options?) =>
+    wrapInvoke('audit:log', { action, ...options }),
+
+  queryAuditLog: (query?) =>
+    wrapInvoke('audit:query', { query }),
+
+  verifyAuditIntegrity: () =>
+    wrapInvoke('audit:verifyIntegrity', {}),
+
+  getAuditStats: () =>
+    wrapInvoke('audit:getStats', {}),
+
+  exportAuditLogs: (format?) =>
+    wrapInvoke('audit:export', { format }),
+
+  closeAuditLog: () =>
+    wrapInvoke('audit:close', {}),
+
+  // PDF/A 验证
+  validatePdfA: (pdfData, flavour?) =>
+    wrapInvoke('pdfa:validate', { pdfData, flavour }),
+
+  checkPdfAGhostscript: () =>
+    wrapInvoke('pdfa:checkGs', {}),
+
+  checkPdfAVeraPdf: () =>
+    wrapInvoke('pdfa:checkVeraPdf', {}),
 };
 
 contextBridge.exposeInMainWorld('verityAPI', api);

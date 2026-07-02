@@ -7,6 +7,7 @@ import { PDFDocument } from 'pdf-lib';
 import { EncryptionService } from '../encryption/EncryptionService';
 import { FormService } from '../form/FormService';
 import { SignatureService } from '../signature/SignatureService';
+import { SmCryptoService } from '../crypto/SmCryptoService';
 import { LibreOfficeService } from '../convert/LibreOfficeService';
 import { PDFRepairService } from '../repair/PDFRepairService';
 import { BatchPageService } from '../batch/BatchPageService';
@@ -903,6 +904,131 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     const binary = Buffer.from(pdfData, 'base64');
     const ab = binary.buffer.slice(binary.byteOffset, binary.byteOffset + binary.byteLength) as ArrayBuffer;
     return signatureService.verifySignatureChain(ab);
+  });
+
+  // ========== 国密算法（SM2/SM3/SM4）IPC ==========
+
+  const smCryptoService = new SmCryptoService();
+
+  // SM2 密钥对生成
+  registerIpcHandler<{}, unknown>('sm2:generateKeyPair', async () => {
+    return smCryptoService.sm2.generateKeyPair();
+  });
+
+  // SM2 签名
+  registerIpcHandler<{
+    data: string;       // base64 编码的数据
+    privateKey: string; // 16进制私钥
+    publicKey?: string; // 可选，加速签名
+    der?: boolean;
+    userId?: string;
+  }, unknown>('sm2:sign', async ({ data, privateKey, publicKey, der, userId }) => {
+    if (!data || !privateKey) throw new Error('缺少签名参数');
+    const buffer = Buffer.from(data, 'base64');
+    return smCryptoService.sm2.sign(buffer, privateKey, {
+      publicKey,
+      der: der !== false,
+      userId,
+    });
+  });
+
+  // SM2 验签
+  registerIpcHandler<{
+    data: string;          // base64 编码的原始数据
+    signature: string;     // 16进制签名值
+    publicKey: string;     // 16进制公钥
+    der?: boolean;
+    userId?: string;
+  }, unknown>('sm2:verify', async ({ data, signature, publicKey, der, userId }) => {
+    if (!data || !signature || !publicKey) throw new Error('缺少验签参数');
+    const buffer = Buffer.from(data, 'base64');
+    return smCryptoService.sm2.verify(buffer, signature, publicKey, {
+      der: der !== false,
+      userId,
+    });
+  });
+
+  // SM2 加密
+  registerIpcHandler<{
+    data: string;       // 明文
+    publicKey: string;  // 16进制公钥
+    cipherMode?: number; // 1=C1C3C2, 0=C1C2C3
+  }, string>('sm2:encrypt', async ({ data, publicKey, cipherMode }) => {
+    if (!data || !publicKey) throw new Error('缺少加密参数');
+    return smCryptoService.sm2.encrypt(data, publicKey, cipherMode || 1);
+  });
+
+  // SM2 解密
+  registerIpcHandler<{
+    cipherText: string;  // 密文
+    privateKey: string;  // 16进制私钥
+    cipherMode?: number;
+  }, string>('sm2:decrypt', async ({ cipherText, privateKey, cipherMode }) => {
+    if (!cipherText || !privateKey) throw new Error('缺少解密参数');
+    return smCryptoService.sm2.decrypt(cipherText, privateKey, cipherMode || 1);
+  });
+
+  // SM3 哈希
+  registerIpcHandler<{
+    data: string;  // base64 编码的数据
+    key?: string;  // HMAC 密钥（可选）
+  }, string>('sm3:hash', async ({ data, key }) => {
+    if (!data) throw new Error('缺少哈希参数');
+    const buffer = Buffer.from(data, 'base64');
+    if (key) {
+      return smCryptoService.sm3.hmac(buffer, key);
+    }
+    return smCryptoService.sm3.hash(buffer);
+  });
+
+  // SM4 密钥生成
+  registerIpcHandler<{}, string>('sm4:generateKey', async () => {
+    return smCryptoService.sm4.generateKey();
+  });
+
+  // SM4 加密
+  registerIpcHandler<{
+    data: string;       // 明文
+    key: string;        // 16进制密钥（128位）
+    mode?: 'ecb' | 'cbc';
+    iv?: string;        // CBC模式IV
+  }, string>('sm4:encrypt', async ({ data, key, mode, iv }) => {
+    if (!data || !key) throw new Error('缺少加密参数');
+    return smCryptoService.sm4.encrypt(data, key, { mode, iv }) as Promise<string>;
+  });
+
+  // SM4 解密
+  registerIpcHandler<{
+    cipherText: string;  // 密文
+    key: string;         // 16进制密钥
+    mode?: 'ecb' | 'cbc';
+    iv?: string;
+  }, string>('sm4:decrypt', async ({ cipherText, key, mode, iv }) => {
+    if (!cipherText || !key) throw new Error('缺少解密参数');
+    return smCryptoService.sm4.decrypt(cipherText, key, { mode, iv, output: 'string' }) as Promise<string>;
+  });
+
+  // SM4 文件加密
+  registerIpcHandler<{
+    pdfData: string;  // base64 编码的PDF数据
+    key: string;      // 16进制密钥
+    iv?: string;
+  }, string>('sm4:encryptFile', async ({ pdfData, key, iv }) => {
+    if (!pdfData || !key) throw new Error('缺少加密参数');
+    const buffer = Buffer.from(pdfData, 'base64');
+    const encrypted = await smCryptoService.sm4.encryptBuffer(buffer, key, { mode: 'cbc', iv });
+    return encrypted;
+  });
+
+  // SM4 文件解密
+  registerIpcHandler<{
+    cipherText: string;  // 16进制密文
+    key: string;
+    iv?: string;
+  }, string>('sm4:decryptFile', async ({ cipherText, key, iv }) => {
+    if (!cipherText || !key) throw new Error('缺少解密参数');
+    const buffer = await smCryptoService.sm4.decryptToBuffer(cipherText, key, { mode: 'cbc', iv });
+    return buffer.toString('base64');
   });
 
   // ========== 第二批新功能 ==========

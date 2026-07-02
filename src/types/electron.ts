@@ -199,6 +199,43 @@ export const IPC_CHANNELS = {
   REST_API_REVOKE_KEY: 'rest-api:revokeKey',
   REST_API_LIST_KEYS: 'rest-api:listKeys',
 
+  // 字体管理
+  FONT_LIST_FAMILIES: 'font:listFamilies',
+  FONT_GET_INFO: 'font:getInfo',
+  FONT_GET_PATH: 'font:getPath',
+  FONT_REGISTER: 'font:register',
+  FONT_REGISTER_FAMILY: 'font:registerFamily',
+  FONT_VERIFY_INTEGRITY: 'font:verifyIntegrity',
+  FONT_GET_AVAILABLE: 'font:getAvailable',
+  FONT_EXPORT: 'font:export',
+
+  // 审计日志
+  AUDIT_INITIALIZE: 'audit:initialize',
+  AUDIT_LOG: 'audit:log',
+  AUDIT_QUERY: 'audit:query',
+  AUDIT_VERIFY_INTEGRITY: 'audit:verifyIntegrity',
+  AUDIT_GET_STATS: 'audit:getStats',
+  AUDIT_EXPORT: 'audit:export',
+  AUDIT_CLOSE: 'audit:close',
+
+  // PDF/A 验证
+  PDFA_VALIDATE: 'pdfa:validate',
+  PDFA_CHECK_GS: 'pdfa:checkGs',
+  PDFA_CHECK_VERAPDF: 'pdfa:checkVeraPdf',
+
+  // 国密算法 (SM-crypto)
+  SM2_GENERATE_KEY_PAIR: 'sm2:generateKeyPair',
+  SM2_SIGN: 'sm2:sign',
+  SM2_VERIFY: 'sm2:verify',
+  SM2_ENCRYPT: 'sm2:encrypt',
+  SM2_DECRYPT: 'sm2:decrypt',
+  SM3_HASH: 'sm3:hash',
+  SM4_GENERATE_KEY: 'sm4:generateKey',
+  SM4_ENCRYPT: 'sm4:encrypt',
+  SM4_DECRYPT: 'sm4:decrypt',
+  SM4_ENCRYPT_FILE: 'sm4:encryptFile',
+  SM4_DECRYPT_FILE: 'sm4:decryptFile',
+
   // 任务队列
   TASK_SUBMIT: 'task:submit',
   TASK_CANCEL: 'task:cancel',
@@ -498,6 +535,43 @@ export interface VerityAPI {
   getFormFieldDetails(pdfData: string): Promise<EnhancedFormFieldInfo[]>;
   detectFormXFA(pdfData: string): Promise<XFADetectResult>;
   getFieldActions(pdfData: string, fieldName: string): Promise<FieldActionScripts>;
+
+  // 国密算法 (SM-crypto)
+  sm2GenerateKeyPair(): Promise<SM2KeyPair>;
+  sm2Sign(data: string, privateKey: string, publicKey?: string, der?: boolean, userId?: string): Promise<SM2SignatureResult>;
+  sm2Verify(data: string, signature: string, publicKey: string, der?: boolean, userId?: string): Promise<SM2VerifyResult>;
+  sm2Encrypt(data: string, publicKey: string, cipherMode?: number): Promise<string>;
+  sm2Decrypt(cipherText: string, privateKey: string, cipherMode?: number): Promise<string>;
+  sm3Hash(data: string, key?: string): Promise<string>;
+  sm4GenerateKey(): Promise<string>;
+  sm4Encrypt(data: string, key: string, mode?: 'ecb' | 'cbc', iv?: string): Promise<string>;
+  sm4Decrypt(cipherText: string, key: string, mode?: 'ecb' | 'cbc', iv?: string): Promise<string>;
+  sm4EncryptFile(pdfData: string, key: string, iv?: string): Promise<string>;
+  sm4DecryptFile(cipherText: string, key: string, iv?: string): Promise<string>;
+
+  // 字体管理
+  listFontFamilies(): Promise<FontFamilyInfo[]>;
+  getFontInfo(family: string, weight: FontWeight): Promise<FontInfo>;
+  getFontPath(family: string, weight: FontWeight): Promise<string | null>;
+  registerFont(family: string, weight: FontWeight): Promise<boolean>;
+  registerFontFamily(family: string): Promise<{ registered: number; failed: number }>;
+  verifyFontIntegrity(family: string, weight: FontWeight): Promise<boolean>;
+  getAvailableFonts(): Promise<FontInfo[]>;
+  exportFonts(targetDir: string, family?: string): Promise<string[]>;
+
+  // 审计日志
+  initializeAuditLog(): Promise<void>;
+  auditLog(action: AuditAction, options?: AuditLogOptions): Promise<AuditLogEntry>;
+  queryAuditLog(query?: AuditLogQuery): Promise<AuditLogEntry[]>;
+  verifyAuditIntegrity(): Promise<IntegrityCheckResult>;
+  getAuditStats(): Promise<AuditLogStats>;
+  exportAuditLogs(format?: 'json' | 'csv'): Promise<string>;
+  closeAuditLog(): Promise<void>;
+
+  // PDF/A 验证
+  validatePdfA(pdfData: string, flavour?: '1b' | '2b' | '3b'): Promise<PdfAValidationResult>;
+  checkPdfAGhostscript(): Promise<{ available: boolean; version?: string }>;
+  checkPdfAVeraPdf(): Promise<{ available: boolean; version?: string }>;
 }
 
 /** 页面操作类型 */
@@ -511,6 +585,7 @@ export type PageOperation =
 export interface EncryptionOptions {
   userPassword: string;
   ownerPassword: string;
+  algorithm?: EncryptionAlgorithm;
   permissions: {
     print: boolean;
     copy: boolean;
@@ -550,6 +625,7 @@ export interface SignatureOptions {
   location: string;
   p12Path?: string;
   p12Password?: string;
+  algorithm?: SignatureAlgorithm;
 }
 
 /** PAdES 签名选项 */
@@ -560,6 +636,7 @@ export interface PadesSignOptions {
   contactInfo?: string;
   p12Path?: string;
   p12Password?: string;
+  algorithm?: SignatureAlgorithm;
   visibleSignature?: {
     page: number;
     rect: { x: number; y: number; width: number; height: number };
@@ -576,6 +653,8 @@ export interface SignatureResult {
     timestamp: string;
     hashAlgorithm: string;
     certificateInfo: CertificateInfo;
+    algorithm?: SignatureAlgorithm;
+    sm2PublicKey?: string;
   };
 }
 
@@ -598,6 +677,7 @@ export interface VerifyResult {
   certificateInfo?: CertificateInfo;
   documentIntact: boolean;
   message: string;
+  algorithm?: SignatureAlgorithm;
 }
 
 /** 擦除矩形（PDF 点坐标） */
@@ -985,6 +1065,10 @@ export interface SanitizeResult {
 export interface PdfAConvertOptions {
   conformance: 'pdfa-1b' | 'pdfa-2b' | 'pdfa-3b';
   includeXmp: boolean;
+  /** 优先使用 Ghostscript 引擎 */
+  preferGhostscript?: boolean;
+  /** ICC 配置文件路径 */
+  iccProfilePath?: string;
 }
 
 /** PDF/A 转换结果 */
@@ -992,6 +1076,8 @@ export interface PdfAConvertResult {
   pdfData: ArrayBuffer;
   conformance: string;
   message: string;
+  /** 使用的转换引擎 */
+  engine: 'ghostscript' | 'pdf-lib';
 }
 
 /** 按书签拆分选项 */
@@ -1417,4 +1503,240 @@ export interface ApiKeyInfo {
   createdAt: number;
   lastUsed: number;
   requestCount: number;
+}
+
+/** ========== 国密算法 (SM-crypto) 类型定义 ========== */
+
+/** 签名算法类型 */
+export type SignatureAlgorithm = 'RSA-SHA256' | 'SM2-SM3';
+
+/** 加密算法类型 */
+export type EncryptionAlgorithm = 'AES-256' | 'SM4';
+
+/** SM2 密钥对 */
+export interface SM2KeyPair {
+  publicKey: string;
+  privateKey: string;
+}
+
+/** SM2 签名结果 */
+export interface SM2SignatureResult {
+  signatureHex: string;
+  publicKey: string;
+  algorithm: 'SM2-SM3';
+}
+
+/** SM2 验签结果 */
+export interface SM2VerifyResult {
+  verified: boolean;
+  algorithm: 'SM2-SM3';
+}
+
+/** SM2 加密选项 */
+export interface SM2EncryptOptions {
+  data: string;       // 明文
+  publicKey: string;  // 16进制公钥
+  cipherMode?: number; // 1=C1C3C2 (默认), 0=C1C2C3
+}
+
+/** SM2 解密选项 */
+export interface SM2DecryptOptions {
+  cipherText: string;  // 密文
+  privateKey: string;  // 16进制私钥
+  cipherMode?: number;
+}
+
+/** SM3 哈希选项 */
+export interface SM3HashOptions {
+  data: string;  // base64 编码的数据
+  key?: string;  // HMAC 密钥（可选，提供则计算 HMAC-SM3）
+}
+
+/** SM4 加密选项 */
+export interface SM4EncryptOptions {
+  data: string;       // 明文
+  key: string;        // 16进制密钥（128位 = 32 hex chars）
+  mode?: 'ecb' | 'cbc';
+  iv?: string;        // CBC 模式 IV（16 hex chars）
+}
+
+/** SM4 解密选项 */
+export interface SM4DecryptOptions {
+  cipherText: string;  // 密文
+  key: string;         // 16进制密钥
+  mode?: 'ecb' | 'cbc';
+  iv?: string;
+}
+
+/** SM4 文件加密选项 */
+export interface SM4FileEncryptOptions {
+  pdfData: string;  // base64 编码的 PDF 数据
+  key: string;      // 16进制密钥
+  iv?: string;
+}
+
+/** SM4 文件解密选项 */
+export interface SM4FileDecryptOptions {
+  cipherText: string;  // 16进制密文
+  key: string;
+  iv?: string;
+}
+
+// ---------------------------------------------------------------------------
+// 字体管理类型
+// ---------------------------------------------------------------------------
+
+/** 字体粗细 */
+export type FontWeight = 'Thin' | 'Light' | 'Regular' | 'Medium' | 'Bold' | 'Heavy';
+
+/** 字体信息 */
+export interface FontInfo {
+  family: string;
+  subfamily: string;
+  weight: FontWeight;
+  style: 'Normal' | 'Italic';
+  filePath: string;
+  format: 'otf' | 'ttf';
+  available: boolean;
+  sha256?: string;
+}
+
+/** 字体族信息 */
+export interface FontFamilyInfo {
+  family: string;
+  displayName: string;
+  license: string;
+  fonts: FontInfo[];
+  totalSize: number;
+  available: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// 审计日志类型
+// ---------------------------------------------------------------------------
+
+/** 审计操作类型 */
+export type AuditAction =
+  | 'document.open'
+  | 'document.save'
+  | 'document.export'
+  | 'document.print'
+  | 'document.close'
+  | 'document.delete'
+  | 'signature.sign'
+  | 'signature.verify'
+  | 'signature.pades'
+  | 'signature.pades_verify'
+  | 'encryption.encrypt'
+  | 'encryption.decrypt'
+  | 'encryption.remove'
+  | 'redaction.apply'
+  | 'redaction.sensitive_detect'
+  | 'permission.change'
+  | 'user.login'
+  | 'user.logout'
+  | 'system.startup'
+  | 'system.shutdown'
+  | 'config.change'
+  | 'api.access'
+  | 'collab.join'
+  | 'collab.leave'
+  | 'font.register'
+  | 'pdfa.convert'
+  | 'pdfa.validate';
+
+/** 审计级别 */
+export type AuditLevel = 'info' | 'warn' | 'error' | 'critical';
+
+/** 审计日志条目 */
+export interface AuditLogEntry {
+  id: number;
+  timestamp: string;
+  action: AuditAction;
+  level: AuditLevel;
+  userId: string;
+  resourceId: string;
+  details: string;
+  clientIp: string;
+  sessionId: string;
+  /** SM3 哈希值 = SM3(本条内容 + 前一条 hash) */
+  hash: string;
+  /** 前一条记录的 hash（用于链式验证） */
+  prevHash: string;
+}
+
+/** 审计日志记录选项 */
+export interface AuditLogOptions {
+  level?: AuditLevel;
+  userId?: string;
+  resourceId?: string;
+  details?: string;
+  clientIp?: string;
+  sessionId?: string;
+}
+
+/** 审计日志查询选项 */
+export interface AuditLogQuery {
+  action?: AuditAction;
+  level?: AuditLevel;
+  userId?: string;
+  resourceId?: string;
+  startTime?: string;
+  endTime?: string;
+  limit?: number;
+  offset?: number;
+}
+
+/** 完整性校验结果 */
+export interface IntegrityCheckResult {
+  valid: boolean;
+  totalRecords: number;
+  brokenAt: number | null;
+  brokenHash: string | null;
+  expectedHash: string | null;
+  message: string;
+}
+
+/** 审计日志统计 */
+export interface AuditLogStats {
+  totalRecords: number;
+  byAction: Record<string, number>;
+  byLevel: Record<string, number>;
+  earliestTimestamp: string | null;
+  latestTimestamp: string | null;
+  integrityValid: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// PDF/A 验证类型
+// ---------------------------------------------------------------------------
+
+/** PDF/A 验证结果 */
+export interface PdfAValidationResult {
+  /** 是否合规 */
+  compliant: boolean;
+  /** 合规级别 (e.g. "PDF/A-2B") */
+  conformanceLevel: string | null;
+  /** 总检查数 */
+  totalChecks: number;
+  /** 失败检查数 */
+  failedChecks: number;
+  /** 失败详情 */
+  failures: PdfAValidationFailure[];
+  /** VeraPDF 原始输出 */
+  rawOutput: string;
+  /** 人类可读摘要 */
+  message: string;
+}
+
+/** PDF/A 验证失败项 */
+export interface PdfAValidationFailure {
+  /** 失败规则 ID (e.g. "6.7.3-1") */
+  ruleId: string;
+  /** 测试描述 */
+  test: string;
+  /** 失败位置 */
+  location: string;
+  /** 详细错误信息 */
+  message: string;
 }

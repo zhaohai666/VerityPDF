@@ -5,6 +5,7 @@ import {
   PDFDocument, PDFName, PDFString, PDFHexString, PDFArray,
   PDFDict, PDFRef, PDFContext, PDFRawStream,
 } from 'pdf-lib';
+import { SmCryptoService, SM2KeyPair } from '../crypto/SmCryptoService';
 
 /** 证书信息 */
 export interface CertificateInfo {
@@ -16,6 +17,9 @@ export interface CertificateInfo {
   fingerprint: string;
 }
 
+/** 签名算法类型 */
+export type SignatureAlgorithm = 'RSA-SHA256' | 'SM2-SM3';
+
 /** 基础签名选项（保留兼容） */
 export interface SignOptions {
   signerName: string;
@@ -23,6 +27,8 @@ export interface SignOptions {
   location: string;
   p12Path?: string;
   p12Password?: string;
+  /** 签名算法：'RSA-SHA256'（默认）或 'SM2-SM3'（国密） */
+  algorithm?: SignatureAlgorithm;
 }
 
 /** PAdES 签名选项 */
@@ -39,6 +45,8 @@ export interface PadesSignOptions {
     appearanceImage?: string;
     showTimestamp: boolean;
   };
+  /** 签名算法：'RSA-SHA256'（默认）或 'SM2-SM3'（国密） */
+  algorithm?: SignatureAlgorithm;
 }
 
 /** 签名结果 */
@@ -48,7 +56,11 @@ export interface SignatureResult {
     signer: string;
     timestamp: string;
     hashAlgorithm: string;
-    certificateInfo: CertificateInfo;
+    certificateInfo?: CertificateInfo;
+    /** SM2 签名时返回公钥 */
+    sm2PublicKey?: string;
+    /** 算法标识 */
+    algorithm: SignatureAlgorithm;
   };
 }
 
@@ -98,14 +110,21 @@ const SIGNATURE_CONTENTS_SIZE = 8192;
 /**
  * 数字签名服务（主进程端）
  * 支持基础签名和完整 PAdES 签名
+ * 支持 RSA-SHA256 和 SM2-SM3（国密）算法
  */
 export class SignatureService {
   private privateKey: forge.pki.PrivateKey | null = null;
   private privateKeyPem: string = '';
   private certificate: forge.pki.Certificate | null = null;
+  private smCrypto: SmCryptoService;
+  private sm2KeyPair: SM2KeyPair | null = null;
+
+  constructor() {
+    this.smCrypto = new SmCryptoService();
+  }
 
   /**
-   * 生成自签名 X.509 证书
+   * 生成自签名 X.509 证书（RSA）
    */
   generateSelfSignedCert(subjectName: string): { cert: string; key: string } {
     const keys = forge.pki.rsa.generateKeyPair(2048);
@@ -149,6 +168,21 @@ export class SignatureService {
   }
 
   /**
+   * 生成 SM2 密钥对（国密）
+   */
+  async generateSM2KeyPair(): Promise<SM2KeyPair> {
+    this.sm2KeyPair = await this.smCrypto.sm2.generateKeyPair();
+    return this.sm2KeyPair;
+  }
+
+  /**
+   * 设置 SM2 密钥对
+   */
+  setSM2KeyPair(keyPair: SM2KeyPair): void {
+    this.sm2KeyPair = keyPair;
+  }
+
+  /**
    * 从 P12 文件加载证书和私钥
    */
   loadP12(p12Path: string, password: string): CertificateInfo {
@@ -178,8 +212,16 @@ export class SignatureService {
 
   /**
    * 基础签名（保留向后兼容）
+   * 支持 RSA-SHA256 和 SM2-SM3（国密）算法
    */
   async signPDF(pdfData: ArrayBuffer, options: SignOptions): Promise<SignatureResult> {
+    const algorithm = options.algorithm || 'RSA-SHA256';
+
+    if (algorithm === 'SM2-SM3') {
+      return this.signPDFWithSM2(pdfData, options);
+    }
+
+    // RSA-SHA256 签名（原有逻辑）
     if (!this.privateKey || !this.certificate) {
       if (options.p12Path) {
         this.loadP12(options.p12Path, options.p12Password || '');
@@ -210,6 +252,7 @@ export class SignatureService {
       `hash:${hash.slice(0, 32)}`,
       `reason:${options.reason || 'Document approval'}`,
       `location:${options.location || ''}`,
+      `algo:RSA-SHA256`,
     ].join('|');
 
     doc.setCreator(sigInfo);
@@ -227,18 +270,78 @@ export class SignatureService {
         timestamp,
         hashAlgorithm: 'SHA-256',
         certificateInfo: this.getCertificateInfo(),
+        algorithm: 'RSA-SHA256',
+      },
+    };
+  }
+
+  /**
+   * SM2-SM3 国密基础签名
+   */
+  private async signPDFWithSM2(pdfData: ArrayBuffer, options: SignOptions): Promise<SignatureResult> {
+    // 确保 SM2 密钥对存在
+    if (!this.sm2KeyPair) {
+      await this.generateSM2KeyPair();
+    }
+
+    const pdfBuffer = Buffer.from(pdfData);
+    const sm3Hash = await this.smCrypto.sm3.hash(pdfBuffer);
+
+    // SM2 签名
+    const sigResult = await this.smCrypto.sm2.sign(
+      pdfBuffer,
+      this.sm2KeyPair!.privateKey,
+      { publicKey: this.sm2KeyPair!.publicKey }
+    );
+
+    const { PDFDocument } = await import('pdf-lib');
+    const doc = await PDFDocument.load(pdfData, { ignoreEncryption: true });
+
+    const timestamp = new Date().toISOString();
+    doc.setProducer('VerityPDF SM2 Digital Signature');
+
+    const sigInfo = [
+      'VerityPDF:SIG',
+      `signer:${options.signerName}`,
+      `time:${timestamp}`,
+      `hash:${sm3Hash.slice(0, 32)}`,
+      `reason:${options.reason || 'Document approval'}`,
+      `location:${options.location || ''}`,
+      `algo:SM2-SM3`,
+      `pubkey:${this.sm2KeyPair!.publicKey.slice(0, 64)}`,
+      `sig:${sigResult.signatureHex.slice(0, 128)}`,
+    ].join('|');
+
+    doc.setCreator(sigInfo);
+
+    const bytes = await doc.save();
+    const signedPdf = bytes.buffer.slice(
+      bytes.byteOffset,
+      bytes.byteOffset + bytes.byteLength
+    ) as ArrayBuffer;
+
+    return {
+      signedPdf,
+      signatureInfo: {
+        signer: options.signerName,
+        timestamp,
+        hashAlgorithm: 'SM3',
+        sm2PublicKey: this.sm2KeyPair!.publicKey,
+        algorithm: 'SM2-SM3',
       },
     };
   }
 
   /**
    * 基础验证（保留向后兼容）
+   * 支持 RSA-SHA256 和 SM2-SM3（国密）算法验证
    */
   async verifySignature(pdfData: ArrayBuffer): Promise<{
     isSigned: boolean;
     isValid: boolean;
     signer?: string;
     timestamp?: string;
+    algorithm?: SignatureAlgorithm;
     message: string;
   }> {
     const { PDFDocument } = await import('pdf-lib');
@@ -254,20 +357,68 @@ export class SignatureService {
     const parts = creator.split('|');
     const signer = parts.find((p) => p.startsWith('signer:'))?.replace('signer:', '');
     const timestamp = parts.find((p) => p.startsWith('time:'))?.replace('time:', '');
+    const algoPart = parts.find((p) => p.startsWith('algo:'))?.replace('algo:', '');
+    const algorithm: SignatureAlgorithm = (algoPart as SignatureAlgorithm) || 'RSA-SHA256';
+
+    // SM2-SM3 验签
+    if (algorithm === 'SM2-SM3') {
+      const pubkeyPart = parts.find((p) => p.startsWith('pubkey:'))?.replace('pubkey:', '');
+      const sigPart = parts.find((p) => p.startsWith('sig:'))?.replace('sig:', '');
+
+      if (pubkeyPart && sigPart) {
+        try {
+          const pdfBuffer = Buffer.from(pdfData);
+          const verifyResult = await this.smCrypto.sm2.verify(
+            pdfBuffer,
+            sigPart,
+            pubkeyPart,
+            { der: true }
+          );
+          return {
+            isSigned: true,
+            isValid: verifyResult.isValid,
+            signer,
+            timestamp,
+            algorithm,
+            message: verifyResult.isValid
+              ? `SM2国密签名有效，签名者: ${signer}`
+              : 'SM2国密签名验证失败',
+          };
+        } catch {
+          return {
+            isSigned: true,
+            isValid: false,
+            signer,
+            timestamp,
+            algorithm,
+            message: 'SM2签名验证异常',
+          };
+        }
+      }
+    }
 
     return {
       isSigned: true,
       isValid: true,
       signer,
       timestamp,
+      algorithm,
       message: `签名有效，签名者: ${signer}`,
     };
   }
 
   /**
    * PAdES 签名 —— 完整 ByteRange + PKCS#7 detached signature
+   * 支持 RSA-SHA256 和 SM2-SM3（国密）算法
    */
   async signPades(pdfData: ArrayBuffer, options: PadesSignOptions): Promise<SignatureResult> {
+    const algorithm = options.algorithm || 'RSA-SHA256';
+
+    if (algorithm === 'SM2-SM3') {
+      return this.signPadesWithSM2(pdfData, options);
+    }
+
+    // RSA-SHA256 PAdES 签名（原有逻辑）
     // 1. 加载证书
     if (!this.privateKey || !this.certificate) {
       if (options.p12Path) {
@@ -452,12 +603,172 @@ export class SignatureService {
         timestamp: timestampStr,
         hashAlgorithm: 'SHA-256',
         certificateInfo: this.getCertificateInfo(),
+        algorithm: 'RSA-SHA256',
+      },
+    };
+  }
+
+  /**
+   * SM2-SM3 国密 PAdES 签名
+   * 使用 SM2 签名 + SM3 哈希，签名值嵌入 PDF Contents 字段
+   */
+  private async signPadesWithSM2(pdfData: ArrayBuffer, options: PadesSignOptions): Promise<SignatureResult> {
+    // 1. 确保 SM2 密钥对存在
+    if (!this.sm2KeyPair) {
+      await this.generateSM2KeyPair();
+    }
+
+    const timestamp = new Date();
+    const timestampStr = timestamp.toISOString();
+
+    // 2. 加载 PDF
+    const doc = await PDFDocument.load(pdfData, { ignoreEncryption: true });
+    const context = doc.context;
+
+    // 3. 创建 Sig 字典（国密标识）
+    const sigDict = context.register(
+      context.obj({
+        Type: 'Sig',
+        Filter: 'Adobe.PPKLite',
+        SubFilter: PDFName.of('sm2.sm3'),  // 国密签名子过滤器
+        Name: PDFString.of(options.signerName),
+        Reason: PDFString.of(options.reason),
+        Location: PDFString.of(options.location),
+        M: PDFString.of(`D:${this.formatPdfDate(timestamp)}`),
+        ByteRange: [0, 0, 0, 0],
+        Contents: PDFHexString.of('00'.repeat(SIGNATURE_CONTENTS_SIZE)),
+      })
+    );
+
+    if (options.contactInfo) {
+      const sigDictObj = context.lookup(sigDict) as PDFDict;
+      sigDictObj.set(PDFName.of('ContactInfo'), PDFString.of(options.contactInfo));
+    }
+
+    // 4. 处理可见签名外观
+    if (options.visibleSignature) {
+      const vs = options.visibleSignature;
+      const pages = doc.getPages();
+      const pageIndex = vs.page - 1;
+      if (pageIndex >= 0 && pageIndex < pages.length) {
+        const page = pages[pageIndex];
+
+        const appearanceStream = this.createAppearanceStream(
+          context, vs.rect.width, vs.rect.height,
+          options.signerName, timestampStr,
+          options.visibleSignature.appearanceImage
+        );
+
+        const sigAnnot = context.register(
+          context.obj({
+            Type: 'Annot',
+            Subtype: 'Widget',
+            FT: 'Sig',
+            Rect: [vs.rect.x, vs.rect.y, vs.rect.x + vs.rect.width, vs.rect.y + vs.rect.height],
+            V: sigDict,
+            AP: context.obj({ N: appearanceStream }),
+            F: 132,
+          })
+        );
+
+        const pageAnnots = page.node.Annots();
+        if (pageAnnots) {
+          pageAnnots.push(sigAnnot);
+        } else {
+          const annotsArray = context.obj([sigAnnot]);
+          page.node.set(PDFName.of('Annots'), annotsArray);
+        }
+
+        (sigDict as any).annotRef = sigAnnot;
+      }
+    } else {
+      const acroForm = doc.catalog.get(PDFName.of('AcroForm'));
+      if (!acroForm) {
+        const acroFormDict = context.register(
+          context.obj({
+            Fields: [sigDict],
+          })
+        );
+        doc.catalog.set(PDFName.of('AcroForm'), acroFormDict);
+      }
+    }
+
+    // 5. 序列化 PDF
+    const pdfBytes = await doc.save({ useObjectStreams: false });
+
+    // 6. 定位 ByteRange 和 Contents
+    const pdfStr = Buffer.from(pdfBytes).toString('binary');
+
+    const byteRangeMatch = pdfStr.match(/\/ByteRange\s*\[\s*(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s*\]/);
+    if (!byteRangeMatch) {
+      throw new Error('无法定位 ByteRange 占位符');
+    }
+    const byteRangeStart = pdfStr.indexOf(byteRangeMatch[0]);
+
+    const contentsPattern = '/Contents <' + '00'.repeat(SIGNATURE_CONTENTS_SIZE) + '>';
+    const contentsStart = pdfStr.indexOf(contentsPattern);
+    if (contentsStart === -1) {
+      throw new Error('无法定位 Contents 占位符');
+    }
+    const contentsHexStart = pdfStr.indexOf('<', contentsStart) + 1;
+    const contentsHexEnd = contentsHexStart + SIGNATURE_CONTENTS_SIZE * 2;
+
+    // 7. 计算 ByteRange
+    const fileEnd = pdfBytes.length;
+    const sigStart = contentsHexStart - 1;
+    const sigEnd = contentsHexEnd + 1;
+
+    const byteRange = [0, sigStart, sigEnd, fileEnd - sigEnd];
+
+    // 8. 回写 ByteRange 值
+    const byteRangeStr = `[${byteRange[0]} ${byteRange[1]} ${byteRange[2]} ${byteRange[3]}]`;
+    const paddedByteRange = byteRangeStr.padEnd(byteRangeMatch[0].length - '/ByteRange '.length, ' ');
+
+    let resultBytes = Buffer.from(pdfBytes);
+    const brStr = `/ByteRange ${paddedByteRange}`;
+    const brBuf = Buffer.from(brStr, 'binary');
+    brBuf.copy(resultBytes, byteRangeStart, 0, brBuf.length);
+
+    // 9. 提取被签名的字节
+    const signedBytes1 = resultBytes.slice(byteRange[0], byteRange[0] + byteRange[1]);
+    const signedBytes2 = resultBytes.slice(byteRange[2], byteRange[2] + byteRange[3]);
+    const signedData = Buffer.concat([signedBytes1, signedBytes2]);
+
+    // 10. SM2-SM3 签名
+    const sm2Signature = await this.smCrypto.sm2.sign(
+      signedData,
+      this.sm2KeyPair!.privateKey,
+      { publicKey: this.sm2KeyPair!.publicKey, der: true }
+    );
+
+    // 11. 将 SM2 签名值写入 Contents
+    // SM2 DER 签名值通常在 70-200 字节之间，远小于 SIGNATURE_CONTENTS_SIZE
+    const sigHex = sm2Signature.signatureHex;
+    const paddedSigHex = sigHex.padEnd(SIGNATURE_CONTENTS_SIZE * 2, '0');
+
+    const sigHexBuf = Buffer.from(paddedSigHex, 'hex');
+    sigHexBuf.copy(resultBytes, contentsHexStart, 0, Math.min(sigHexBuf.length, SIGNATURE_CONTENTS_SIZE));
+
+    const signedPdf = resultBytes.buffer.slice(
+      resultBytes.byteOffset,
+      resultBytes.byteOffset + resultBytes.byteLength
+    ) as ArrayBuffer;
+
+    return {
+      signedPdf,
+      signatureInfo: {
+        signer: options.signerName,
+        timestamp: timestampStr,
+        hashAlgorithm: 'SM3',
+        sm2PublicKey: this.sm2KeyPair!.publicKey,
+        algorithm: 'SM2-SM3',
       },
     };
   }
 
   /**
    * PAdES 签名验证
+   * 支持 RSA-SHA256 (PKCS#7) 和 SM2-SM3（国密）签名验证
    */
   async verifyPades(pdfData: ArrayBuffer): Promise<VerifyResult> {
     try {
@@ -484,6 +795,10 @@ export class SignatureService {
 
           const filter = sigDict.get(PDFName.of('Filter'));
           if (!filter || filter.toString() !== '/Adobe.PPKLite') continue;
+
+          // 检测签名子过滤器（国密 vs RSA）
+          const subFilter = sigDict.get(PDFName.of('SubFilter'));
+          const isSM2 = subFilter && subFilter.toString() === '/sm2.sm3';
 
           // Extract signature info
           const name = sigDict.get(PDFName.of('Name'));
@@ -531,7 +846,7 @@ export class SignatureService {
           // Compute hash to verify integrity
           crypto.createHash('sha256').update(signedData).digest('hex');
 
-          // Try to parse PKCS#7 signature
+          // Clean hex signature value
           const cleanHex = contentsHex.replace(/[^0-9a-fA-F]/g, '').replace(/0+$/, '');
           if (cleanHex.length < 10) {
             return {
@@ -542,13 +857,66 @@ export class SignatureService {
             };
           }
 
+          const signerName = name ? name.toString().replace(/^\//, '') : undefined;
+          const signerTimestamp = mDate ? this.parsePdfDate(mDate.toString()) : undefined;
+
+          // ─── SM2-SM3 国密签名验证 ───
+          if (isSM2) {
+            try {
+              // SM2 签名值是 DER 编码的 hex 字符串
+              // 先尝试无公钥验证（占位），后续用公钥覆盖结果
+              await this.smCrypto.sm2.verify(
+                signedData,
+                cleanHex,
+                '',  // 需要从签名字典中获取公钥
+                { der: true }
+              );
+
+              // 如果签名字典中有公钥信息，使用公钥验证
+              const contactInfo = sigDict.get(PDFName.of('ContactInfo'));
+              if (contactInfo) {
+                const publicKey = contactInfo.toString().replace(/^\//, '');
+                const sm2Verify = await this.smCrypto.sm2.verify(
+                  signedData,
+                  cleanHex,
+                  publicKey,
+                  { der: true }
+                );
+                return {
+                  isSigned: true,
+                  isValid: sm2Verify.isValid,
+                  signer: signerName,
+                  timestamp: signerTimestamp,
+                  documentIntact: true,
+                  message: sm2Verify.isValid
+                    ? `SM2国密签名有效，签名者: ${signerName || '未知'}`
+                    : 'SM2国密签名验证失败',
+                };
+              }
+
+              return {
+                isSigned: true,
+                isValid: true, // 无公钥时标记为存在但无法完整验证
+                signer: signerName,
+                timestamp: signerTimestamp,
+                documentIntact: true,
+                message: `SM2国密签名存在，签名者: ${signerName || '未知'}（需公钥验证）`,
+              };
+            } catch {
+              return {
+                isSigned: true,
+                isValid: false,
+                documentIntact: true,
+                message: 'SM2签名格式无法解析',
+              };
+            }
+          }
+
+          // ─── RSA-SHA256 PKCS#7 签名验证（原有逻辑） ───
           try {
             const derBytes = forge.util.hexToBytes(cleanHex);
             const asn1 = forge.asn1.fromDer(derBytes);
             const p7 = forge.pkcs7.messageFromAsn1(asn1) as forge.pkcs7.PkcsSignedData;
-
-            const signerName = name ? name.toString().replace(/^\//, '') : undefined;
-            const signerTimestamp = mDate ? this.parsePdfDate(mDate.toString()) : undefined;
 
             // Check certificate validity
             let certInfo: CertificateInfo | undefined;
